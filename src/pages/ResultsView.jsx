@@ -16,7 +16,7 @@ const DEMO_RESULTS = [
 
 const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97316", "5": "#ef4444", "6": "#dc2626" };
 
-export default function ResultsView({ navigate, onLogout, currentUser }) {
+export default function ResultsView({ navigate, onLogout, currentUser, test, groups }) {
   const [selectedResult, setSelectedResult] = useState(null);
   const [overrides, setOverrides] = useState({});
 
