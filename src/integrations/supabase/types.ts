@@ -14,7 +14,251 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      assignments: {
+        Row: {
+          anti_cheat: boolean | null
+          created_at: string
+          grading_scale: Json
+          group_id: number
+          id: number
+          question_data: Json
+          status: string
+          teacher_id: string
+          template_id: number | null
+          time_limit: number | null
+          timing_mode: string | null
+          title: string
+          window_end: string | null
+          window_start: string | null
+        }
+        Insert: {
+          anti_cheat?: boolean | null
+          created_at?: string
+          grading_scale?: Json
+          group_id: number
+          id?: number
+          question_data?: Json
+          status?: string
+          teacher_id: string
+          template_id?: number | null
+          time_limit?: number | null
+          timing_mode?: string | null
+          title: string
+          window_end?: string | null
+          window_start?: string | null
+        }
+        Update: {
+          anti_cheat?: boolean | null
+          created_at?: string
+          grading_scale?: Json
+          group_id?: number
+          id?: number
+          question_data?: Json
+          status?: string
+          teacher_id?: string
+          template_id?: number | null
+          time_limit?: number | null
+          timing_mode?: string | null
+          title?: string
+          window_end?: string | null
+          window_start?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          count: number
+          created_at: string
+          id: number
+          name: string
+          subject: string
+          teacher_id: string
+          usernames: Json
+        }
+        Insert: {
+          count?: number
+          created_at?: string
+          id?: number
+          name: string
+          subject?: string
+          teacher_id: string
+          usernames?: Json
+        }
+        Update: {
+          count?: number
+          created_at?: string
+          id?: number
+          name?: string
+          subject?: string
+          teacher_id?: string
+          usernames?: Json
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+          name?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      students: {
+        Row: {
+          created_at: string
+          group_id: number
+          id: number
+          pin: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: number
+          id?: number
+          pin?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: number
+          id?: number
+          pin?: string
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "students_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      submissions: {
+        Row: {
+          ai_corrections: Json | null
+          answers: Json
+          assignment_id: number
+          id: number
+          manual_overrides: Json | null
+          reviewed: boolean | null
+          score: number | null
+          student_id: number | null
+          submitted_at: string
+          total_points: number | null
+          username: string | null
+        }
+        Insert: {
+          ai_corrections?: Json | null
+          answers?: Json
+          assignment_id: number
+          id?: number
+          manual_overrides?: Json | null
+          reviewed?: boolean | null
+          score?: number | null
+          student_id?: number | null
+          submitted_at?: string
+          total_points?: number | null
+          username?: string | null
+        }
+        Update: {
+          ai_corrections?: Json | null
+          answers?: Json
+          assignment_id?: number
+          id?: number
+          manual_overrides?: Json | null
+          reviewed?: boolean | null
+          score?: number | null
+          student_id?: number | null
+          submitted_at?: string
+          total_points?: number | null
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submissions_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "submissions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      templates: {
+        Row: {
+          anti_cheat: boolean | null
+          created_at: string
+          description: string | null
+          grading_scale: Json
+          id: number
+          question_data: Json
+          subject: string | null
+          teacher_id: string
+          time_limit: number | null
+          title: string
+        }
+        Insert: {
+          anti_cheat?: boolean | null
+          created_at?: string
+          description?: string | null
+          grading_scale?: Json
+          id?: number
+          question_data?: Json
+          subject?: string | null
+          teacher_id: string
+          time_limit?: number | null
+          title?: string
+        }
+        Update: {
+          anti_cheat?: boolean | null
+          created_at?: string
+          description?: string | null
+          grading_scale?: Json
+          id?: number
+          question_data?: Json
+          subject?: string | null
+          teacher_id?: string
+          time_limit?: number | null
+          title?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
