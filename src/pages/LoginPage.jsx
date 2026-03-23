@@ -1,30 +1,46 @@
 import { useState } from "react";
-
-const DEMO_TEACHER = { username: "lehrer@quicktest.de", password: "test123", name: "Frau Müller" };
-const DEMO_STUDENT = { username: "blauer-adler", password: "1234", name: "Blauer Adler" };
+import { useAuth } from "../hooks/useAuth";
 
 export default function LoginPage({ onLogin }) {
   const [role, setRole] = useState("teacher");
+  const [isRegister, setIsRegister] = useState(false);
+  const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { signIn, signUp, studentSignIn } = useAuth();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
-    if (role === "teacher") {
-      if (username === DEMO_TEACHER.username && password === DEMO_TEACHER.password) {
-        onLogin("teacher", DEMO_TEACHER);
+    setError(""); setLoading(true);
+    try {
+      if (role === "teacher") {
+        if (isRegister) {
+          const { error } = await signUp(username, password, name);
+          if (error) { setError(error.message); return; }
+          setError(""); 
+          setIsRegister(false);
+          setError("Registrierung erfolgreich! Bitte jetzt einloggen.");
+          return;
+        }
+        const { error } = await signIn(username, password);
+        if (error) { setError("E-Mail oder Passwort falsch."); return; }
+        onLogin("teacher", null);
       } else {
-        setError("Ungültige Anmeldedaten. Demo: lehrer@quicktest.de / test123");
+        const { error, student } = await studentSignIn(username, password);
+        if (error) { setError(error); return; }
+        onLogin("student", student);
       }
-    } else {
-      if (username === DEMO_STUDENT.username && password === DEMO_STUDENT.password) {
-        onLogin("student", DEMO_STUDENT);
-      } else {
-        setError("Ungültiger Benutzername oder PIN. Demo: blauer-adler / 1234");
-      }
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const inputStyle = {
+    width: "100%", padding: "12px 14px", border: "2px solid #e5e7eb",
+    borderRadius: "10px", fontSize: "15px", boxSizing: "border-box",
+    outline: "none", fontFamily: "inherit"
   };
 
   return (
@@ -50,9 +66,10 @@ export default function LoginPage({ onLogin }) {
         </div>
 
         <div style={{ background: "#fff", borderRadius: "20px", padding: "36px", boxShadow: "0 25px 60px rgba(0,0,0,0.3)" }}>
-          <div style={{ display: "flex", background: "#f1f5f9", borderRadius: "12px", padding: "4px", marginBottom: "28px" }}>
+          {/* Role Toggle */}
+          <div style={{ display: "flex", background: "#f1f5f9", borderRadius: "12px", padding: "4px", marginBottom: "24px" }}>
             {["teacher", "student"].map(r => (
-              <button key={r} onClick={() => { setRole(r); setError(""); setUsername(""); setPassword(""); }}
+              <button key={r} onClick={() => { setRole(r); setError(""); setUsername(""); setPassword(""); setIsRegister(false); }}
                 style={{
                   flex: 1, padding: "10px", border: "none", borderRadius: "9px",
                   fontWeight: 600, fontSize: "14px", cursor: "pointer", transition: "all 0.2s",
@@ -65,60 +82,58 @@ export default function LoginPage({ onLogin }) {
           </div>
 
           <form onSubmit={handleSubmit}>
+            {role === "teacher" && isRegister && (
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>Vollständiger Name</label>
+                <input type="text" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="z.B. Maria Müller" required style={inputStyle} />
+              </div>
+            )}
+
             <div style={{ marginBottom: "16px" }}>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
                 {role === "teacher" ? "E-Mail-Adresse" : "Benutzername"}
               </label>
-              <input
-                type="text" value={username} onChange={e => setUsername(e.target.value)}
-                placeholder={role === "teacher" ? "name@schule.de" : "z.B. blauer-adler"}
-                required
-                style={{
-                  width: "100%", padding: "12px 14px", border: "2px solid #e5e7eb",
-                  borderRadius: "10px", fontSize: "15px", boxSizing: "border-box",
-                  outline: "none", fontFamily: "inherit"
-                }}
-              />
+              <input type={role === "teacher" ? "email" : "text"}
+                value={username} onChange={e => setUsername(e.target.value)}
+                placeholder={role === "teacher" ? "name@schule.de" : "z.B. blauer-Adler"}
+                required style={inputStyle} />
             </div>
+
             <div style={{ marginBottom: "20px" }}>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
                 {role === "teacher" ? "Passwort" : "PIN"}
               </label>
-              <input
-                type="password" value={password} onChange={e => setPassword(e.target.value)}
-                placeholder={role === "teacher" ? "Passwort eingeben" : "4-stellige PIN"}
-                required
-                style={{
-                  width: "100%", padding: "12px 14px", border: "2px solid #e5e7eb",
-                  borderRadius: "10px", fontSize: "15px", boxSizing: "border-box",
-                  outline: "none", fontFamily: "inherit"
-                }}
-              />
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                placeholder={role === "teacher" ? "Mind. 6 Zeichen" : "PIN eingeben"}
+                required style={inputStyle} />
             </div>
 
             {error && (
               <div style={{
-                background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px",
-                padding: "10px 14px", marginBottom: "16px", fontSize: "13px", color: "#dc2626"
-              }}>
-                {error}
-              </div>
+                background: error.includes("erfolgreich") ? "#dcfce7" : "#fef2f2",
+                border: `1px solid ${error.includes("erfolgreich") ? "#bbf7d0" : "#fecaca"}`,
+                borderRadius: "8px", padding: "10px 14px", marginBottom: "16px",
+                fontSize: "13px", color: error.includes("erfolgreich") ? "#16a34a" : "#dc2626"
+              }}>{error}</div>
             )}
 
-            <button type="submit" style={{
-              width: "100%", padding: "13px", background: "#2563a8", color: "#fff",
-              border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: 700, cursor: "pointer"
+            <button type="submit" disabled={loading} style={{
+              width: "100%", padding: "13px", background: loading ? "#93c5fd" : "#2563a8",
+              color: "#fff", border: "none", borderRadius: "10px", fontSize: "15px",
+              fontWeight: 700, cursor: loading ? "not-allowed" : "pointer"
             }}>
-              Anmelden
+              {loading ? "Bitte warten..." : isRegister ? "Konto erstellen" : "Anmelden"}
             </button>
           </form>
 
           {role === "teacher" && (
             <p style={{ textAlign: "center", marginTop: "20px", fontSize: "13px", color: "#6b7280" }}>
-              Noch kein Konto?{" "}
-              <a href="#" style={{ color: "#2563a8", fontWeight: 600, textDecoration: "none" }}>
-                Kostenlos registrieren
-              </a>
+              {isRegister ? "Schon ein Konto? " : "Noch kein Konto? "}
+              <button onClick={() => { setIsRegister(!isRegister); setError(""); }}
+                style={{ background: "none", border: "none", color: "#2563a8", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+                {isRegister ? "Einloggen" : "Kostenlos registrieren"}
+              </button>
             </p>
           )}
         </div>
