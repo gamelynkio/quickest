@@ -48,14 +48,11 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
 
   const handleSave = async () => {
     setSaving(true);
-    console.log("currentUser:", currentUser);
-    console.log("payload teacher_id:", currentUser?.id);
     const payload = {
       teacher_id: currentUser?.id,
       title: title || "Unbenannte Vorlage",
       description,
       subject,
-      questions: questions.length,
       time_limit: timeLimit * 60,
       anti_cheat: antiCheat,
       question_data: questions,
@@ -64,8 +61,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     if (editingTest?.id) {
       await supabase.from("templates").update(payload).eq("id", editingTest.id);
     } else {
-      const { data, error } = await supabase.from("templates").insert(payload);
-      console.log("insert result:", data, error);
+      await supabase.from("templates").insert(payload);
     }
     setSaving(false); setSaved(true);
     setTimeout(() => { setSaved(false); navigate("library"); }, 1000);
