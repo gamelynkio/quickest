@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "./lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import LoginPage from "./pages/LoginPage";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import TestEditor from "./pages/TestEditor";
@@ -9,7 +9,7 @@ import GroupManager from "./pages/GroupManager";
 import ResultsView from "./pages/ResultsView";
 
 export default function App() {
-  const [session, setSession] = useState(undefined); // undefined = loading
+  const [session, setSession] = useState(undefined);
   const [profile, setProfile] = useState(null);
   const [studentUser, setStudentUser] = useState(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
@@ -17,18 +17,15 @@ export default function App() {
   const [viewingResults, setViewingResults] = useState(null);
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+      setSession(session ?? null);
       if (session?.user) fetchProfile(session.user.id);
-      else setSession(null);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      setSession(session ?? null);
       if (session?.user) fetchProfile(session.user.id);
-      else { setProfile(null); }
+      else setProfile(null);
     });
 
     return () => subscription.unsubscribe();
@@ -60,7 +57,6 @@ export default function App() {
     }
   };
 
-  // Loading
   if (session === undefined) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
       <div style={{ textAlign: "center", color: "#fff" }}>
@@ -71,13 +67,9 @@ export default function App() {
     </div>
   );
 
-  // Student view
   if (studentUser) return <StudentTestView currentUser={studentUser} onFinish={handleLogout} />;
-
-  // Not logged in
   if (!session) return <LoginPage onLogin={handleLogin} />;
 
-  // Teacher views
   const teacherNav = { navigate, onLogout: handleLogout, currentUser: profile };
   if (currentPage === "dashboard") return <TeacherDashboard {...teacherNav} />;
   if (currentPage === "testEditor") return <TestEditor {...teacherNav} editingTest={editingTest} />;
