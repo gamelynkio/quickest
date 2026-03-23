@@ -15,9 +15,11 @@ const getSubjectColor = (subject) => SUBJECT_COLORS[subject] || defaultColor;
 export default function TestLibrary({ navigate, onLogout, currentUser, templates, setTemplates, groups, tests, setTests }) {
   const [search, setSearch] = useState("");
   const [filterSubject, setFilterSubject] = useState("");
-  const [assignModal, setAssignModal] = useState(null); // template to assign
+  const [assignModal, setAssignModal] = useState(null);
   const [assignGroupId, setAssignGroupId] = useState("");
+  const [assignTimeLimit, setAssignTimeLimit] = useState(20);
   const [assignTimingMode, setAssignTimingMode] = useState("countdown");
+  const [assignAntiCheat, setAssignAntiCheat] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const subjects = [...new Set(templates.map(t => t.subject).filter(Boolean))];
@@ -36,9 +38,9 @@ export default function TestLibrary({ navigate, onLogout, currentUser, templates
       title: assignModal.title,
       description: assignModal.description,
       groupId: Number(assignGroupId),
-      timeLimit: assignModal.timeLimit,
+      timeLimit: assignTimeLimit * 60,
       timingMode: assignTimingMode,
-      antiCheat: assignModal.antiCheat,
+      antiCheat: assignAntiCheat,
       questionData: assignModal.questionData,
       gradingScale: assignModal.gradingScale,
       status: "aktiv",
@@ -147,7 +149,13 @@ export default function TestLibrary({ navigate, onLogout, currentUser, templates
 
                 {/* Card Actions */}
                 <div style={{ padding: "12px 20px", borderTop: "1px solid #f1f5f9", display: "flex", gap: "8px" }}>
-                  <button onClick={() => { setAssignModal(template); setAssignGroupId(""); }}
+                  <button onClick={() => {
+                      setAssignModal(template);
+                      setAssignGroupId("");
+                      setAssignTimeLimit(Math.round((template.timeLimit || 1200) / 60));
+                      setAssignTimingMode(template.timingMode || "countdown");
+                      setAssignAntiCheat(template.antiCheat || false);
+                    }}
                     style={{ flex: 1, padding: "8px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
                     👥 Zuweisen
                   </button>
@@ -196,13 +204,33 @@ export default function TestLibrary({ navigate, onLogout, currentUser, templates
               )}
             </div>
 
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+              <div>
+                <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Bearbeitungszeit (Min.)</label>
+                <input type="number" min={1} max={180} value={assignTimeLimit} onChange={e => setAssignTimeLimit(Number(e.target.value))}
+                  style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Timer-Modus</label>
+                <select value={assignTimingMode} onChange={e => setAssignTimingMode(e.target.value)}
+                  style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
+                  <option value="countdown">Countdown ab Start</option>
+                  <option value="window">Festes Zeitfenster</option>
+                </select>
+              </div>
+            </div>
+
             <div style={{ marginBottom: "24px" }}>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Timer-Modus</label>
-              <select value={assignTimingMode} onChange={e => setAssignTimingMode(e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
-                <option value="countdown">Countdown – startet beim ersten Login des Schülers</option>
-                <option value="window">Zeitfenster – nur in einem festen Zeitraum verfügbar</option>
-              </select>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                <input type="checkbox" checked={assignAntiCheat} onChange={e => setAssignAntiCheat(e.target.checked)}
+                  style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
+                🛡️ Anti-Cheat aktivieren
+              </label>
+              {assignAntiCheat && (
+                <div style={{ marginTop: "8px", background: "#f0f7ff", borderRadius: "8px", padding: "8px 12px", fontSize: "12px", color: "#2563a8", border: "1px solid #bfdbfe" }}>
+                  Aufgaben werden in zufälliger Reihenfolge und mit unterschiedlichen Farben angezeigt.
+                </div>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: "10px" }}>
