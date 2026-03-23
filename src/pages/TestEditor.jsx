@@ -20,7 +20,7 @@ const newQuestion = (type) => ({
   attachment: null,
 });
 
-export default function TestEditor({ navigate, onLogout, currentUser, editingTest, tests, setTests, groups }) {
+export default function TestEditor({ navigate, onLogout, currentUser, editingTest, templates, setTemplates, groups }) {
   const [testTitle, setTestTitle] = useState(editingTest?.title || "");
   const [testDescription, setTestDescription] = useState(editingTest?.description || "");
   const [selectedGroupId, setSelectedGroupId] = useState(editingTest?.groupId || "");
@@ -81,12 +81,12 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     };
 
     if (editingTest) {
-      setTests(prev => prev.map(t => t.id === editingTest.id ? testData : t));
+      setTemplates(prev => prev.map(t => t.id === editingTest.id ? testData : t));
     } else {
-      setTests(prev => [...prev, testData]);
+      setTemplates(prev => [...prev, testData]);
     }
     setSaved(true);
-    setTimeout(() => { setSaved(false); navigate("dashboard"); }, 1000);
+    setTimeout(() => { setSaved(false); navigate("library"); }, 1000);
   };
 
   return (
