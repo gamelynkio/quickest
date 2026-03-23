@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function StudentTestView({ currentUser, onFinish }) {
   const [assignment, setAssignment] = useState(null);
