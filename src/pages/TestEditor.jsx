@@ -64,7 +64,8 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     if (editingTest?.id) {
       await supabase.from("templates").update(payload).eq("id", editingTest.id);
     } else {
-      await supabase.from("templates").insert(payload);
+      const { data, error } = await supabase.from("templates").insert(payload);
+      console.log("insert result:", data, error);
     }
     setSaving(false); setSaved(true);
     setTimeout(() => { setSaved(false); navigate("library"); }, 1000);
