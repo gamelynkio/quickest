@@ -4,14 +4,15 @@ import TeacherLayout from "../components/TeacherLayout";
 const ADJECTIVES = ["blauer", "roter", "grüner", "schneller", "kluger", "starker", "leiser", "großer", "freier", "alter", "wilder", "sanfter", "mutiger", "flinker", "weiser", "treuer", "stolzer", "kühner", "wacher", "schlauer", "ruhiger", "fleißiger", "tapferer", "heller", "dunkler"];
 const ANIMALS = ["Adler", "Tiger", "Fuchs", "Wolf", "Bär", "Luchs", "Falke", "Dachs", "Hirsch", "Storch", "Igel", "Otter", "Rabe", "Elch", "Biber", "Marder", "Habicht", "Wisent", "Uhu", "Fischotter", "Steinbock", "Lämmergeier", "Rotmilan", "Seehund", "Zander"];
 
-const generateUsernames = (count) => {
+const generateUsernames = (count, existing = []) => {
   const all = [];
   for (const adj of ADJECTIVES) for (const animal of ANIMALS) all.push(`${adj}-${animal}`);
-  for (let i = all.length - 1; i > 0; i--) {
+  const available = all.filter(u => !existing.includes(u));
+  for (let i = available.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [all[i], all[j]] = [all[j], all[i]];
+    [available[i], available[j]] = [available[j], available[i]];
   }
-  return all.slice(0, count);
+  return available.slice(0, count);
 };
 
 export default function GroupManager({ navigate, onLogout, currentUser, groups, setGroups, tests }) {
@@ -22,6 +23,9 @@ export default function GroupManager({ navigate, onLogout, currentUser, groups, 
   const [newCount, setNewCount] = useState(20);
   const [expandedGroup, setExpandedGroup] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  // For removing individual students: { groupId, toRemove: Set of indices }
+  const [removingFrom, setRemovingFrom] = useState(null);
+  const [selectedToRemove, setSelectedToRemove] = useState(new Set());
 
   const openNewForm = () => {
     setEditingGroup(null);
@@ -38,16 +42,57 @@ export default function GroupManager({ navigate, onLogout, currentUser, groups, 
   const saveGroup = () => {
     const count = parseInt(newCount, 10);
     if (editingGroup) {
-      setGroups(prev => prev.map(g => g.id === editingGroup.id
-        ? { ...g, name: newName, subject: newSubject, count }
-        : g
-      ));
+      const existing = editingGroup.usernames || [];
+      const diff = count - existing.length;
+      if (diff > 0) {
+        // Anzahl gestiegen → neue Benutzernamen hinzufügen
+        const newUsernames = generateUsernames(diff, existing);
+        setGroups(prev => prev.map(g => g.id === editingGroup.id
+          ? { ...g, name: newName, subject: newSubject, count, usernames: [...existing, ...newUsernames] }
+          : g
+        ));
+        setShowForm(false); setEditingGroup(null);
+        setNewName(""); setNewSubject(""); setNewCount(20);
+      } else if (diff < 0) {
+        // Anzahl gesunken → Auswahl-Modal öffnen
+        setShowForm(false);
+        setRemovingFrom({ group: editingGroup, newName, newSubject, count });
+        setSelectedToRemove(new Set());
+      } else {
+        // Nur Name/Fach geändert
+        setGroups(prev => prev.map(g => g.id === editingGroup.id
+          ? { ...g, name: newName, subject: newSubject }
+          : g
+        ));
+        setShowForm(false); setEditingGroup(null);
+        setNewName(""); setNewSubject(""); setNewCount(20);
+      }
     } else {
       const usernames = generateUsernames(count);
       setGroups(prev => [...prev, { id: Date.now(), name: newName, subject: newSubject, count, usernames }]);
+      setShowForm(false);
+      setNewName(""); setNewSubject(""); setNewCount(20);
     }
-    setShowForm(false); setEditingGroup(null);
-    setNewName(""); setNewSubject(""); setNewCount(20);
+  };
+
+  const confirmRemoval = () => {
+    const { group, newName, newSubject, count } = removingFrom;
+    const remaining = group.usernames.filter((_, i) => !selectedToRemove.has(i));
+    setGroups(prev => prev.map(g => g.id === group.id
+      ? { ...g, name: newName, subject: newSubject, count, usernames: remaining }
+      : g
+    ));
+    setRemovingFrom(null);
+    setSelectedToRemove(new Set());
+    setEditingGroup(null);
+  };
+
+  const toggleRemoveSelect = (i) => {
+    setSelectedToRemove(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
   };
 
   const deleteGroup = (id) => {
@@ -83,6 +128,7 @@ export default function GroupManager({ navigate, onLogout, currentUser, groups, 
   };
 
   const getAssignedTests = (groupId) => (tests || []).filter(t => t.groupId === groupId);
+  const needToRemove = removingFrom ? removingFrom.group.usernames.length - removingFrom.count : 0;
 
   return (
     <TeacherLayout navigate={navigate} onLogout={onLogout} currentUser={currentUser} activePage="groups">
@@ -97,6 +143,7 @@ export default function GroupManager({ navigate, onLogout, currentUser, groups, 
           </button>
         </div>
 
+        {/* Create / Edit Form */}
         {showForm && (
           <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
             <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: 700 }}>
@@ -119,11 +166,21 @@ export default function GroupManager({ navigate, onLogout, currentUser, groups, 
                   style={{ width: "80px", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit" }} />
               </div>
             </div>
+            {editingGroup && parseInt(newCount, 10) < editingGroup.usernames.length && (
+              <div style={{ marginTop: "12px", background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#92400e" }}>
+                ⚠️ Du reduzierst die Gruppe um {editingGroup.usernames.length - parseInt(newCount, 10)} Schüler/in. Im nächsten Schritt kannst du auswählen, welche Benutzernamen entfernt werden sollen.
+              </div>
+            )}
+            {editingGroup && parseInt(newCount, 10) > editingGroup.usernames.length && (
+              <div style={{ marginTop: "12px", background: "#dcfce7", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#14532d" }}>
+                ✓ Es werden {parseInt(newCount, 10) - editingGroup.usernames.length} neue Benutzernamen hinzugefügt. Alle bestehenden Benutzernamen bleiben erhalten.
+              </div>
+            )}
             <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
               <button onClick={saveGroup} disabled={!newName} style={{
                 padding: "9px 20px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "9px",
                 fontWeight: 600, fontSize: "13px", cursor: newName ? "pointer" : "not-allowed", opacity: newName ? 1 : 0.5
-              }}>{editingGroup ? "Änderungen speichern" : "Gruppe erstellen & Benutzernamen generieren"}</button>
+              }}>{editingGroup ? "Weiter" : "Gruppe erstellen & Benutzernamen generieren"}</button>
               <button onClick={() => { setShowForm(false); setEditingGroup(null); }} style={{ padding: "9px 16px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>Abbrechen</button>
             </div>
           </div>
@@ -157,12 +214,8 @@ export default function GroupManager({ navigate, onLogout, currentUser, groups, 
                   <button onClick={() => generateForGroup(group.id)} style={{ padding: "7px 14px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
                     🔄 Benutzernamen
                   </button>
-                  <button onClick={() => openEditForm(group)} style={{ padding: "7px 12px", background: "#f8fafc", color: "#374151", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>
-                    ✏️
-                  </button>
-                  <button onClick={() => setDeleteConfirm(group.id)} style={{ padding: "7px 12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>
-                    🗑
-                  </button>
+                  <button onClick={() => openEditForm(group)} style={{ padding: "7px 12px", background: "#f8fafc", color: "#374151", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>✏️</button>
+                  <button onClick={() => setDeleteConfirm(group.id)} style={{ padding: "7px 12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>🗑</button>
                   <button onClick={() => setExpandedGroup(expandedGroup === group.id ? null : group.id)} style={{ padding: "7px 10px", background: "#f8fafc", color: "#374151", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>
                     {expandedGroup === group.id ? "▲" : "▼"}
                   </button>
@@ -172,9 +225,7 @@ export default function GroupManager({ navigate, onLogout, currentUser, groups, 
               {expandedGroup === group.id && (
                 <div style={{ padding: "0 24px 20px", borderTop: "1px solid #f1f5f9" }}>
                   {group.usernames.length === 0 ? (
-                    <p style={{ fontSize: "13px", color: "#94a3b8", marginTop: "14px" }}>
-                      Noch keine Benutzernamen generiert. Klicke auf „🔄 Benutzernamen".
-                    </p>
+                    <p style={{ fontSize: "13px", color: "#94a3b8", marginTop: "14px" }}>Noch keine Benutzernamen generiert. Klicke auf „🔄 Benutzernamen".</p>
                   ) : (
                     <>
                       <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "12px", marginTop: "14px" }}>
@@ -200,7 +251,61 @@ export default function GroupManager({ navigate, onLogout, currentUser, groups, 
         })}
       </div>
 
-      {/* Delete Modal */}
+      {/* Remove Students Modal */}
+      {removingFrom && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "500px", width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ fontSize: "32px", marginBottom: "12px", textAlign: "center" }}>👤</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a", textAlign: "center" }}>
+              Welche Schüler/innen verlassen die Gruppe?
+            </h3>
+            <p style={{ color: "#64748b", marginBottom: "8px", fontSize: "14px", textAlign: "center" }}>
+              Bitte wähle genau <strong>{needToRemove}</strong> Benutzernamen aus, die entfernt werden sollen.
+            </p>
+            <div style={{ background: "#fef9c3", borderRadius: "8px", padding: "8px 12px", fontSize: "12px", color: "#92400e", marginBottom: "16px", textAlign: "center" }}>
+              ⚠️ Alle anderen Benutzernamen bleiben unverändert.
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "20px" }}>
+              {removingFrom.group.usernames.map((u, i) => {
+                const selected = selectedToRemove.has(i);
+                return (
+                  <button key={i} onClick={() => toggleRemoveSelect(i)}
+                    style={{
+                      padding: "10px 12px", borderRadius: "9px", cursor: "pointer", textAlign: "left",
+                      border: `2px solid ${selected ? "#dc2626" : "#e2e8f0"}`,
+                      background: selected ? "#fef2f2" : "#f8fafc",
+                      transition: "all 0.15s", fontFamily: "inherit"
+                    }}>
+                    <span style={{ fontSize: "11px", color: selected ? "#dc2626" : "#94a3b8", display: "block" }}>
+                      {selected ? "✕ Wird entfernt" : `#${i + 1}`}
+                    </span>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: selected ? "#dc2626" : "#374151" }}>{u}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => { setRemovingFrom(null); setSelectedToRemove(new Set()); setEditingGroup(null); }}
+                style={{ flex: 1, padding: "10px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>
+                Abbrechen
+              </button>
+              <button onClick={confirmRemoval} disabled={selectedToRemove.size !== needToRemove}
+                style={{
+                  flex: 1, padding: "10px", background: selectedToRemove.size === needToRemove ? "#dc2626" : "#e2e8f0",
+                  color: selectedToRemove.size === needToRemove ? "#fff" : "#94a3b8",
+                  border: "none", borderRadius: "9px", fontWeight: 700,
+                  cursor: selectedToRemove.size === needToRemove ? "pointer" : "not-allowed", transition: "all 0.2s"
+                }}>
+                {selectedToRemove.size}/{needToRemove} ausgewählt – Entfernen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Group Modal */}
       {deleteConfirm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "360px", textAlign: "center" }}>
