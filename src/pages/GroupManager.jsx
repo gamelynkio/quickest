@@ -24,10 +24,38 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
   const [expandedGroup, setExpandedGroup] = useState(null);
 
   const createGroup = () => {
-    const usernames = Array.from({ length: newCount }, () => generateUsername());
-    setGroups(prev => [...prev, { id: Date.now(), name: newName, subject: newSubject, count: newCount, usernames }]);
+    const count = parseInt(newCount, 10);
+    const usernames = Array.from({ length: count }, () => generateUsername());
+    setGroups(prev => [...prev, { id: Date.now(), name: newName, subject: newSubject, count, usernames }]);
     setNewName(""); setNewSubject(""); setNewCount(20);
     setShowForm(false);
+  };
+
+  const exportPDF = (group) => {
+    const rows = group.usernames.map((u, i) =>
+      `<tr style="border-bottom:1px solid #e2e8f0">
+        <td style="padding:8px 12px;color:#94a3b8">${i + 1}</td>
+        <td style="padding:8px 12px;font-weight:600">${u}</td>
+        <td style="padding:8px 12px;font-weight:700;color:#2563a8">1234</td>
+      </tr>`
+    ).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Benutzernamen – ${group.name}</title>
+    <style>body{font-family:sans-serif;padding:32px}h1{font-size:20px;margin-bottom:4px}p{color:#64748b;font-size:13px;margin-bottom:24px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:8px 12px;background:#f8fafc;font-size:12px;color:#94a3b8;border-bottom:2px solid #e2e8f0}</style>
+    </head><body>
+    <h1>⚡ QuickTest – ${group.name}</h1>
+    <p>${group.subject} · ${group.count} Schüler/innen · Bitte nicht weitergeben!</p>
+    <table><thead><tr><th>#</th><th>Benutzername</th><th>PIN</th></tr></thead><tbody>${rows}</tbody></table>
+    </body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `QuickTest_${group.name.replace(/\s/g, "_")}_Benutzernamen.html`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const generateForGroup = (id) => {
@@ -116,7 +144,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
                     </div>
                   ))}
                 </div>
-                <button style={{
+                <button onClick={() => exportPDF(group)} style={{
                   marginTop: "12px", padding: "8px 16px", background: "#16a34a", color: "#fff",
                   border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer"
                 }}>📋 Als PDF exportieren</button>
