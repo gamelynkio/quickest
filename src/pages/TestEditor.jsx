@@ -48,6 +48,8 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
 
   const handleSave = async () => {
     setSaving(true);
+    console.log("currentUser:", currentUser);
+    console.log("payload teacher_id:", currentUser?.id);
     const payload = {
       teacher_id: currentUser?.id,
       title: title || "Unbenannte Vorlage",
