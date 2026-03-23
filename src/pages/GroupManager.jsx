@@ -1,13 +1,22 @@
 import { useState } from "react";
 import TeacherLayout from "../components/TeacherLayout";
 
-const ADJECTIVES = ["blauer", "roter", "grüner", "schneller", "kluger", "starker", "leiser", "großer", "freier", "alter"];
-const ANIMALS = ["Adler", "Tiger", "Fuchs", "Wolf", "Bär", "Luchs", "Falke", "Dachs", "Hirsch", "Storch"];
+const ADJECTIVES = ["blauer", "roter", "grüner", "schneller", "kluger", "starker", "leiser", "großer", "freier", "alter", "wilder", "sanfter", "mutiger", "flinker", "weiser", "treuer", "stolzer", "kühner", "wacher", "schlauer", "ruhiger", "fleißiger", "tapferer", "heller", "dunkler"];
+const ANIMALS = ["Adler", "Tiger", "Fuchs", "Wolf", "Bär", "Luchs", "Falke", "Dachs", "Hirsch", "Storch", "Igel", "Otter", "Rabe", "Elch", "Biber", "Marder", "Habicht", "Wisent", "Uhu", "Fischotter", "Steinbock", "Lämmergeier", "Rotmilan", "Seehund", "Zander"];
 
-const generateUsername = () => {
-  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-  const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-  return `${adj}-${animal}`;
+const generateUsernames = (count) => {
+  const all = [];
+  for (const adj of ADJECTIVES) {
+    for (const animal of ANIMALS) {
+      all.push(`${adj}-${animal}`);
+    }
+  }
+  // shuffle
+  for (let i = all.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [all[i], all[j]] = [all[j], all[i]];
+  }
+  return all.slice(0, count);
 };
 
 const DEMO_GROUPS = [
@@ -25,7 +34,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
 
   const createGroup = () => {
     const count = parseInt(newCount, 10);
-    const usernames = Array.from({ length: count }, () => generateUsername());
+    const usernames = generateUsernames(count);
     setGroups(prev => [...prev, { id: Date.now(), name: newName, subject: newSubject, count, usernames }]);
     setNewName(""); setNewSubject(""); setNewCount(20);
     setShowForm(false);
@@ -60,7 +69,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
 
   const generateForGroup = (id) => {
     setGroups(prev => prev.map(g =>
-      g.id === id ? { ...g, usernames: Array.from({ length: g.count }, () => generateUsername()) } : g
+      g.id === id ? { ...g, usernames: generateUsernames(g.count) } : g
     ));
     setExpandedGroup(id);
   };
