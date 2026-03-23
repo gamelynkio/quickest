@@ -10,22 +10,25 @@ const QUESTION_TYPES = [
 ];
 
 const newQuestion = (type) => ({
-  id: Date.now(),
+  id: Date.now() + Math.random(),
   type,
   text: "",
   points: 1,
   options: type === "multiple_choice" ? ["", "", "", ""] : [],
   correctAnswer: null,
-  blanks: type === "fill_blank" ? [""] : [],
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
   attachment: null,
 });
 
-export default function TestEditor({ navigate, onLogout, currentUser, editingTest }) {
+export default function TestEditor({ navigate, onLogout, currentUser, editingTest, tests, setTests, groups }) {
   const [testTitle, setTestTitle] = useState(editingTest?.title || "");
-  const [testDescription, setTestDescription] = useState("");
-  const [questions, setQuestions] = useState([]);
-  const [gradingScale, setGradingScale] = useState([
+  const [testDescription, setTestDescription] = useState(editingTest?.description || "");
+  const [selectedGroupId, setSelectedGroupId] = useState(editingTest?.groupId || "");
+  const [timeLimit, setTimeLimit] = useState(editingTest?.timeLimit ? Math.round(editingTest.timeLimit / 60) : 20);
+  const [timingMode, setTimingMode] = useState(editingTest?.timingMode || "countdown");
+  const [antiCheat, setAntiCheat] = useState(editingTest?.antiCheat || false);
+  const [questions, setQuestions] = useState(editingTest?.questionData || []);
+  const [gradingScale, setGradingScale] = useState(editingTest?.gradingScale || [
     { grade: "1", minPercent: 87 },
     { grade: "2", minPercent: 73 },
     { grade: "3", minPercent: 59 },
@@ -49,11 +52,41 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     setQuestions(prev => prev.filter(q => q.id !== id));
   };
 
-  const totalPoints = questions.reduce((sum, q) => sum + Number(q.points), 0);
+  const moveQuestion = (index, dir) => {
+    const next = [...questions];
+    const swap = index + dir;
+    if (swap < 0 || swap >= next.length) return;
+    [next[index], next[swap]] = [next[swap], next[index]];
+    setQuestions(next);
+  };
 
-  const handleSave = () => {
+  const totalPoints = questions.reduce((sum, q) => sum + Number(q.points || 0), 0);
+
+  const handleSave = (status = "entwurf") => {
+    const testData = {
+      id: editingTest?.id || Date.now(),
+      title: testTitle || "Unbenannter Test",
+      description: testDescription,
+      groupId: selectedGroupId ? Number(selectedGroupId) : null,
+      timeLimit: timeLimit * 60,
+      timingMode,
+      antiCheat,
+      questionData: questions,
+      gradingScale,
+      status: editingTest?.status === "aktiv" ? "aktiv" : status,
+      submissions: editingTest?.submissions || 0,
+      total: selectedGroupId ? (groups.find(g => g.id === Number(selectedGroupId))?.count || 0) : 0,
+      avgScore: editingTest?.avgScore || null,
+      questions: questions.length,
+    };
+
+    if (editingTest) {
+      setTests(prev => prev.map(t => t.id === editingTest.id ? testData : t));
+    } else {
+      setTests(prev => [...prev, testData]);
+    }
     setSaved(true);
-    setTimeout(() => { setSaved(false); navigate("dashboard"); }, 1200);
+    setTimeout(() => { setSaved(false); navigate("dashboard"); }, 1000);
   };
 
   return (
@@ -68,36 +101,67 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
               Gesamt: <strong>{totalPoints} Punkte</strong> · {questions.length} Aufgaben
             </p>
           </div>
-          <button onClick={handleSave} style={{
-            padding: "10px 24px", background: saved ? "#16a34a" : "#2563a8",
-            color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700,
-            fontSize: "14px", cursor: "pointer", transition: "background 0.3s"
-          }}>
-            {saved ? "✓ Gespeichert!" : "Test speichern"}
-          </button>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={() => handleSave("entwurf")} style={{
+              padding: "10px 18px", background: "#f1f5f9", color: "#374151",
+              border: "1px solid #e2e8f0", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer"
+            }}>Als Entwurf speichern</button>
+            <button onClick={() => handleSave("aktiv")} style={{
+              padding: "10px 18px", background: saved ? "#16a34a" : "#2563a8",
+              color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer", transition: "background 0.3s"
+            }}>{saved ? "✓ Gespeichert!" : "Speichern & Aktivieren"}</button>
+          </div>
         </div>
 
+        {/* Meta Card */}
         <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
             <div>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>
-                Titel des Tests *
-              </label>
-              <input value={testTitle} onChange={e => setTestTitle(e.target.value)}
-                placeholder="z.B. Mathe – Bruchrechnung Kl. 6"
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Titel *</label>
+              <input value={testTitle} onChange={e => setTestTitle(e.target.value)} placeholder="z.B. Mathe – Bruchrechnung Kl. 6"
                 style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
             </div>
             <div>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>
-                Kurzbeschreibung
-              </label>
-              <input value={testDescription} onChange={e => setTestDescription(e.target.value)}
-                placeholder="Optional"
-                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Lerngruppe zuweisen</label>
+              <select value={selectedGroupId} onChange={e => setSelectedGroupId(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "#fff" }}>
+                <option value="">– Keine Gruppe –</option>
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name} {g.subject ? `(${g.subject})` : ""}</option>)}
+              </select>
             </div>
           </div>
 
-          <details>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+            <div>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Bearbeitungszeit (Min.)</label>
+              <input type="number" min={1} max={180} value={timeLimit} onChange={e => setTimeLimit(Number(e.target.value))}
+                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Timer-Modus</label>
+              <select value={timingMode} onChange={e => setTimingMode(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "#fff" }}>
+                <option value="countdown">Countdown ab Start</option>
+                <option value="window">Festes Zeitfenster</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", paddingBottom: "10px" }}>
+                <input type="checkbox" checked={antiCheat} onChange={e => setAntiCheat(e.target.checked)}
+                  style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
+                🛡️ Anti-Cheat aktivieren
+              </label>
+            </div>
+          </div>
+
+          {antiCheat && (
+            <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#2563a8", border: "1px solid #bfdbfe" }}>
+              ✓ Aufgaben werden bei jedem Schüler in zufälliger Reihenfolge angezeigt und farblich unterschiedlich unterlegt.
+            </div>
+          )}
+
+          {/* Grading Scale */}
+          <details style={{ marginTop: "16px" }}>
             <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#374151", userSelect: "none" }}>
               📊 Notenschlüssel anpassen
             </summary>
@@ -118,13 +182,18 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
           </details>
         </div>
 
+        {/* Questions */}
         {questions.map((q, index) => (
           <div key={q.id} style={{ background: "#fff", borderRadius: "16px", padding: "22px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ background: "#2563a8", color: "#fff", borderRadius: "8px", padding: "3px 10px", fontSize: "13px", fontWeight: 700 }}>
-                  {index + 1}
-                </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                  <button onClick={() => moveQuestion(index, -1)} disabled={index === 0}
+                    style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", color: index === 0 ? "#e2e8f0" : "#94a3b8", fontSize: "12px", padding: "0" }}>▲</button>
+                  <button onClick={() => moveQuestion(index, 1)} disabled={index === questions.length - 1}
+                    style={{ background: "none", border: "none", cursor: index === questions.length - 1 ? "default" : "pointer", color: index === questions.length - 1 ? "#e2e8f0" : "#94a3b8", fontSize: "12px", padding: "0" }}>▼</button>
+                </div>
+                <span style={{ background: "#2563a8", color: "#fff", borderRadius: "8px", padding: "3px 10px", fontSize: "13px", fontWeight: 700 }}>{index + 1}</span>
                 <span style={{ fontSize: "13px", color: "#64748b" }}>
                   {QUESTION_TYPES.find(t => t.id === q.type)?.icon} {QUESTION_TYPES.find(t => t.id === q.type)?.label}
                 </span>
@@ -134,16 +203,12 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
                 <input type="number" value={q.points} min={0.5} step={0.5}
                   onChange={e => updateQuestion(q.id, "points", e.target.value)}
                   style={{ width: "56px", padding: "5px 8px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", fontWeight: 700, textAlign: "center" }} />
-                <button onClick={() => removeQuestion(q.id)} style={{
-                  background: "#fef2f2", border: "none", color: "#dc2626",
-                  borderRadius: "7px", padding: "5px 10px", cursor: "pointer", fontSize: "14px"
-                }}>✕</button>
+                <button onClick={() => removeQuestion(q.id)} style={{ background: "#fef2f2", border: "none", color: "#dc2626", borderRadius: "7px", padding: "5px 10px", cursor: "pointer", fontSize: "14px" }}>✕</button>
               </div>
             </div>
 
             <textarea value={q.text} onChange={e => updateQuestion(q.id, "text", e.target.value)}
-              placeholder="Aufgabenstellung eingeben..."
-              rows={2}
+              placeholder="Aufgabenstellung eingeben..." rows={2}
               style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} />
 
             {q.type === "multiple_choice" && (
@@ -151,21 +216,17 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
                 {q.options.map((opt, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <input type="radio" name={`correct-${q.id}`} checked={q.correctAnswer === i}
-                      onChange={() => updateQuestion(q.id, "correctAnswer", i)}
-                      style={{ accentColor: "#2563a8" }} />
+                      onChange={() => updateQuestion(q.id, "correctAnswer", i)} style={{ accentColor: "#2563a8" }} />
                     <input value={opt}
                       onChange={e => {
-                        const opts = [...q.options];
-                        opts[i] = e.target.value;
+                        const opts = [...q.options]; opts[i] = e.target.value;
                         updateQuestion(q.id, "options", opts);
                       }}
                       placeholder={`Antwort ${String.fromCharCode(65 + i)}`}
                       style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
                   </div>
                 ))}
-                <p style={{ gridColumn: "span 2", fontSize: "11px", color: "#94a3b8", margin: "2px 0 0" }}>
-                  ○ Richtigen Antwort markieren
-                </p>
+                <p style={{ gridColumn: "span 2", fontSize: "11px", color: "#94a3b8", margin: "2px 0 0" }}>○ Richtige Antwort markieren</p>
               </div>
             )}
 
@@ -176,8 +237,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
                     style={{
                       padding: "9px 24px", border: `2px solid ${q.correctAnswer === i ? "#2563a8" : "#e5e7eb"}`,
                       borderRadius: "9px", background: q.correctAnswer === i ? "#2563a8" : "#fff",
-                      color: q.correctAnswer === i ? "#fff" : "#374151",
-                      fontWeight: 600, fontSize: "14px", cursor: "pointer", fontFamily: "inherit"
+                      color: q.correctAnswer === i ? "#fff" : "#374151", fontWeight: 600, fontSize: "14px", cursor: "pointer", fontFamily: "inherit"
                     }}>{opt}</button>
                 ))}
               </div>
@@ -200,34 +260,26 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
                 {q.pairs.map((pair, i) => (
                   <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
                     <input value={pair.left} placeholder={`Begriff ${i + 1}`}
-                      onChange={e => {
-                        const pairs = [...q.pairs];
-                        pairs[i] = { ...pairs[i], left: e.target.value };
-                        updateQuestion(q.id, "pairs", pairs);
-                      }}
+                      onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], left: e.target.value }; updateQuestion(q.id, "pairs", p); }}
                       style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
                     <span style={{ color: "#94a3b8" }}>→</span>
                     <input value={pair.right} placeholder={`Definition ${i + 1}`}
-                      onChange={e => {
-                        const pairs = [...q.pairs];
-                        pairs[i] = { ...pairs[i], right: e.target.value };
-                        updateQuestion(q.id, "pairs", pairs);
-                      }}
+                      onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], right: e.target.value }; updateQuestion(q.id, "pairs", p); }}
                       style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
+                    {q.pairs.length > 1 && (
+                      <button onClick={() => updateQuestion(q.id, "pairs", q.pairs.filter((_, pi) => pi !== i))}
+                        style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
+                    )}
                   </div>
                 ))}
                 <button onClick={() => updateQuestion(q.id, "pairs", [...q.pairs, { left: "", right: "" }])}
-                  style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>
-                  + Paar hinzufügen
-                </button>
+                  style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>+ Paar hinzufügen</button>
               </div>
             )}
 
             <div style={{ marginTop: "12px" }}>
               <label style={{ fontSize: "12px", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "6px", padding: "5px 10px" }}>
-                  📎 Datei anhängen (Bild, Audio, Video)
-                </span>
+                <span style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "6px", padding: "5px 10px" }}>📎 Datei anhängen (Bild, Audio, Video)</span>
                 <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }}
                   onChange={e => updateQuestion(q.id, "attachment", e.target.files[0]?.name)} />
                 {q.attachment && <span style={{ fontSize: "12px", color: "#16a34a" }}>✓ {q.attachment}</span>}
@@ -236,29 +288,22 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
           </div>
         ))}
 
+        {/* Add Question */}
         <div style={{ position: "relative" }}>
           <button onClick={() => setShowTypeMenu(m => !m)} style={{
             width: "100%", padding: "14px", border: "2px dashed #cbd5e1",
-            borderRadius: "14px", background: "#fff", color: "#2563a8",
-            fontSize: "14px", fontWeight: 600, cursor: "pointer"
+            borderRadius: "14px", background: "#fff", color: "#2563a8", fontSize: "14px", fontWeight: 600, cursor: "pointer"
           }}
             onMouseOver={e => e.currentTarget.style.borderColor = "#2563a8"}
             onMouseOut={e => e.currentTarget.style.borderColor = "#cbd5e1"}
-          >
-            + Aufgabe hinzufügen
-          </button>
+          >+ Aufgabe hinzufügen</button>
           {showTypeMenu && (
-            <div style={{
-              position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0,
-              background: "#fff", borderRadius: "14px", border: "1px solid #e2e8f0",
-              boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 10
-            }}>
+            <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0, background: "#fff", borderRadius: "14px", border: "1px solid #e2e8f0", boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 10 }}>
               {QUESTION_TYPES.map(t => (
                 <button key={t.id} onClick={() => addQuestion(t.id)} style={{
                   width: "100%", padding: "13px 20px", border: "none", background: "#fff",
                   textAlign: "left", fontSize: "14px", cursor: "pointer", display: "flex",
-                  alignItems: "center", gap: "12px", borderBottom: "1px solid #f8fafc",
-                  fontFamily: "inherit"
+                  alignItems: "center", gap: "12px", borderBottom: "1px solid #f8fafc", fontFamily: "inherit"
                 }}
                   onMouseOver={e => e.currentTarget.style.background = "#f0f7ff"}
                   onMouseOut={e => e.currentTarget.style.background = "#fff"}
