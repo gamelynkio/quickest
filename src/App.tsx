@@ -1,10 +1,16 @@
 import { useState } from "react";
-import LoginPage from "./pages/LoginPage";
-import TeacherDashboard from "./pages/TeacherDashboard";
-import TestEditor from "./pages/TestEditor";
-import StudentTestView from "./pages/StudentTestView";
-import GroupManager from "./pages/GroupManager";
-import ResultsView from "./pages/ResultsView";
+// @ts-ignore
+import LoginPage from "./pages/LoginPage.jsx";
+// @ts-ignore
+import TeacherDashboard from "./pages/TeacherDashboard.jsx";
+// @ts-ignore
+import TestEditor from "./pages/TestEditor.jsx";
+// @ts-ignore
+import StudentTestView from "./pages/StudentTestView.jsx";
+// @ts-ignore
+import GroupManager from "./pages/GroupManager.jsx";
+// @ts-ignore
+import ResultsView from "./pages/ResultsView.jsx";
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState("login");
