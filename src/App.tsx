@@ -12,9 +12,9 @@ const DEMO_GROUPS = [
 ];
 
 const DEMO_TESTS = [
-  { id: 1, title: "Mathe – Bruchrechnung Kl. 6", questions: 12, group: "6a", status: "aktiv", submissions: 18, total: 24, avgScore: 76 },
-  { id: 2, title: "Deutsch – Grammatik", questions: 8, group: "7b", status: "beendet", submissions: 22, total: 22, avgScore: 82 },
-  { id: 3, title: "Englisch – Simple Past", questions: 15, group: "8c", status: "entwurf", submissions: 0, total: 28, avgScore: null },
+  { id: 1, title: "Mathe – Bruchrechnung Kl. 6", questions: 12, groupId: 1, status: "aktiv", submissions: 18, total: 24, avgScore: 76, timeLimit: 1200 },
+  { id: 2, title: "Deutsch – Grammatik", questions: 8, groupId: 2, status: "beendet", submissions: 22, total: 22, avgScore: 82, timeLimit: 900 },
+  { id: 3, title: "Englisch – Simple Past", questions: 15, groupId: null, status: "entwurf", submissions: 0, total: 0, avgScore: null, timeLimit: 1800 },
 ];
 
 export default function App() {
@@ -25,10 +25,12 @@ export default function App() {
   const [activeTest, setActiveTest] = useState(null);
   const [groups, setGroups] = useState(DEMO_GROUPS);
   const [tests, setTests] = useState(DEMO_TESTS);
+  const [viewingResults, setViewingResults] = useState(null);
 
   const navigate = (page, data = null) => {
     if (page === "testEditor") setEditingTest(data);
     if (page === "studentTest") setActiveTest(data);
+    if (page === "results") setViewingResults(data);
     setCurrentPage(page);
   };
 
@@ -48,10 +50,10 @@ export default function App() {
 
   if (userRole === "teacher") {
     const teacherNav = { navigate, onLogout: handleLogout, currentUser };
-    if (currentPage === "dashboard") return <TeacherDashboard {...teacherNav} tests={tests} />;
-    if (currentPage === "testEditor") return <TestEditor {...teacherNav} editingTest={editingTest} tests={tests} setTests={setTests} />;
-    if (currentPage === "groups") return <GroupManager {...teacherNav} groups={groups} setGroups={setGroups} />;
-    if (currentPage === "results") return <ResultsView {...teacherNav} />;
+    if (currentPage === "dashboard") return <TeacherDashboard {...teacherNav} tests={tests} setTests={setTests} groups={groups} />;
+    if (currentPage === "testEditor") return <TestEditor {...teacherNav} editingTest={editingTest} tests={tests} setTests={setTests} groups={groups} />;
+    if (currentPage === "groups") return <GroupManager {...teacherNav} groups={groups} setGroups={setGroups} tests={tests} />;
+    if (currentPage === "results") return <ResultsView {...teacherNav} test={viewingResults} groups={groups} />;
   }
 
   if (userRole === "student") {
