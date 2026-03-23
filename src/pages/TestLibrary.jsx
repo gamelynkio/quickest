@@ -20,6 +20,10 @@ export default function TestLibrary({ navigate, onLogout, currentUser, templates
   const [assignTimeLimit, setAssignTimeLimit] = useState(20);
   const [assignTimingMode, setAssignTimingMode] = useState("countdown");
   const [assignAntiCheat, setAssignAntiCheat] = useState(false);
+  const [assignDate, setAssignDate] = useState("");
+  const [assignTimeStart, setAssignTimeStart] = useState("08:00");
+  const [assignTimeEnd, setAssignTimeEnd] = useState("10:00");
+  const [assignTimezone, setAssignTimezone] = useState("Europe/Berlin");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const subjects = [...new Set(templates.map(t => t.subject).filter(Boolean))];
@@ -30,8 +34,10 @@ export default function TestLibrary({ navigate, onLogout, currentUser, templates
     return matchSearch && matchSubject;
   });
 
+  const windowValid = assignTimingMode !== "window" || (assignDate && assignTimeStart && assignTimeEnd);
+
   const handleAssign = () => {
-    if (!assignGroupId) return;
+    if (!assignGroupId || !windowValid) return;
     const group = groups.find(g => g.id === Number(assignGroupId));
     const newTest = {
       id: Date.now(),
@@ -41,6 +47,12 @@ export default function TestLibrary({ navigate, onLogout, currentUser, templates
       timeLimit: assignTimeLimit * 60,
       timingMode: assignTimingMode,
       antiCheat: assignAntiCheat,
+      ...(assignTimingMode === "window" && {
+        windowDate: assignDate,
+        windowStart: assignTimeStart,
+        windowEnd: assignTimeEnd,
+        windowTimezone: assignTimezone,
+      }),
       questionData: assignModal.questionData,
       gradingScale: assignModal.gradingScale,
       status: "aktiv",
@@ -211,14 +223,58 @@ export default function TestLibrary({ navigate, onLogout, currentUser, templates
                   style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
               </div>
               <div>
-                <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Timer-Modus</label>
-                <select value={assignTimingMode} onChange={e => setAssignTimingMode(e.target.value)}
-                  style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
+                <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>
+                  Timer-Modus
+                  {!assignGroupId && <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: "6px" }}>(erst Gruppe wählen)</span>}
+                </label>
+                <select value={assignTimingMode}
+                  onChange={e => setAssignTimingMode(e.target.value)}
+                  disabled={!assignGroupId}
+                  style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: assignGroupId ? "#fff" : "#f8fafc", boxSizing: "border-box", color: assignGroupId ? "#0f172a" : "#94a3b8", cursor: assignGroupId ? "pointer" : "not-allowed" }}>
                   <option value="countdown">Countdown ab Start</option>
                   <option value="window">Festes Zeitfenster</option>
                 </select>
               </div>
             </div>
+
+            {assignGroupId && assignTimingMode === "window" && (
+              <div style={{ background: "#f0f7ff", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #bfdbfe" }}>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e3a5f", marginBottom: "12px" }}>📅 Prüfungszeitfenster</div>
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Prüfungstag</label>
+                  <input type="date" value={assignDate} onChange={e => setAssignDate(e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", border: "2px solid #bfdbfe", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "#fff" }} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+                  <div>
+                    <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Uhrzeit Start</label>
+                    <input type="time" value={assignTimeStart} onChange={e => setAssignTimeStart(e.target.value)}
+                      style={{ width: "100%", padding: "9px 12px", border: "2px solid #bfdbfe", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "#fff" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Uhrzeit Ende</label>
+                    <input type="time" value={assignTimeEnd} onChange={e => setAssignTimeEnd(e.target.value)}
+                      style={{ width: "100%", padding: "9px 12px", border: "2px solid #bfdbfe", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "#fff" }} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Zeitzone</label>
+                  <select value={assignTimezone} onChange={e => setAssignTimezone(e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", border: "2px solid #bfdbfe", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
+                    <option value="Europe/Berlin">Europa/Berlin (MEZ/MESZ)</option>
+                    <option value="Europe/Vienna">Europa/Wien (MEZ/MESZ)</option>
+                    <option value="Europe/Zurich">Europa/Zürich (MEZ/MESZ)</option>
+                    <option value="Europe/London">Europa/London (GMT/BST)</option>
+                    <option value="UTC">UTC</option>
+                  </select>
+                </div>
+                {assignDate && assignTimeStart && assignTimeEnd && (
+                  <div style={{ marginTop: "10px", fontSize: "12px", color: "#2563a8", fontWeight: 600 }}>
+                    ✓ Test verfügbar am {new Date(assignDate).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })} von {assignTimeStart} bis {assignTimeEnd} Uhr
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ marginBottom: "24px" }}>
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
@@ -238,8 +294,8 @@ export default function TestLibrary({ navigate, onLogout, currentUser, templates
                 style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>
                 Abbrechen
               </button>
-              <button onClick={handleAssign} disabled={!assignGroupId}
-                style={{ flex: 1, padding: "11px", background: assignGroupId ? "#2563a8" : "#e2e8f0", color: assignGroupId ? "#fff" : "#94a3b8", border: "none", borderRadius: "10px", fontWeight: 700, cursor: assignGroupId ? "pointer" : "not-allowed", transition: "all 0.2s" }}>
+              <button onClick={handleAssign} disabled={!assignGroupId || !windowValid}
+                style={{ flex: 1, padding: "11px", background: (assignGroupId && windowValid) ? "#2563a8" : "#e2e8f0", color: (assignGroupId && windowValid) ? "#fff" : "#94a3b8", border: "none", borderRadius: "10px", fontWeight: 700, cursor: (assignGroupId && windowValid) ? "pointer" : "not-allowed", transition: "all 0.2s" }}>
                 Test aktivieren →
               </button>
             </div>
