@@ -48,12 +48,11 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const handleAssign = async () => {
     if (!assignGroupId || !windowValid) return;
     setAssigning(true);
-    const { data: { user } } = await supabase.auth.getUser();
     const group = groups.find(g => g.id === Number(assignGroupId));
     const newAssignment = {
       template_id: assignModal.id,
       group_id: Number(assignGroupId),
-      teacher_id: user.id,
+      teacher_id: currentUser?.id,
       title: assignModal.title,
       status: "aktiv",
       time_limit: assignTimeLimit * 60,
