@@ -11,7 +11,6 @@ const generateUsernames = (count) => {
       all.push(`${adj}-${animal}`);
     }
   }
-  // shuffle
   for (let i = all.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [all[i], all[j]] = [all[j], all[i]];
@@ -19,13 +18,7 @@ const generateUsernames = (count) => {
   return all.slice(0, count);
 };
 
-const DEMO_GROUPS = [
-  { id: 1, name: "Klasse 6a", subject: "Mathematik", count: 24, usernames: [] },
-  { id: 2, name: "Klasse 7b", subject: "Deutsch", count: 22, usernames: [] },
-];
-
-export default function GroupManager({ navigate, onLogout, currentUser }) {
-  const [groups, setGroups] = useState(DEMO_GROUPS);
+export default function GroupManager({ navigate, onLogout, currentUser, groups, setGroups }) {
   const [showForm, setShowForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [newSubject, setNewSubject] = useState("");
@@ -40,6 +33,13 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     setShowForm(false);
   };
 
+  const generateForGroup = (id) => {
+    setGroups(prev => prev.map(g =>
+      g.id === id ? { ...g, usernames: generateUsernames(g.count) } : g
+    ));
+    setExpandedGroup(id);
+  };
+
   const exportPDF = (group) => {
     const rows = group.usernames.map((u, i) =>
       `<tr style="border-bottom:1px solid #e2e8f0">
@@ -50,10 +50,10 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     ).join("");
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>Benutzernamen – ${group.name}</title>
+    <title>Benutzernamen - ${group.name}</title>
     <style>body{font-family:sans-serif;padding:32px}h1{font-size:20px;margin-bottom:4px}p{color:#64748b;font-size:13px;margin-bottom:24px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:8px 12px;background:#f8fafc;font-size:12px;color:#94a3b8;border-bottom:2px solid #e2e8f0}</style>
     </head><body>
-    <h1>⚡ QuickTest – ${group.name}</h1>
+    <h1>QuickTest - ${group.name}</h1>
     <p>${group.subject} · ${group.count} Schüler/innen · Bitte nicht weitergeben!</p>
     <table><thead><tr><th>#</th><th>Benutzername</th><th>PIN</th></tr></thead><tbody>${rows}</tbody></table>
     </body></html>`;
@@ -65,13 +65,6 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     a.download = `QuickTest_${group.name.replace(/\s/g, "_")}_Benutzernamen.html`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const generateForGroup = (id) => {
-    setGroups(prev => prev.map(g =>
-      g.id === id ? { ...g, usernames: generateUsernames(g.count) } : g
-    ));
-    setExpandedGroup(id);
   };
 
   return (
@@ -104,7 +97,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
               </div>
               <div>
                 <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Schüleranzahl</label>
-                <input type="number" value={newCount} min={1} max={40} onChange={e => setNewCount(Number(e.target.value))}
+                <input type="number" value={newCount} min={1} max={625} onChange={e => setNewCount(e.target.value)}
                   style={{ width: "80px", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit" }} />
               </div>
             </div>
