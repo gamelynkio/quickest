@@ -48,9 +48,8 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
 
   const handleSave = async () => {
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
     const payload = {
-      teacher_id: user.id,
+      teacher_id: currentUser?.id,
       title: title || "Unbenannte Vorlage",
       description,
       subject,
