@@ -11,7 +11,7 @@ const DEMO_TEST = {
   ]
 };
 
-export default function StudentTestView({ currentUser, onFinish }) {
+export default function StudentTestView({ currentUser, onFinish, test }) {
   const [answers, setAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(DEMO_TEST.timeLimit);
   const [submitted, setSubmitted] = useState(false);
