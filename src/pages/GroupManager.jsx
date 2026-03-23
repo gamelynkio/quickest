@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import TeacherLayout from "../components/TeacherLayout";
 
 const ADJECTIVES = ["blauer","roter","grüner","schneller","kluger","starker","leiser","großer","freier","alter","wilder","sanfter","mutiger","flinker","weiser","treuer","stolzer","kühner","wacher","schlauer","ruhiger","fleißiger","tapferer","heller","dunkler"];
