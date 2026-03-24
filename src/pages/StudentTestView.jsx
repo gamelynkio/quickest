@@ -55,8 +55,6 @@ export default function StudentTestView({ currentUser, onFinish }) {
 
   const COLORS = ["#fff3cd", "#d4edda", "#d1ecf1", "#f8d7da", "#e2d9f3", "#fde2e4"];
 
-  const handleSubmit = async () => {
-    if (submitting) return;
   const autoCorrect = (questions, answers) => {
     let score = 0;
     const corrections = {};
