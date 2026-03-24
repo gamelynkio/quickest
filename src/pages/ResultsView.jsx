@@ -41,10 +41,49 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     if (!selectedSubmission) return;
     setSaving(true);
     const updatedOverrides = { ...selectedSubmission.manual_overrides, ...overrides };
+
+    // Recalculate score from ai_corrections + manual overrides
+    const corrections = selectedSubmission.ai_corrections || {};
+    let newScore = 0;
+    for (const [qId, correction] of Object.entries(corrections)) {
+      if (updatedOverrides[qId] !== undefined) {
+        newScore += Number(updatedOverrides[qId]);
+      } else if (correction.points !== null && correction.points !== undefined) {
+        newScore += Number(correction.points);
+      }
+    }
+
+    // Recalculate grade
     const totalPoints = selectedSubmission.total_points || 1;
-    const newScore = Object.values({ ...selectedSubmission.ai_corrections, ...updatedOverrides }).reduce((sum, v) => sum + Number(v || 0), 0);
-    await supabase.from("submissions").update({ manual_overrides: updatedOverrides, score: newScore, reviewed: true }).eq("id", selectedSubmission.id);
-    setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, manual_overrides: updatedOverrides, score: newScore, reviewed: true } : s));
+    const percent = (newScore / totalPoints) * 100;
+    const scale = selectedSubmission.grading_scale ||
+      [{ grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
+       { grade: "3", minPercent: 59 }, { grade: "4", minPercent: 45 },
+       { grade: "5", minPercent: 18 }, { grade: "6", minPercent: 0 }];
+
+    // Fetch grading scale from assignment if not on submission
+    const { data: assignmentData } = await supabase
+      .from("assignments").select("grading_scale").eq("id", selectedSubmission.assignment_id).single();
+    const gradingScale = assignmentData?.grading_scale || scale;
+    const sorted = [...gradingScale].sort((a, b) => b.minPercent - a.minPercent);
+    let newGrade = "6";
+    for (const g of sorted) {
+      if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; }
+    }
+
+    await supabase.from("submissions").update({
+      manual_overrides: updatedOverrides,
+      score: newScore,
+      grade: newGrade,
+      reviewed: true
+    }).eq("id", selectedSubmission.id);
+
+    setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id
+      ? { ...s, manual_overrides: updatedOverrides, score: newScore, grade: newGrade, reviewed: true }
+      : s
+    ));
+    setSelectedSubmission(prev => ({ ...prev, manual_overrides: updatedOverrides, score: newScore, grade: newGrade, reviewed: true }));
+    setOverrides({});
     setSaving(false);
   };
 
