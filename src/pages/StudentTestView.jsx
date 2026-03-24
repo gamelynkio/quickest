@@ -1,6 +1,76 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+const COLORS = ["#fff3cd", "#d4edda", "#d1ecf1", "#f8d7da", "#e2d9f3", "#fde2e4"];
+
+const autoCorrect = (questions, answers) => {
+  let score = 0;
+  const corrections = {};
+  for (const q of questions) {
+    const studentAnswer = answers[q.id];
+    const maxPoints = Number(q.points || 0);
+    if (q.type === "multiple_choice") {
+      const correct = studentAnswer !== undefined && Number(studentAnswer) === Number(q.correctAnswer);
+      corrections[q.id] = {
+        points: correct ? maxPoints : 0, maxPoints, correct,
+        studentAnswer: q.options?.[studentAnswer] ?? String(studentAnswer ?? ""),
+        comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.options?.[q.correctAnswer] ?? "–"}`,
+      };
+      score += correct ? maxPoints : 0;
+    } else if (q.type === "true_false") {
+      const correct = studentAnswer !== undefined && Number(studentAnswer) === Number(q.correctAnswer);
+      corrections[q.id] = {
+        points: correct ? maxPoints : 0, maxPoints, correct,
+        studentAnswer: studentAnswer === 0 || studentAnswer === "0" ? "Wahr" : "Falsch",
+        comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.correctAnswer === 0 ? "Wahr" : "Falsch"}`,
+      };
+      score += correct ? maxPoints : 0;
+    } else if (q.type === "fill_blank") {
+      const expected = String(q.blanks?.[0] || "").toLowerCase().trim();
+      const given = String(studentAnswer || "").toLowerCase().trim();
+      const correct = !!expected && given === expected;
+      corrections[q.id] = {
+        points: correct ? maxPoints : 0, maxPoints, correct,
+        studentAnswer: String(studentAnswer || ""),
+        comment: correct ? "Richtig" : "Bitte manuell prüfen",
+      };
+      score += correct ? maxPoints : 0;
+    } else if (q.type === "open") {
+      corrections[q.id] = {
+        points: null, maxPoints, correct: null,
+        studentAnswer: String(studentAnswer || ""),
+        comment: "⏳ Wartet auf manuelle Bewertung",
+        needsReview: true,
+      };
+    } else if (q.type === "assignment") {
+      const pairs = q.pairs || [];
+      const studentPairs = studentAnswer || {};
+      let correctPairs = 0;
+      for (let i = 0; i < pairs.length; i++) {
+        if (studentPairs[i] === pairs[i].right) correctPairs++;
+      }
+      const pairPoints = pairs.length > 0 ? Math.round((correctPairs / pairs.length) * maxPoints * 2) / 2 : 0;
+      corrections[q.id] = {
+        points: pairPoints, maxPoints, correct: correctPairs === pairs.length,
+        studentAnswer: Object.values(studentPairs).join(", "),
+        comment: `${correctPairs} von ${pairs.length} Paaren richtig`,
+      };
+      score += pairPoints;
+    }
+  }
+  return { score, corrections };
+};
+
+const calcGrade = (score, totalPoints, gradingScale) => {
+  if (!totalPoints || !gradingScale?.length) return null;
+  const percent = (score / totalPoints) * 100;
+  const sorted = [...gradingScale].sort((a, b) => b.minPercent - a.minPercent);
+  for (const g of sorted) {
+    if (percent >= Number(g.minPercent)) return g.grade;
+  }
+  return "6";
+};
+
 export default function StudentTestView({ currentUser, onFinish }) {
   const [assignment, setAssignment] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -22,10 +92,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
-    if (data) {
-      setAssignment(data);
-      setTimeLeft(data.time_limit || 1200);
-    }
+    if (data) { setAssignment(data); setTimeLeft(data.time_limit || 1200); }
     setLoading(false);
   };
 
@@ -46,131 +113,29 @@ export default function StudentTestView({ currentUser, onFinish }) {
 
   const getQuestions = () => {
     const questions = assignment?.question_data || [];
-    if (assignment?.anti_cheat) {
-      const shuffled = [...questions].sort(() => Math.random() - 0.5);
-      return shuffled;
-    }
+    if (assignment?.anti_cheat) return [...questions].sort(() => Math.random() - 0.5);
     return questions;
   };
 
-  const COLORS = ["#fff3cd", "#d4edda", "#d1ecf1", "#f8d7da", "#e2d9f3", "#fde2e4"];
-
-  const autoCorrect = (questions, answers) => {
-    let score = 0;
-    const corrections = {};
-
-    for (const q of questions) {
-      const studentAnswer = answers[q.id];
-      const maxPoints = Number(q.points || 0);
-
-      if (q.type === "multiple_choice") {
-        // answers stores index, compare with correctAnswer index
-        const correct = studentAnswer !== undefined && Number(studentAnswer) === Number(q.correctAnswer);
-        corrections[q.id] = {
-          points: correct ? maxPoints : 0,
-          maxPoints,
-          correct,
-          studentAnswer: q.options?.[studentAnswer] ?? studentAnswer,
-          comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.options?.[q.correctAnswer] ?? "–"}`,
-        };
-        score += correct ? maxPoints : 0;
-
-      } else if (q.type === "true_false") {
-        const correct = studentAnswer !== undefined && Number(studentAnswer) === Number(q.correctAnswer);
-        corrections[q.id] = {
-          points: correct ? maxPoints : 0,
-          maxPoints,
-          correct,
-          studentAnswer: studentAnswer === 0 || studentAnswer === "0" ? "Wahr" : "Falsch",
-          comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.correctAnswer === 0 ? "Wahr" : "Falsch"}`,
-        };
-        score += correct ? maxPoints : 0;
-
-      } else if (q.type === "fill_blank") {
-        // Simple case-insensitive match
-        const expected = (q.blanks || []).join(" ").toLowerCase().trim();
-        const given = String(studentAnswer || "").toLowerCase().trim();
-        const correct = expected && given === expected;
-        corrections[q.id] = {
-          points: correct ? maxPoints : 0,
-          maxPoints,
-          correct,
-          studentAnswer: String(studentAnswer || ""),
-          comment: correct ? "Richtig" : "Bitte manuell prüfen",
-        };
-        score += correct ? maxPoints : 0;
-
-      } else if (q.type === "open") {
-        // Open answers: give 0 points, mark for manual/AI review
-        corrections[q.id] = {
-          points: null, // null = not yet corrected
-          maxPoints,
-          correct: null,
-          studentAnswer: String(studentAnswer || ""),
-          comment: "⏳ Wartet auf KI-Bewertung",
-          needsReview: true,
-        };
-
-      } else if (q.type === "assignment") {
-        // Check all pairs
-        const pairs = q.pairs || [];
-        const studentPairs = studentAnswer || {};
-        let correctPairs = 0;
-        for (let i = 0; i < pairs.length; i++) {
-          if (studentPairs[i] === pairs[i].right) correctPairs++;
-        }
-        const pairPoints = pairs.length > 0 ? (correctPairs / pairs.length) * maxPoints : 0;
-        corrections[q.id] = {
-          points: Math.round(pairPoints * 2) / 2,
-          maxPoints,
-          correct: correctPairs === pairs.length,
-          studentAnswer: Object.values(studentPairs).join(", "),
-          comment: `${correctPairs} von ${pairs.length} Paaren richtig`,
-        };
-        score += Math.round(pairPoints * 2) / 2;
-      }
-    }
-    return { score, corrections };
-  };
-
-  const calcGrade = (score, totalPoints, gradingScale) => {
-    if (!totalPoints || !gradingScale?.length) return null;
-    const percent = (score / totalPoints) * 100;
-    const sorted = [...gradingScale].sort((a, b) => b.minPercent - a.minPercent);
-    for (const g of sorted) {
-      if (percent >= g.minPercent) return g.grade;
-    }
-    return "6";
-  };
-
   const handleSubmit = async () => {
-    if (submitting) return;
+    if (submitting || !assignment) return;
     setSubmitting(true);
-
     const questions = assignment.question_data || [];
     const totalPoints = questions.reduce((sum, q) => sum + Number(q.points || 0), 0);
     const { score, corrections } = autoCorrect(questions, answers);
-
-    // Score only counts auto-correctable questions (not open)
-    const autoScore = Object.values(corrections)
-      .filter(c => c.points !== null)
-      .reduce((sum, c) => sum + (c.points || 0), 0);
-
     const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
-    const grade = hasOpenQuestions ? null : calcGrade(autoScore, totalPoints, assignment.grading_scale);
-
+    const grade = hasOpenQuestions ? null : calcGrade(score, totalPoints, assignment.grading_scale);
     await supabase.from("submissions").insert({
       assignment_id: assignment.id,
       student_id: currentUser.id,
       username: currentUser.username,
       answers,
-      score: autoScore,
+      score,
       total_points: totalPoints,
       grade,
       ai_corrections: corrections,
       reviewed: !hasOpenQuestions,
     });
-
     setSubmitted(true);
     setShowConfirm(false);
     setSubmitting(false);
@@ -275,10 +240,10 @@ export default function StudentTestView({ currentUser, onFinish }) {
             )}
 
             {q.type === "assignment" && (
-              <div style={{ fontSize: "13px", color: "#64748b" }}>
+              <div>
                 {(q.pairs || []).map((pair, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                    <span style={{ background: "rgba(255,255,255,0.7)", borderRadius: "6px", padding: "6px 10px", fontWeight: 600 }}>{pair.left}</span>
+                    <span style={{ background: "rgba(255,255,255,0.7)", borderRadius: "6px", padding: "6px 10px", fontWeight: 600, fontSize: "13px" }}>{pair.left}</span>
                     <span style={{ color: "#94a3b8" }}>→</span>
                     <select value={(answers[q.id] || {})[i] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [i]: e.target.value } }))}
                       style={{ flex: 1, padding: "6px 10px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "6px", fontSize: "13px", background: "rgba(255,255,255,0.7)", fontFamily: "inherit" }}>
