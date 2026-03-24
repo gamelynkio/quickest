@@ -125,7 +125,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
     const { score, corrections } = autoCorrect(questions, answers);
     const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
     const grade = hasOpenQuestions ? null : calcGrade(score, totalPoints, assignment.grading_scale);
-    const { error: insertError } = await supabase.from("submissions").insert({
+    await supabase.from("submissions").insert({
       assignment_id: assignment.id,
       student_id: currentUser.id,
       username: currentUser.username,
@@ -135,7 +135,6 @@ export default function StudentTestView({ currentUser, onFinish }) {
       ai_corrections: corrections,
       reviewed: !hasOpenQuestions,
     });
-    console.log("submission insert:", { insertError, assignmentId: assignment.id, studentId: currentUser.id });
     setSubmitted(true);
     setShowConfirm(false);
     setSubmitting(false);
