@@ -19,6 +19,7 @@ const generateUsernames = (count, existing = []) => {
 export default function GroupManager({ navigate, onLogout, currentUser }) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
   const [newName, setNewName] = useState("");
@@ -45,38 +46,39 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
   const saveGroup = async () => {
     const count = parseInt(newCount, 10);
     setSaving(true);
-    if (editingGroup) {
-      const existing = editingGroup.usernames || [];
-      const diff = count - existing.length;
-      if (diff > 0) {
-        const newUsernames = generateUsernames(diff, existing);
-        const updatedUsernames = [...existing, ...newUsernames];
-        const { data } = await supabase.from("groups").update({ name: newName, subject: newSubject, count, usernames: updatedUsernames }).eq("id", editingGroup.id).select().single();
-        // Also insert new students
-        const newStudents = newUsernames.map(u => ({ group_id: editingGroup.id, username: u, pin: "1234" }));
-        await supabase.from("students").insert(newStudents);
-        setGroups(prev => prev.map(g => g.id === editingGroup.id ? data : g));
-        setShowForm(false); setEditingGroup(null);
-      } else if (diff < 0) {
-        setShowForm(false);
-        setRemovingFrom({ group: editingGroup, newName, newSubject, count });
-        setSelectedToRemove(new Set());
+    try {
+      if (editingGroup) {
+        const existing = editingGroup.usernames || [];
+        const diff = count - existing.length;
+        if (diff > 0) {
+          const newUsernames = generateUsernames(diff, existing);
+          const updatedUsernames = [...existing, ...newUsernames];
+          const { data } = await supabase.from("groups").update({ name: newName, subject: newSubject, count, usernames: updatedUsernames }).eq("id", editingGroup.id).select().single();
+          const newStudents = newUsernames.map(u => ({ group_id: editingGroup.id, username: u, pin: "1234" }));
+          await supabase.from("students").insert(newStudents);
+          setGroups(prev => prev.map(g => g.id === editingGroup.id ? data : g));
+          setShowForm(false); setEditingGroup(null);
+        } else if (diff < 0) {
+          setShowForm(false);
+          setRemovingFrom({ group: editingGroup, newName, newSubject, count });
+          setSelectedToRemove(new Set());
+        } else {
+          const { data } = await supabase.from("groups").update({ name: newName, subject: newSubject }).eq("id", editingGroup.id).select().single();
+          setGroups(prev => prev.map(g => g.id === editingGroup.id ? data : g));
+          setShowForm(false); setEditingGroup(null);
+        }
       } else {
-        const { data } = await supabase.from("groups").update({ name: newName, subject: newSubject }).eq("id", editingGroup.id).select().single();
-        setGroups(prev => prev.map(g => g.id === editingGroup.id ? data : g));
-        setShowForm(false); setEditingGroup(null);
+        const usernames = generateUsernames(count);
+        const { data } = await supabase.from("groups").insert({ name: newName, subject: newSubject, count, usernames, teacher_id: currentUser?.id }).select().single();
+        const students = usernames.map(u => ({ group_id: data.id, username: u, pin: "1234" }));
+        await supabase.from("students").insert(students);
+        setGroups(prev => [data, ...prev]);
+        setShowForm(false);
       }
-    } else {
-      const usernames = generateUsernames(count);
-      const { data } = await supabase.from("groups").insert({ name: newName, subject: newSubject, count, usernames, teacher_id: currentUser?.id }).select().single();
-      // Insert students
-      const students = usernames.map(u => ({ group_id: data.id, username: u, pin: "1234" }));
-      await supabase.from("students").insert(students);
-      setGroups(prev => [data, ...prev]);
-      setShowForm(false);
+    } finally {
+      setNewName(""); setNewSubject(""); setNewCount(20);
+      setSaving(false);
     }
-    setNewName(""); setNewSubject(""); setNewCount(20);
-    setSaving(false);
   };
 
   const confirmRemoval = async () => {
@@ -84,7 +86,6 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     const toRemoveUsernames = group.usernames.filter((_, i) => selectedToRemove.has(i));
     const remaining = group.usernames.filter((_, i) => !selectedToRemove.has(i));
     const { data } = await supabase.from("groups").update({ name: newName, subject: newSubject, count, usernames: remaining }).eq("id", group.id).select().single();
-    // Remove students
     for (const u of toRemoveUsernames) await supabase.from("students").delete().eq("username", u).eq("group_id", group.id);
     setGroups(prev => prev.map(g => g.id === group.id ? data : g));
     setRemovingFrom(null); setSelectedToRemove(new Set()); setEditingGroup(null);
@@ -101,8 +102,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     const { data } = await supabase.from("groups").update({ usernames }).eq("id", group.id).select().single();
     await supabase.from("students").delete().eq("group_id", group.id);
     const students = usernames.map(u => ({ group_id: group.id, username: u, pin: "1234" }));
-    const { error: studentsError } = await supabase.from("students").insert(students);
-    console.log("students insert error:", studentsError);
+    await supabase.from("students").insert(students);
     setGroups(prev => prev.map(g => g.id === group.id ? data : g));
     setExpandedGroup(group.id);
     setRegenConfirm(null);
@@ -195,9 +195,6 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
                 )}
                 <button onClick={() => openEditForm(group)} style={{ padding: "7px 12px", background: "#f8fafc", color: "#374151", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>✏️</button>
                 <button onClick={() => setDeleteConfirm(group.id)} style={{ padding: "7px 12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>🗑</button>
-                <button onClick={() => setExpandedGroup(expandedGroup === group.id ? null : group.id)} style={{ padding: "7px 10px", background: "#f8fafc", color: "#374151", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>
-                  {expandedGroup === group.id ? "▲" : "▼"}
-                </button>
               </div>
             </div>
             {expandedGroup === group.id && (
