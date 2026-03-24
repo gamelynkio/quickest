@@ -101,28 +101,45 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                 <p style={{ margin: "0 0 18px", color: "#64748b", fontSize: "13px" }}>
                   Abgegeben: {new Date(selectedSubmission.submitted_at).toLocaleString("de-DE")}
                 </p>
-                {Object.entries(selectedSubmission.answers || {}).map(([qId, answer], i) => {
-                  const aiCorrection = selectedSubmission.ai_corrections?.[qId];
+                {Object.entries(selectedSubmission.ai_corrections || {}).map(([qId, correction], i) => {
                   const override = overrides[qId];
-                  const currentPoints = override !== undefined ? override : (selectedSubmission.manual_overrides?.[qId] ?? aiCorrection?.points ?? null);
+                  const currentPoints = override !== undefined ? Number(override) : (
+                    selectedSubmission.manual_overrides?.[qId] !== undefined
+                      ? selectedSubmission.manual_overrides[qId]
+                      : correction.points
+                  );
+                  const isOpen = correction.needsReview;
                   return (
-                    <div key={qId} style={{ marginBottom: "16px", background: "#f8fafc", borderRadius: "12px", padding: "14px", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>Aufgabe {i + 1}</div>
-                      <div style={{ fontSize: "13px", color: "#64748b", marginBottom: "8px" }}><em>Antwort:</em> {String(answer)}</div>
-                      {aiCorrection?.comment && (
-                        <div style={{ background: "#f5f3ff", borderRadius: "8px", padding: "10px", marginBottom: "8px", fontSize: "12px", color: "#7c3aed", border: "1px solid #ddd6fe" }}>
-                          🤖 {aiCorrection.comment}
+                    <div key={qId} style={{
+                      marginBottom: "16px", background: "#f8fafc", borderRadius: "12px", padding: "14px",
+                      border: `1px solid ${correction.correct === true ? "#bbf7d0" : correction.correct === false ? "#fecaca" : "#e2e8f0"}`
+                    }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
+                        Aufgabe {i + 1}
+                        {correction.correct === true && <span style={{ marginLeft: "8px", color: "#16a34a" }}>✓</span>}
+                        {correction.correct === false && <span style={{ marginLeft: "8px", color: "#dc2626" }}>✗</span>}
+                        {correction.correct === null && <span style={{ marginLeft: "8px", color: "#ca8a04" }}>⏳</span>}
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
+                        <em style={{ color: "#94a3b8" }}>Antwort:</em> {correction.studentAnswer ?? "–"}
+                      </div>
+                      {correction.comment && (
+                        <div style={{ background: isOpen ? "#fef9c3" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isOpen ? "#92400e" : correction.correct ? "#16a34a" : "#dc2626" }}>
+                          {correction.comment}
                         </div>
                       )}
-                      {currentPoints !== null && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <label style={{ fontSize: "12px", color: "#64748b" }}>Punkte:</label>
-                          <input type="number" min={0} step={0.5} value={currentPoints}
-                            onChange={e => setOverrides(prev => ({ ...prev, [qId]: Number(e.target.value) }))}
-                            style={{ width: "56px", padding: "4px 8px", border: "2px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontWeight: 700, textAlign: "center" }} />
-                          {overrides[qId] !== undefined && <span style={{ fontSize: "11px", background: "#fef9c3", color: "#ca8a04", borderRadius: "5px", padding: "2px 6px" }}>✏️ Geändert</span>}
-                        </div>
-                      )}
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <label style={{ fontSize: "12px", color: "#64748b" }}>Punkte:</label>
+                        <input type="number" min={0} max={correction.maxPoints} step={0.5}
+                          value={currentPoints ?? ""}
+                          placeholder={currentPoints === null ? "–" : ""}
+                          onChange={e => setOverrides(prev => ({ ...prev, [qId]: Number(e.target.value) }))}
+                          style={{ width: "64px", padding: "4px 8px", border: "2px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontWeight: 700, textAlign: "center" }} />
+                        <span style={{ fontSize: "12px", color: "#94a3b8" }}>/ {correction.maxPoints}</span>
+                        {overrides[qId] !== undefined && (
+                          <span style={{ fontSize: "11px", background: "#fef9c3", color: "#ca8a04", borderRadius: "5px", padding: "2px 6px" }}>✏️ Geändert</span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
