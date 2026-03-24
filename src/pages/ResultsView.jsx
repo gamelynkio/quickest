@@ -11,7 +11,23 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [overrides, setOverrides] = useState({});
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { if (assignment?.id) fetchSubmissions(); }, [assignment]);
+  useEffect(() => {
+    if (!assignment?.id) return;
+    fetchSubmissions();
+
+    // Realtime: listen for new submissions
+    const channel = supabase
+      .channel(`submissions-${assignment.id}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "submissions",
+        filter: `assignment_id=eq.${assignment.id}`
+      }, () => fetchSubmissions())
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [assignment]);
 
   const fetchSubmissions = async () => {
     setLoading(true);
@@ -49,6 +65,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: 0 }}>{assignment.title}</h1>
           <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>
             {submissions.length} Abgaben{avg ? ` · Ø ${avg}%` : ""}
+            <button onClick={fetchSubmissions} style={{ marginLeft: "12px", background: "none", border: "none", color: "#2563a8", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>
+              🔄 Aktualisieren
+            </button>
           </p>
         </div>
 
