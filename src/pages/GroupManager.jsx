@@ -53,7 +53,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
         const updatedUsernames = [...existing, ...newUsernames];
         const { data } = await supabase.from("groups").update({ name: newName, subject: newSubject, count, usernames: updatedUsernames }).eq("id", editingGroup.id).select().single();
         // Also insert new students
-        const newStudents = newUsernames.map(u => ({ group_id: editingGroup.id, teacher_id: currentUser?.id, username: u, pin: "1234" }));
+        const newStudents = newUsernames.map(u => ({ group_id: editingGroup.id, username: u, pin: "1234" }));
         await supabase.from("students").insert(newStudents);
         setGroups(prev => prev.map(g => g.id === editingGroup.id ? data : g));
         setShowForm(false); setEditingGroup(null);
@@ -70,7 +70,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
       const usernames = generateUsernames(count);
       const { data } = await supabase.from("groups").insert({ name: newName, subject: newSubject, count, usernames, teacher_id: currentUser?.id }).select().single();
       // Insert students
-      const students = usernames.map(u => ({ group_id: data.id, teacher_id: currentUser?.id, username: u, pin: "1234" }));
+      const students = usernames.map(u => ({ group_id: data.id, username: u, pin: "1234" }));
       await supabase.from("students").insert(students);
       setGroups(prev => [data, ...prev]);
       setShowForm(false);
@@ -100,7 +100,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     const usernames = generateUsernames(group.count);
     const { data } = await supabase.from("groups").update({ usernames }).eq("id", group.id).select().single();
     await supabase.from("students").delete().eq("group_id", group.id);
-    const students = usernames.map(u => ({ group_id: group.id, teacher_id: currentUser?.id, username: u, pin: "1234" }));
+    const students = usernames.map(u => ({ group_id: group.id, username: u, pin: "1234" }));
     await supabase.from("students").insert(students);
     setGroups(prev => prev.map(g => g.id === group.id ? data : g));
     setExpandedGroup(group.id);
