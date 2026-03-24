@@ -101,7 +101,8 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     const { data } = await supabase.from("groups").update({ usernames }).eq("id", group.id).select().single();
     await supabase.from("students").delete().eq("group_id", group.id);
     const students = usernames.map(u => ({ group_id: group.id, username: u, pin: "1234" }));
-    await supabase.from("students").insert(students);
+    const { error: studentsError } = await supabase.from("students").insert(students);
+    console.log("students insert error:", studentsError);
     setGroups(prev => prev.map(g => g.id === group.id ? data : g));
     setExpandedGroup(group.id);
     setRegenConfirm(null);
