@@ -132,7 +132,6 @@ export default function StudentTestView({ currentUser, onFinish }) {
       answers,
       score,
       total_points: totalPoints,
-      grade,
       ai_corrections: corrections,
       reviewed: !hasOpenQuestions,
     });
