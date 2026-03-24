@@ -28,7 +28,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [removingFrom, setRemovingFrom] = useState(null);
   const [selectedToRemove, setSelectedToRemove] = useState(new Set());
-  const [saving, setSaving] = useState(false);
+  const [regenConfirm, setRegenConfirm] = useState(null);
 
   useEffect(() => { fetchGroups(); }, []);
 
@@ -99,12 +99,12 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
   const generateForGroup = async (group) => {
     const usernames = generateUsernames(group.count);
     const { data } = await supabase.from("groups").update({ usernames }).eq("id", group.id).select().single();
-    // Replace students
     await supabase.from("students").delete().eq("group_id", group.id);
     const students = usernames.map(u => ({ group_id: group.id, teacher_id: currentUser?.id, username: u, pin: "1234" }));
     await supabase.from("students").insert(students);
     setGroups(prev => prev.map(g => g.id === group.id ? data : g));
     setExpandedGroup(group.id);
+    setRegenConfirm(null);
   };
 
   const exportPDF = (group) => {
@@ -183,7 +183,15 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
                 <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>{group.subject} · {group.count} Schüler/innen</div>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={() => generateForGroup(group)} style={{ padding: "7px 14px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>🔄 Benutzernamen</button>
+                {!group.usernames?.length ? (
+                  <button onClick={() => generateForGroup(group)} style={{ padding: "7px 14px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+                    🎲 Benutzernamen generieren
+                  </button>
+                ) : (
+                  <button onClick={() => setExpandedGroup(expandedGroup === group.id ? null : group.id)} style={{ padding: "7px 14px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+                    👁 Benutzernamen anzeigen
+                  </button>
+                )}
                 <button onClick={() => openEditForm(group)} style={{ padding: "7px 12px", background: "#f8fafc", color: "#374151", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>✏️</button>
                 <button onClick={() => setDeleteConfirm(group.id)} style={{ padding: "7px 12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>🗑</button>
                 <button onClick={() => setExpandedGroup(expandedGroup === group.id ? null : group.id)} style={{ padding: "7px 10px", background: "#f8fafc", color: "#374151", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>
@@ -205,7 +213,10 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
                         </div>
                       ))}
                     </div>
-                    <button onClick={() => exportPDF(group)} style={{ marginTop: "12px", padding: "8px 16px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📋 Als PDF exportieren</button>
+                    <div style={{ marginTop: "12px", display: "flex", gap: "8px", alignItems: "center" }}>
+                      <button onClick={() => exportPDF(group)} style={{ padding: "8px 16px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📋 Als PDF exportieren</button>
+                      <button onClick={() => setRegenConfirm(group)} style={{ padding: "8px 14px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>🔄 Alle neu generieren</button>
+                    </div>
                   </>
                 )}
               </div>
@@ -243,7 +254,26 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
         </div>
       )}
 
-      {deleteConfirm && (
+      {regenConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "400px", textAlign: "center" }}>
+            <div style={{ fontSize: "40px", marginBottom: "12px" }}>⚠️</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" }}>Benutzernamen neu generieren?</h3>
+            <p style={{ color: "#64748b", marginBottom: "8px", fontSize: "14px" }}>
+              Alle bestehenden Benutzernamen für <strong>{regenConfirm.name}</strong> werden unwiderruflich ersetzt.
+            </p>
+            <p style={{ color: "#dc2626", marginBottom: "24px", fontSize: "13px", fontWeight: 600 }}>
+              ⚠️ Schüler die sich bereits mit ihren alten Benutzernamen kennen, können sich danach nicht mehr einloggen!
+            </p>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setRegenConfirm(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
+              <button onClick={() => generateForGroup(regenConfirm)} style={{ flex: 1, padding: "10px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 700, cursor: "pointer" }}>Ja, neu generieren</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "360px", textAlign: "center" }}>
             <div style={{ fontSize: "40px", marginBottom: "12px" }}>🗑️</div>
