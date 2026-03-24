@@ -273,7 +273,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
         </div>
       )}
 
-
+      {deleteConfirm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "360px", textAlign: "center" }}>
             <div style={{ fontSize: "40px", marginBottom: "12px" }}>🗑️</div>
