@@ -31,7 +31,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
 
   const fetchSubmissions = async () => {
     setLoading(true);
-    const { data } = await supabase.from("submissions").select("*").eq("assignment_id", assignment.id).order("submitted_at", { ascending: false });
+    const { data, error } = await supabase.from("submissions").select("*").eq("assignment_id", assignment.id).order("submitted_at", { ascending: false });
+    console.log("fetchSubmissions:", { assignmentId: assignment?.id, count: data?.length, error });
     setSubmissions(data || []);
     setLoading(false);
   };
