@@ -186,6 +186,22 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                           {correction.comment}
                         </div>
                       )}
+                      {correction.solution && (
+                        <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
+                          <strong>📝 Musterlösung:</strong> {correction.solution}
+                        </div>
+                      )}
+                      {correction.partialPoints?.length > 0 && (
+                        <div style={{ marginBottom: "8px" }}>
+                          <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "4px" }}>Teilbepunktung:</div>
+                          {correction.partialPoints.map((p, pi) => (
+                            <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", marginBottom: "2px" }}>
+                              <span style={{ background: "#f1f5f9", borderRadius: "4px", padding: "1px 6px", fontWeight: 700, color: "#2563a8" }}>{p.points} Pkt.</span>
+                              <span>{p.description}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                         <label style={{ fontSize: "12px", color: "#64748b" }}>Punkte:</label>
                         <input type="number" min={0} max={correction.maxPoints} step={0.5}
