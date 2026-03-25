@@ -25,6 +25,16 @@ const autoCorrect = (questions, answers) => {
         comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.correctAnswer === 0 ? "Wahr" : "Falsch"}`,
       };
       score += correct ? maxPoints : 0;
+    } else if (q.type === "flashcard") {
+      const expected = String(q.cardBack || "").toLowerCase().trim();
+      const given = String(studentAnswer || "").toLowerCase().trim();
+      const correct = !!expected && given === expected;
+      corrections[q.id] = {
+        points: correct ? maxPoints : 0, maxPoints, correct,
+        studentAnswer: String(studentAnswer || ""),
+        comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.cardBack || "–"}`,
+      };
+      score += correct ? maxPoints : 0;
     } else if (q.type === "fill_blank") {
       const expected = String(q.blanks?.[0] || "").toLowerCase().trim();
       const given = String(studentAnswer || "").toLowerCase().trim();
@@ -229,6 +239,18 @@ export default function StudentTestView({ currentUser, onFinish }) {
                   <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))}
                     style={{ padding: "11px 24px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "rgba(0,0,0,0.12)"}`, borderRadius: "10px", background: answers[q.id] === i ? "#2563a8" : "rgba(255,255,255,0.7)", color: answers[q.id] === i ? "#fff" : "#374151", cursor: "pointer", fontWeight: 600, fontSize: "14px", fontFamily: "inherit" }}>{opt}</button>
                 ))}
+              </div>
+            )}
+
+            {q.type === "flashcard" && (
+              <div>
+                <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: "12px", padding: "20px 24px", marginBottom: "12px", border: "2px solid rgba(0,0,0,0.1)", textAlign: "center" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>A-SEITE</div>
+                  <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>
+                </div>
+                <input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+                  placeholder="B-Seite eingeben..."
+                  style={{ width: "100%", padding: "12px 14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "10px", fontSize: "16px", background: "rgba(255,255,255,0.7)", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }} />
               </div>
             )}
 
