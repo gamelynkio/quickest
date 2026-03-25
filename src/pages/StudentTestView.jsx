@@ -15,6 +15,8 @@ const autoCorrect = (questions, answers) => {
         points: correct ? maxPoints : 0, maxPoints, correct,
         studentAnswer: q.options?.[studentAnswer] ?? String(studentAnswer ?? ""),
         comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.options?.[q.correctAnswer] ?? "–"}`,
+        solution: q.solution || null,
+        partialPoints: q.partialPoints || [],
       };
       score += correct ? maxPoints : 0;
     } else if (q.type === "true_false") {
@@ -23,6 +25,8 @@ const autoCorrect = (questions, answers) => {
         points: correct ? maxPoints : 0, maxPoints, correct,
         studentAnswer: studentAnswer === 0 || studentAnswer === "0" ? "Wahr" : "Falsch",
         comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.correctAnswer === 0 ? "Wahr" : "Falsch"}`,
+        solution: q.solution || null,
+        partialPoints: q.partialPoints || [],
       };
       score += correct ? maxPoints : 0;
     } else if (q.type === "flashcard") {
@@ -33,6 +37,8 @@ const autoCorrect = (questions, answers) => {
         points: correct ? maxPoints : 0, maxPoints, correct,
         studentAnswer: String(studentAnswer || ""),
         comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.cardBack || "–"}`,
+        solution: q.solution || null,
+        partialPoints: q.partialPoints || [],
       };
       score += correct ? maxPoints : 0;
     } else if (q.type === "fill_blank") {
@@ -43,6 +49,8 @@ const autoCorrect = (questions, answers) => {
         points: correct ? maxPoints : 0, maxPoints, correct,
         studentAnswer: String(studentAnswer || ""),
         comment: correct ? "Richtig" : "Bitte manuell prüfen",
+        solution: q.solution || null,
+        partialPoints: q.partialPoints || [],
       };
       score += correct ? maxPoints : 0;
     } else if (q.type === "open") {
@@ -50,6 +58,8 @@ const autoCorrect = (questions, answers) => {
         points: null, maxPoints, correct: null,
         studentAnswer: String(studentAnswer || ""),
         comment: "⏳ Wartet auf manuelle Bewertung",
+        solution: q.solution || null,
+        partialPoints: q.partialPoints || [],
         needsReview: true,
       };
     } else if (q.type === "assignment") {
