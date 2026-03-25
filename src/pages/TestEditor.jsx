@@ -36,6 +36,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const [title, setTitle] = useState(editingTest?.title || "");
   const [description, setDescription] = useState(editingTest?.description || "");
   const [subject, setSubject] = useState(editingTest?.subject || "");
+  const [gradeLevel, setGradeLevel] = useState(editingTest?.grade_level || "");
   const [timeLimit, setTimeLimit] = useState(editingTest?.time_limit ? Math.round(editingTest.time_limit / 60) : 20);
   const [antiCheat, setAntiCheat] = useState(editingTest?.anti_cheat || false);
   const [questions, setQuestions] = useState(editingTest?.question_data || []);
@@ -175,7 +176,7 @@ Erkenne den Typ automatisch.`;
     const payload = {
       teacher_id: currentUser?.id,
       title: title || "Unbenannte Vorlage",
-      description, subject,
+      description, subject, grade_level: gradeLevel,
       time_limit: timeLimit * 60,
       anti_cheat: antiCheat,
       question_data: questions,
@@ -227,7 +228,7 @@ Erkenne den Typ automatisch.`;
         {/* Meta Card */}
         <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-            <div style={{ gridColumn: "span 2" }}>
+            <div style={{ gridColumn: "span 1" }}>
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Titel *</label>
               <input value={title} onChange={e => setTitle(e.target.value)} placeholder="z.B. Bruchrechnung – Grundlagen"
                 style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
@@ -236,8 +237,16 @@ Erkenne den Typ automatisch.`;
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Fach</label>
               <select value={subject} onChange={e => setSubject(e.target.value)}
                 style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
-                <option value="">– Fach wählen –</option>
+                <option value="">– Fach –</option>
                 {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Klasse</label>
+              <select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
+                <option value="">– Klasse –</option>
+                {[5,6,7,8,9,10,11,12,13].map(g => <option key={g} value={String(g)}>{g}. Klasse</option>)}
               </select>
             </div>
           </div>
