@@ -5,10 +5,17 @@ import TeacherLayout from "../components/TeacherLayout";
 const ADJECTIVES = ["blauer","roter","grüner","schneller","kluger","starker","leiser","großer","freier","alter","wilder","sanfter","mutiger","flinker","weiser","treuer","stolzer","kühner","wacher","schlauer","ruhiger","fleißiger","tapferer","heller","dunkler"];
 const ANIMALS = ["Adler","Tiger","Fuchs","Wolf","Bär","Luchs","Falke","Dachs","Hirsch","Storch","Igel","Otter","Rabe","Elch","Biber","Marder","Habicht","Wisent","Uhu","Fischotter","Steinbock","Lämmergeier","Rotmilan","Seehund","Zander"];
 
-const generateUsernames = (count, existing = []) => {
+const generatePin = () => String(Math.floor(1000 + Math.random() * 9000));
+
+const generateUsernamesGlobal = async (count, alsoExclude = []) => {
   const all = [];
   for (const adj of ADJECTIVES) for (const animal of ANIMALS) all.push(`${adj}-${animal}`);
-  const available = all.filter(u => !existing.includes(u));
+
+  // Fetch all taken usernames from DB
+  const { data } = await supabase.from("students").select("username");
+  const taken = new Set([...(data || []).map(s => s.username), ...alsoExclude]);
+
+  const available = all.filter(u => !taken.has(u));
   for (let i = available.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [available[i], available[j]] = [available[j], available[i]];
@@ -40,7 +47,19 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     setLoading(false);
   };
 
-  const openNewForm = () => { setEditingGroup(null); setNewName(""); setNewSubject(""); setNewCount(20); setShowForm(true); };
+  const [studentPins, setStudentPins] = useState({}); // groupId -> { username -> pin }
+
+  const handleExpand = async (groupId) => {
+    if (expandedGroup === groupId) { setExpandedGroup(null); return; }
+    setExpandedGroup(groupId);
+    // Fetch real PINs for this group
+    const { data } = await supabase.from("students").select("username, pin").eq("group_id", groupId);
+    if (data) {
+      const pinMap = {};
+      data.forEach(s => { pinMap[s.username] = s.pin; });
+      setStudentPins(prev => ({ ...prev, [groupId]: pinMap }));
+    }
+  };
   const openEditForm = (g) => { setEditingGroup(g); setNewName(g.name); setNewSubject(g.subject); setNewCount(g.count); setShowForm(true); };
 
   const saveGroup = async () => {
@@ -51,10 +70,10 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
         const existing = editingGroup.usernames || [];
         const diff = count - existing.length;
         if (diff > 0) {
-          const newUsernames = generateUsernames(diff, existing);
+          const newUsernames = await generateUsernamesGlobal(diff, existing);
           const updatedUsernames = [...existing, ...newUsernames];
           const { data } = await supabase.from("groups").update({ name: newName, subject: newSubject, count, usernames: updatedUsernames }).eq("id", editingGroup.id).select().single();
-          const newStudents = newUsernames.map(u => ({ group_id: editingGroup.id, username: u, pin: "1234" }));
+          const newStudents = newUsernames.map(u => ({ group_id: editingGroup.id, username: u, pin: generatePin() }));
           await supabase.from("students").insert(newStudents);
           setGroups(prev => prev.map(g => g.id === editingGroup.id ? data : g));
           setShowForm(false); setEditingGroup(null);
@@ -68,9 +87,9 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
           setShowForm(false); setEditingGroup(null);
         }
       } else {
-        const usernames = generateUsernames(count);
+        const usernames = await generateUsernamesGlobal(count);
         const { data } = await supabase.from("groups").insert({ name: newName, subject: newSubject, count, usernames, teacher_id: currentUser?.id }).select().single();
-        const students = usernames.map(u => ({ group_id: data.id, username: u, pin: "1234" }));
+        const students = usernames.map(u => ({ group_id: data.id, username: u, pin: generatePin() }));
         await supabase.from("students").insert(students);
         setGroups(prev => [data, ...prev]);
         setShowForm(false);
@@ -98,10 +117,10 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
   };
 
   const generateForGroup = async (group) => {
-    const usernames = generateUsernames(group.count);
+    const usernames = await generateUsernamesGlobal(group.count);
     const { data } = await supabase.from("groups").update({ usernames }).eq("id", group.id).select().single();
     await supabase.from("students").delete().eq("group_id", group.id);
-    const students = usernames.map(u => ({ group_id: group.id, username: u, pin: "1234" }));
+    const students = usernames.map(u => ({ group_id: group.id, username: u, pin: generatePin() }));
     await supabase.from("students").insert(students);
     setGroups(prev => prev.map(g => g.id === group.id ? data : g));
     setExpandedGroup(group.id);
@@ -109,8 +128,9 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
   };
 
   const exportPDF = (group) => {
-    const rows = group.usernames.map((u, i) => `<tr><td style="padding:8px 12px;color:#94a3b8">${i + 1}</td><td style="padding:8px 12px;font-weight:600">${u}</td><td style="padding:8px 12px;font-weight:700;color:#2563a8">1234</td></tr>`).join("");
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${group.name}</title><style>body{font-family:sans-serif;padding:32px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:8px 12px;background:#f8fafc;border-bottom:2px solid #e2e8f0}</style></head><body><h1>QuickTest – ${group.name}</h1><p>${group.subject} · ${group.count} Schüler/innen · PIN: 1234</p><table><thead><tr><th>#</th><th>Benutzername</th><th>PIN</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+    const pins = studentPins[group.id] || {};
+    const rows = group.usernames.map((u, i) => `<tr><td style="padding:8px 12px;color:#94a3b8">${i + 1}</td><td style="padding:8px 12px;font-weight:600">${u}</td><td style="padding:8px 12px;font-weight:700;color:#2563a8">${pins[u] || "–"}</td></tr>`).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${group.name}</title><style>body{font-family:sans-serif;padding:32px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:8px 12px;background:#f8fafc;border-bottom:2px solid #e2e8f0}</style></head><body><h1>QuickTest – ${group.name}</h1><p>${group.subject} · ${group.count} Schüler/innen</p><table><thead><tr><th>#</th><th>Benutzername</th><th>PIN</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `${group.name}_Benutzernamen.html`; a.click();
@@ -189,7 +209,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
                     🎲 Benutzernamen generieren
                   </button>
                 ) : (
-                  <button onClick={() => setExpandedGroup(expandedGroup === group.id ? null : group.id)} style={{ padding: "7px 14px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+                  <button onClick={() => handleExpand(group.id)} style={{ padding: "7px 14px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
                     👁 Benutzernamen anzeigen
                   </button>
                 )}
@@ -203,13 +223,18 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
                   <p style={{ fontSize: "13px", color: "#94a3b8", marginTop: "14px" }}>Noch keine Benutzernamen generiert.</p>
                 ) : (
                   <>
-                    <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "12px", marginTop: "14px" }}>PIN = <strong>1234</strong></p>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
-                      {group.usernames.map((u, i) => (
-                        <div key={i} style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 12px", fontSize: "13px", color: "#374151", border: "1px solid #e2e8f0" }}>
-                          <span style={{ color: "#94a3b8", fontSize: "11px", display: "block" }}>#{i + 1}</span>{u}
-                        </div>
-                      ))}
+                    <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "12px", marginTop: "14px" }}>Benutzername + individuelle PIN pro Schüler/in</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                      {group.usernames.map((u, i) => {
+                        const pin = studentPins[group.id]?.[u];
+                        return (
+                          <div key={i} style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 12px", fontSize: "13px", color: "#374151", border: "1px solid #e2e8f0" }}>
+                            <span style={{ color: "#94a3b8", fontSize: "11px", display: "block" }}>#{i + 1}</span>
+                            <span style={{ fontWeight: 600 }}>{u}</span>
+                            <span style={{ display: "block", fontSize: "12px", color: "#2563a8", fontWeight: 700 }}>PIN: {pin || "…"}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                     <div style={{ marginTop: "12px", display: "flex", gap: "8px", alignItems: "center" }}>
                       <button onClick={() => exportPDF(group)} style={{ padding: "8px 16px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📋 Als PDF exportieren</button>
