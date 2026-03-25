@@ -120,7 +120,12 @@ Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhan
         }),
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      console.log("Edge Function response:", response.status, rawText.slice(0, 500));
+
+      if (!response.ok) throw new Error(`Edge Function Fehler ${response.status}: ${rawText.slice(0, 200)}`);
+
+      const data = JSON.parse(rawText);
       const text = data.content?.find(b => b.type === "text")?.text || "";
       const clean = text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
