@@ -19,9 +19,9 @@ const autoCorrect = (questions, answers) => {
       corrections[q.id] = { points: correct ? maxPoints : 0, maxPoints, correct, studentAnswer: studentAnswer === 0 || studentAnswer === "0" ? "Wahr" : "Falsch", comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.correctAnswer === 0 ? "Wahr" : "Falsch"}`, solution: q.solution || null, partialPoints: q.partialPoints || [] };
       score += correct ? maxPoints : 0;
     } else if (q.type === "flashcard") {
-      const expected = String(q.cardBack || "").toLowerCase().trim();
+      const accepted = [q.cardBack, ...(q.cardBackAlternatives || [])].map(s => String(s || "").toLowerCase().trim()).filter(Boolean);
       const given = String(studentAnswer || "").toLowerCase().trim();
-      const correct = !!expected && given === expected;
+      const correct = accepted.length > 0 && accepted.includes(given);
       corrections[q.id] = { points: correct ? maxPoints : 0, maxPoints, correct, studentAnswer: String(studentAnswer || ""), comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.cardBack || "–"}`, solution: q.solution || null, partialPoints: q.partialPoints || [] };
       score += correct ? maxPoints : 0;
     } else if (q.type === "fill_blank") {
