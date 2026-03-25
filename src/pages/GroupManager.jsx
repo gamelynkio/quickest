@@ -126,11 +126,112 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
 
   const exportPDF = (group) => {
     const pins = studentPins[group.id] || {};
-    const rows = group.usernames.map((u, i) => `<tr><td style="padding:8px 12px;color:#94a3b8">${i + 1}</td><td style="padding:8px 12px;font-weight:600">${u}</td><td style="padding:8px 12px;font-weight:700;color:#2563a8">${pins[u] || "–"}</td></tr>`).join("");
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${group.name}</title><style>body{font-family:sans-serif;padding:32px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:8px 12px;background:#f8fafc;border-bottom:2px solid #e2e8f0}</style></head><body><h1>QuickTest – ${group.name}</h1><p>${group.subject} · ${group.count} Schüler/innen</p><table><thead><tr><th>#</th><th>Benutzername</th><th>PIN</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+    const date = new Date().toLocaleDateString("de-DE");
+
+    // Page 1: Teacher overview with blank name column
+    const teacherRows = group.usernames.map((u, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td style="font-weight:600">${u}</td>
+        <td style="font-weight:700;color:#2563a8">${pins[u] || "–"}</td>
+        <td></td>
+      </tr>`).join("");
+
+    // Page 2: Student cards (3 per row)
+    const cards = group.usernames.map((u) => `
+      <div class="card">
+        <div class="card-logo">⚡ QuickTest</div>
+        <div class="card-name">${u}</div>
+        <div class="card-pin-label">PIN</div>
+        <div class="card-pin">${pins[u] || "–"}</div>
+        <div class="card-url">quickest.lovable.app</div>
+      </div>`).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>${group.name} – QuickTest Zugangsdaten</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #1a1a1a; }
+
+  /* PAGE 1 – TEACHER */
+  .page1 { padding: 32px; page-break-after: always; }
+  .page1 h1 { font-size: 20px; margin-bottom: 4px; }
+  .page1 .meta { color: #64748b; font-size: 12px; margin-bottom: 20px; }
+  .page1 table { width: 100%; border-collapse: collapse; }
+  .page1 th { background: #f1f5f9; padding: 10px 12px; text-align: left; font-size: 12px; color: #64748b; border-bottom: 2px solid #e2e8f0; }
+  .page1 td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; }
+  .page1 tr:nth-child(even) td { background: #fafafa; }
+  .page1 .col-name { width: 40%; }
+  .blank-col { width: 35%; border-bottom: 1px solid #94a3b8 !important; }
+  .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+
+  /* PAGE 2 – STUDENT CARDS */
+  .page2 { padding: 16px; }
+  .cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+  .card {
+    border: 1px dashed #94a3b8;
+    padding: 14px 16px;
+    text-align: center;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+  }
+  .card-logo { font-size: 11px; color: #94a3b8; font-weight: 700; letter-spacing: 0.5px; }
+  .card-name { font-size: 14px; font-weight: 800; color: #1e3a5f; margin: 4px 0; word-break: break-word; }
+  .card-pin-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+  .card-pin { font-size: 22px; font-weight: 900; color: #2563a8; letter-spacing: 4px; }
+  .card-url { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+
+  .page2-header { margin-bottom: 12px; font-size: 11px; color: #94a3b8; text-align: center; }
+
+  @media print {
+    .page1 { page-break-after: always; }
+    .card { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1: TEACHER OVERVIEW -->
+<div class="page1">
+  <h1>QuickTest – ${group.name}</h1>
+  <div class="meta">${group.subject || ""} · ${group.count} Schüler/innen · Exportiert am ${date}</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:5%">#</th>
+        <th class="col-name">Pseudonym</th>
+        <th style="width:10%">PIN</th>
+        <th style="width:35%">Klarname (handschriftlich)</th>
+      </tr>
+    </thead>
+    <tbody>${teacherRows}</tbody>
+  </table>
+  <div class="footer">
+    ⚠️ Diese Liste ist vertraulich und verbleibt beim Lehrer. Seite 2 enthält die ausschneidbaren Zugangskarten für die Schüler.
+  </div>
+</div>
+
+<!-- PAGE 2: STUDENT CARDS -->
+<div class="page2">
+  <div class="page2-header">✂️ Entlang der gestrichelten Linien ausschneiden und austeilen</div>
+  <div class="cards-grid">${cards}</div>
+</div>
+
+</body>
+</html>`;
+
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `${group.name}_Benutzernamen.html`; a.click();
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${group.name}_Zugangsdaten.html`;
+    a.click();
     URL.revokeObjectURL(url);
   };
 
