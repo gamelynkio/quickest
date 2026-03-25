@@ -208,7 +208,6 @@ Erkenne den Aufgabentyp automatisch. Multiple Choice wenn Auswahloptionen vorhan
             <div style={{ color: "#64748b", marginTop: "4px" }}>Aufgaben werden automatisch erkannt und hinzugefügt.</div>
           </div>
         )}
-        </div>
 
         <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
