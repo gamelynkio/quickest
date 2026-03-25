@@ -73,6 +73,7 @@ const calcGrade = (score, totalPoints, gradingScale) => {
 
 export default function StudentTestView({ currentUser, onFinish }) {
   const [assignment, setAssignment] = useState(null);
+  const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -92,7 +93,13 @@ export default function StudentTestView({ currentUser, onFinish }) {
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
-    if (data) { setAssignment(data); setTimeLeft(data.time_limit || 1200); }
+    if (data) {
+      setAssignment(data);
+      setTimeLeft(data.time_limit || 1200);
+      const qs = data.question_data || [];
+      // Shuffle once on load, never again
+      setQuestions(data.anti_cheat ? [...qs].sort(() => Math.random() - 0.5) : qs);
+    }
     setLoading(false);
   };
 
@@ -110,12 +117,6 @@ export default function StudentTestView({ currentUser, onFinish }) {
   const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   const timePercent = assignment ? (timeLeft / assignment.time_limit) * 100 : 100;
   const timeColor = timeLeft < 120 ? "#ef4444" : timeLeft < 300 ? "#f97316" : "#16a34a";
-
-  const getQuestions = () => {
-    const questions = assignment?.question_data || [];
-    if (assignment?.anti_cheat) return [...questions].sort(() => Math.random() - 0.5);
-    return questions;
-  };
 
   const handleSubmit = async () => {
     if (submitting || !assignment) return;
@@ -170,8 +171,6 @@ export default function StudentTestView({ currentUser, onFinish }) {
       </div>
     </div>
   );
-
-  const questions = getQuestions();
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
