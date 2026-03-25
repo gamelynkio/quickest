@@ -228,6 +228,7 @@ export type Database = {
           anti_cheat: boolean | null
           created_at: string
           description: string | null
+          grade_level: string | null
           grading_scale: Json
           id: number
           question_data: Json
@@ -240,6 +241,7 @@ export type Database = {
           anti_cheat?: boolean | null
           created_at?: string
           description?: string | null
+          grade_level?: string | null
           grading_scale?: Json
           id?: number
           question_data?: Json
@@ -252,6 +254,7 @@ export type Database = {
           anti_cheat?: boolean | null
           created_at?: string
           description?: string | null
+          grade_level?: string | null
           grading_scale?: Json
           id?: number
           question_data?: Json

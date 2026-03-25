@@ -1,0 +1,1 @@
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS grade_level text;
