@@ -379,8 +379,110 @@ Erkenne den Typ automatisch.`;
                 </div>
               )}
               {q.type === "fill_blank" && (
-                <div style={{ marginTop: "10px", fontSize: "13px", color: "#64748b" }}>
-                  Nutze <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: "4px" }}>[Lücke]</code> in der Aufgabenstellung.
+                <div style={{ marginTop: "12px" }}>
+                  {/* Full text input */}
+                  <div style={{ marginBottom: "10px" }}>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>
+                      Vollständiger Text — markiere Wörter um Lücken zu erstellen
+                    </label>
+                    <textarea
+                      value={q.fullText || ""}
+                      onChange={e => updateQuestion(q.id, "fullText", e.target.value)}
+                      onMouseUp={e => {
+                        const sel = window.getSelection();
+                        const selected = sel?.toString().trim();
+                        if (!selected || !q.fullText) return;
+                        const text = q.fullText;
+                        const start = text.indexOf(selected);
+                        if (start === -1) return;
+                        // Replace selected text with [Lücke] and store solution
+                        const newText = text.slice(0, start) + "[Lücke]" + text.slice(start + selected.length);
+                        const newBlanks = [...(q.blanks || []), { solution: selected, alternatives: [] }];
+                        updateQuestion(q.id, "fullText", newText);
+                        updateQuestion(q.id, "blanks", newBlanks);
+                        // Also update the main text field for display
+                        updateQuestion(q.id, "text", newText);
+                        sel.removeAllRanges();
+                      }}
+                      placeholder="z.B. Tom _____ to school every day. He _____ his homework in the evening."
+                      rows={4}
+                      style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }}
+                    />
+                    <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
+                      💡 Text eingeben → Wort mit Maus markieren → Lücke wird automatisch erstellt
+                    </div>
+                  </div>
+
+                  {/* Preview */}
+                  {(q.fullText || "").includes("[Lücke]") && (
+                    <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px 14px", marginBottom: "10px", fontSize: "13px", color: "#1e3a5f", lineHeight: 1.8 }}>
+                      <strong style={{ fontSize: "11px", color: "#64748b", display: "block", marginBottom: "4px" }}>VORSCHAU FÜR SCHÜLER:</strong>
+                      {(q.fullText || "").split("[Lücke]").map((part, i, arr) => (
+                        <span key={i}>
+                          {part}
+                          {i < arr.length - 1 && (
+                            <span style={{ display: "inline-block", minWidth: "80px", borderBottom: "2px solid #2563a8", margin: "0 4px" }}>&nbsp;</span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Blanks / solutions */}
+                  {(q.blanks || []).length > 0 && (
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "8px" }}>
+                        Lücken & Lösungen
+                      </label>
+                      {(q.blanks || []).map((blank, bi) => (
+                        <div key={bi} style={{ background: "#f8fafc", borderRadius: "8px", padding: "10px 14px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                            <span style={{ background: "#2563a8", color: "#fff", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", fontWeight: 700 }}>Lücke {bi + 1}</span>
+                            <input
+                              value={blank.solution}
+                              onChange={e => {
+                                const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], solution: e.target.value }; updateQuestion(q.id, "blanks", nb);
+                              }}
+                              placeholder="Hauptlösung"
+                              style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }}
+                            />
+                            <button onClick={() => {
+                              const nb = (q.blanks || []).filter((_, i) => i !== bi);
+                              // Remove the bi-th [Lücke] from fullText
+                              let count = 0;
+                              const newText = (q.fullText || "").replace(/\[Lücke\]/g, match => {
+                                count++;
+                                return count - 1 === bi ? blank.solution : match;
+                              });
+                              updateQuestion(q.id, "blanks", nb);
+                              updateQuestion(q.id, "fullText", newText);
+                              updateQuestion(q.id, "text", newText);
+                            }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
+                          </div>
+                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Auch akzeptiert:</span>
+                            {(blank.alternatives || []).map((alt, ai) => (
+                              <span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                {alt}
+                                <button onClick={() => {
+                                  const nb = [...(q.blanks || [])];
+                                  nb[bi] = { ...nb[bi], alternatives: nb[bi].alternatives.filter((_, i) => i !== ai) };
+                                  updateQuestion(q.id, "blanks", nb);
+                                }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "12px", padding: 0 }}>✕</button>
+                              </span>
+                            ))}
+                            <button onClick={() => {
+                              const alt = prompt("Alternative Lösung eingeben:");
+                              if (!alt?.trim()) return;
+                              const nb = [...(q.blanks || [])];
+                              nb[bi] = { ...nb[bi], alternatives: [...(nb[bi].alternatives || []), alt.trim()] };
+                              updateQuestion(q.id, "blanks", nb);
+                            }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {q.type === "flashcard" && (
