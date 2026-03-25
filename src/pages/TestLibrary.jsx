@@ -18,6 +18,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterSubject, setFilterSubject] = useState("");
+  const [filterGradeLevel, setFilterGradeLevel] = useState("");
   const [assignModal, setAssignModal] = useState(null);
   const [assignGroupId, setAssignGroupId] = useState("");
   const [assignTimeLimit, setAssignTimeLimit] = useState(20);
@@ -87,7 +88,8 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const subjects = [...new Set(templates.map(t => t.subject).filter(Boolean))];
   const filtered = templates.filter(t =>
     t.title.toLowerCase().includes(search.toLowerCase()) &&
-    (!filterSubject || t.subject === filterSubject)
+    (!filterSubject || t.subject === filterSubject) &&
+    (!filterGradeLevel || t.grade_level === filterGradeLevel)
   );
 
   return (
@@ -108,6 +110,11 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
             style={{ padding: "10px 14px", border: "2px solid #e5e7eb", borderRadius: "10px", fontSize: "14px", fontFamily: "inherit", background: "#fff" }}>
             <option value="">Alle Fächer</option>
             {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={filterGradeLevel} onChange={e => setFilterGradeLevel(e.target.value)}
+            style={{ padding: "10px 14px", border: "2px solid #e5e7eb", borderRadius: "10px", fontSize: "14px", fontFamily: "inherit", background: "#fff" }}>
+            <option value="">Alle Klassen</option>
+            {[5,6,7,8,9,10,11,12,13].map(g => <option key={g} value={String(g)}>{g}. Klasse</option>)}
           </select>
         </div>
 
@@ -139,8 +146,9 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                     <div style={{ fontWeight: 700, fontSize: "15px", color: "#0f172a", marginBottom: "8px" }}>{template.title}</div>
                     {template.description && <div style={{ fontSize: "13px", color: "#64748b", marginBottom: "8px" }}>{template.description}</div>}
                     <div style={{ display: "flex", gap: "12px", fontSize: "12px", color: "#94a3b8" }}>
-                      <span>📋 {template.questions || 0} Aufgaben</span>
+                      <span>📋 {(template.question_data || []).filter(q => q.type !== "section").length} Aufgaben</span>
                       {mins > 0 && <span>⏱ {mins} Min.</span>}
+                      {template.grade_level && <span>🎓 Klasse {template.grade_level}</span>}
                       {template.anti_cheat && <span>🛡️ Anti-Cheat</span>}
                     </div>
                   </div>
