@@ -60,8 +60,30 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
       const ext = file.name.split(".").pop().toLowerCase();
       let contentBlocks = [];
 
-      if (ext === "pdf" || ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp") {
-        // Send as base64 image/document
+      const PROMPT = `Analysiere diesen Test/diese Prüfungsarbeit und extrahiere alle Aufgaben. Gib das Ergebnis als reines JSON-Array zurück (keine Markdown-Backticks, kein Text drumherum). Jede Aufgabe hat folgende Felder:
+- type: "multiple_choice" | "true_false" | "open" | "fill_blank" | "assignment" | "flashcard"
+- text: Aufgabenstellung
+- points: Punktzahl (Zahl, default 1)
+- options: Array mit Antwortoptionen (nur bei multiple_choice, sonst [])
+- correctAnswer: Index der richtigen Antwort (nur bei multiple_choice/true_false, sonst null)
+- pairs: Array von {left, right} Objekten (nur bei assignment, sonst [])
+- cardFront: Vorderseite (nur bei flashcard, sonst "")
+- cardBack: Rückseite (nur bei flashcard, sonst "")
+- solution: Musterlösung als Text (optional)
+- partialPoints: []
+
+Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhanden. Wahr/Falsch bei solchen Fragen. Zuordnung bei Zuordnungsaufgaben. Karteikarte bei Vokabel-Paaren. Offene Antwort sonst.`;
+
+      if (ext === "docx") {
+        // Use mammoth to extract text from DOCX
+        const mammoth = await import("mammoth");
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        const text = result.value;
+        if (!text.trim()) throw new Error("Kein Text extrahiert");
+        contentBlocks = [{ type: "text", text: `${PROMPT}\n\nInhalt der Datei:\n\n${text}` }];
+
+      } else if (ext === "pdf" || ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp") {
         const base64 = await new Promise((res, rej) => {
           const reader = new FileReader();
           reader.onload = () => res(reader.result.split(",")[1]);
@@ -73,30 +95,10 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
           ext === "pdf"
             ? { type: "document", source: { type: "base64", media_type: mediaType, data: base64 } }
             : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          { type: "text", text: `Analysiere diesen Test/diese Prüfungsarbeit und extrahiere alle Aufgaben. Gib das Ergebnis als reines JSON-Array zurück (keine Markdown-Backticks, kein Text drumherum). Jede Aufgabe hat folgende Felder:
-- type: "multiple_choice" | "true_false" | "open" | "fill_blank" | "assignment" | "flashcard"
-- text: Aufgabenstellung
-- points: Punktzahl (Zahl, default 1)
-- options: Array mit Antwortoptionen (nur bei multiple_choice, sonst [])
-- correctAnswer: Index der richtigen Antwort (nur bei multiple_choice/true_false, sonst null)
-- pairs: Array von {left, right} Objekten (nur bei assignment, sonst [])
-- cardFront: Vorderseite (nur bei flashcard, sonst "")
-- cardBack: Rückseite / erwartete Antwort (nur bei flashcard, sonst "")
-- solution: Musterlösung oder Erwartungshorizont als Text (optional)
-- partialPoints: [] (leer lassen)
-
-Erkenne den Aufgabentyp automatisch. Multiple Choice wenn Auswahloptionen vorhanden. Wahr/Falsch bei solchen Fragen. Zuordnung bei Zuordnungsaufgaben. Karteikarte bei Vokabel/Begriff-Paaren. Offene Antwort sonst.` }
+          { type: "text", text: PROMPT }
         ];
-      } else if (ext === "docx") {
-        // For DOCX: extract text first, then send as text
-        const arrayBuffer = await file.arrayBuffer();
-        // Simple DOCX text extraction (read XML)
-        const uint8 = new Uint8Array(arrayBuffer);
-        const base64 = btoa(String.fromCharCode(...uint8.slice(0, Math.min(uint8.length, 500000))));
-        contentBlocks = [
-          { type: "document", source: { type: "base64", media_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", data: base64 } },
-          { type: "text", text: `Analysiere dieses Word-Dokument und extrahiere alle Aufgaben als JSON-Array. Kein Markdown, nur reines JSON. Jede Aufgabe: { type, text, points, options, correctAnswer, pairs, cardFront, cardBack, solution, partialPoints }. Typen: multiple_choice, true_false, open, fill_blank, assignment, flashcard.` }
-        ];
+      } else {
+        throw new Error("Nicht unterstütztes Format");
       }
 
       const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -132,12 +134,10 @@ Erkenne den Aufgabentyp automatisch. Multiple Choice wenn Auswahloptionen vorhan
       }));
 
       setQuestions(prev => [...prev, ...importedQuestions]);
-
-      // Try to extract title from filename
       if (!title) setTitle(file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
 
     } catch (err) {
-      setImportError("Fehler beim Importieren. Bitte prüfe das Format der Datei.");
+      setImportError(`Fehler beim Importieren: ${err.message || "Bitte prüfe das Format der Datei."}`);
       console.error(err);
     } finally {
       setImporting(false);
