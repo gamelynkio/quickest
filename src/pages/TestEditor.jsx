@@ -16,10 +16,20 @@ const newQuestion = (type) => ({
   type, text: "", points: 1,
   options: type === "multiple_choice" ? ["", "", "", ""] : [],
   correctAnswer: null,
-  cardFront: "",
-  cardBack: "",
+  cardFront: "", cardBack: "",
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
+  solution: "", partialPoints: [],
   attachment: null,
+});
+
+const newSection = () => ({
+  id: Date.now() + Math.random(),
+  type: "section",
+  sectionTitle: "",
+  sectionInstruction: "",
+  sectionText: "",
+  sectionMedia: null,
+  sectionMediaType: null,
 });
 
 export default function TestEditor({ navigate, onLogout, currentUser, editingTest }) {
@@ -37,8 +47,11 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const [showTypeMenu, setShowTypeMenu] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
 
   const addQuestion = (type) => { setQuestions(prev => [...prev, newQuestion(type)]); setShowTypeMenu(false); };
+  const addSection = () => setQuestions(prev => [...prev, newSection()]);
   const updateQuestion = (id, field, value) => setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
   const removeQuestion = (id) => setQuestions(prev => prev.filter(q => q.id !== id));
   const moveQuestion = (index, dir) => {
@@ -47,51 +60,59 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     [next[index], next[swap]] = [next[swap], next[index]]; setQuestions(next);
   };
 
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState("");
+  const totalPoints = questions.filter(q => q.type !== "section").reduce((sum, q) => sum + Number(q.points || 0), 0);
+
+  // Points per section for display
+  const getSectionPoints = (sectionIndex) => {
+    let sum = 0;
+    for (let i = sectionIndex + 1; i < questions.length; i++) {
+      if (questions[i].type === "section") break;
+      sum += Number(questions[i].points || 0);
+    }
+    return sum;
+  };
+
+  // Question number (skipping sections)
+  const getQuestionNumber = (index) => {
+    return questions.slice(0, index).filter(q => q.type !== "section").length + 1;
+  };
 
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setImporting(true);
     setImportError("");
-
     try {
       const ext = file.name.split(".").pop().toLowerCase();
       let contentBlocks = [];
-
       const PROMPT = `Analysiere diesen Test/diese Prüfungsarbeit und extrahiere alle Aufgaben. Gib das Ergebnis als reines JSON-Array zurück (keine Markdown-Backticks, kein Text drumherum). Jede Aufgabe hat folgende Felder:
 - type: "multiple_choice" | "true_false" | "open" | "fill_blank" | "assignment" | "flashcard"
 - text: Aufgabenstellung
 - points: Punktzahl (Zahl, default 1)
 - options: Array mit Antwortoptionen (nur bei multiple_choice, sonst [])
 - correctAnswer: Index der richtigen Antwort (nur bei multiple_choice/true_false, sonst null)
-- pairs: Array von {left, right} Objekten (nur bei assignment, sonst [])
+- pairs: Array von {left, right} (nur bei assignment, sonst [])
 - cardFront: Vorderseite (nur bei flashcard, sonst "")
 - cardBack: Rückseite (nur bei flashcard, sonst "")
-- solution: Musterlösung als Text (optional)
+- solution: Musterlösung (optional)
 - partialPoints: []
-
-Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhanden. Wahr/Falsch bei solchen Fragen. Zuordnung bei Zuordnungsaufgaben. Karteikarte bei Vokabel-Paaren. Offene Antwort sonst.`;
+Erkenne den Typ automatisch.`;
 
       if (ext === "docx") {
-        // Extract text from DOCX (it's a ZIP with XML inside)
         const arrayBuffer = await file.arrayBuffer();
         const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
         const zip = await JSZip.loadAsync(arrayBuffer);
         const xmlFile = zip.file("word/document.xml");
         if (!xmlFile) throw new Error("Ungültige DOCX-Datei");
         const xml = await xmlFile.async("string");
-        // Extract plain text from XML by removing all tags
         const text = xml
           .replace(/<w:p[ >]/g, "\n<w:p ")
           .replace(/<[^>]+>/g, "")
           .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
           .replace(/\n{3,}/g, "\n\n").trim();
         if (!text.trim()) throw new Error("Kein Text extrahiert");
-        contentBlocks = [{ type: "text", text: `${PROMPT}\n\nInhalt der Datei:\n\n${text}` }];
-
-      } else if (ext === "pdf" || ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp") {
+        contentBlocks = [{ type: "text", text: `${PROMPT}\n\nInhalt:\n\n${text}` }];
+      } else if (ext === "pdf" || ["jpg","jpeg","png","webp"].includes(ext)) {
         const base64 = await new Promise((res, rej) => {
           const reader = new FileReader();
           reader.onload = () => res(reader.result.split(",")[1]);
@@ -113,23 +134,15 @@ Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhan
       const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 4000,
-          messages: [{ role: "user", content: contentBlocks }],
-        }),
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 4000, messages: [{ role: "user", content: contentBlocks }] }),
       });
 
       const rawText = await response.text();
-      console.log("Edge Function response:", response.status, rawText.slice(0, 500));
-
       if (!response.ok) throw new Error(`Edge Function Fehler ${response.status}: ${rawText.slice(0, 200)}`);
-
       const data = JSON.parse(rawText);
       const text = data.content?.find(b => b.type === "text")?.text || "";
       const clean = text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
-
       if (!Array.isArray(parsed)) throw new Error("Kein Array erhalten");
 
       const importedQuestions = parsed.map(q => ({
@@ -143,31 +156,26 @@ Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhan
         cardFront: q.cardFront || "",
         cardBack: q.cardBack || "",
         solution: q.solution || "",
-        partialPoints: q.partialPoints || [],
+        partialPoints: [],
         attachment: null,
       }));
 
       setQuestions(prev => [...prev, ...importedQuestions]);
       if (!title) setTitle(file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
-
     } catch (err) {
-      setImportError(`Fehler beim Importieren: ${err.message || "Bitte prüfe das Format der Datei."}`);
-      console.error(err);
+      setImportError(`Fehler beim Importieren: ${err.message}`);
     } finally {
       setImporting(false);
       e.target.value = "";
     }
   };
 
-  const totalPoints = questions.reduce((sum, q) => sum + Number(q.points || 0), 0);
-
   const handleSave = async () => {
     setSaving(true);
     const payload = {
       teacher_id: currentUser?.id,
       title: title || "Unbenannte Vorlage",
-      description,
-      subject,
+      description, subject,
       time_limit: timeLimit * 60,
       anti_cheat: antiCheat,
       question_data: questions,
@@ -187,21 +195,17 @@ Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhan
   return (
     <TeacherLayout navigate={navigate} onLogout={onLogout} currentUser={currentUser} activePage="testEditor">
       <div style={{ padding: "32px", maxWidth: "860px" }}>
+
+        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
           <div>
             <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: 0 }}>{editingTest ? "Vorlage bearbeiten" : "Neue Vorlage erstellen"}</h1>
-            <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}><strong>{totalPoints} Punkte</strong> · {questions.length} Aufgaben</p>
+            <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}><strong>{totalPoints} Punkte</strong> · {questions.filter(q => q.type !== "section").length} Aufgaben</p>
           </div>
           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-            <label style={{
-              padding: "10px 16px", background: importing ? "#f1f5f9" : "#f0f7ff",
-              color: importing ? "#94a3b8" : "#2563a8", border: "1px solid #bfdbfe",
-              borderRadius: "10px", fontWeight: 600, fontSize: "13px",
-              cursor: importing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "6px"
-            }}>
+            <label style={{ padding: "10px 16px", background: importing ? "#f1f5f9" : "#f0f7ff", color: importing ? "#94a3b8" : "#2563a8", border: "1px solid #bfdbfe", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: importing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
               {importing ? "⏳ Wird analysiert..." : "📄 Aus Datei importieren"}
-              <input type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.webp" style={{ display: "none" }}
-                onChange={handleImport} disabled={importing} />
+              <input type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={handleImport} disabled={importing} />
             </label>
             <button onClick={handleSave} disabled={saving} style={{ padding: "10px 24px", background: saved ? "#16a34a" : "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: saving ? "not-allowed" : "pointer", transition: "background 0.3s" }}>
               {saving ? "Wird gespeichert..." : saved ? "✓ Gespeichert!" : "Vorlage speichern"}
@@ -210,11 +214,8 @@ Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhan
         </div>
 
         {importError && (
-          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#dc2626" }}>
-            ⚠️ {importError}
-          </div>
+          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#dc2626" }}>⚠️ {importError}</div>
         )}
-
         {importing && (
           <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "16px", marginBottom: "16px", fontSize: "13px", color: "#2563a8", textAlign: "center" }}>
             <div style={{ fontSize: "24px", marginBottom: "8px" }}>🤖</div>
@@ -223,6 +224,7 @@ Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhan
           </div>
         )}
 
+        {/* Meta Card */}
         <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
             <div style={{ gridColumn: "span 2" }}>
@@ -269,153 +271,219 @@ Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhan
           </details>
         </div>
 
-        {questions.map((q, index) => (
-          <div key={q.id} style={{ background: "#fff", borderRadius: "16px", padding: "22px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                  <button onClick={() => moveQuestion(index, -1)} disabled={index === 0} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", color: index === 0 ? "#e2e8f0" : "#94a3b8", fontSize: "12px", padding: 0 }}>▲</button>
-                  <button onClick={() => moveQuestion(index, 1)} disabled={index === questions.length - 1} style={{ background: "none", border: "none", cursor: index === questions.length - 1 ? "default" : "pointer", color: index === questions.length - 1 ? "#e2e8f0" : "#94a3b8", fontSize: "12px", padding: 0 }}>▼</button>
-                </div>
-                <span style={{ background: "#2563a8", color: "#fff", borderRadius: "8px", padding: "3px 10px", fontSize: "13px", fontWeight: 700 }}>{index + 1}</span>
-                <span style={{ fontSize: "13px", color: "#64748b" }}>{QUESTION_TYPES.find(t => t.id === q.type)?.icon} {QUESTION_TYPES.find(t => t.id === q.type)?.label}</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <label style={{ fontSize: "13px", color: "#64748b" }}>Punkte:</label>
-                <input type="number" value={q.points} min={0.5} step={0.5} onChange={e => updateQuestion(q.id, "points", e.target.value)}
-                  style={{ width: "56px", padding: "5px 8px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", fontWeight: 700, textAlign: "center" }} />
-                <button onClick={() => removeQuestion(q.id)} style={{ background: "#fef2f2", border: "none", color: "#dc2626", borderRadius: "7px", padding: "5px 10px", cursor: "pointer" }}>✕</button>
-              </div>
-            </div>
-            <textarea value={q.text} onChange={e => updateQuestion(q.id, "text", e.target.value)} placeholder="Aufgabenstellung eingeben..." rows={2}
-              style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} />
-            {q.type === "multiple_choice" && (
-              <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                {q.options.map((opt, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <input type="radio" name={`correct-${q.id}`} checked={q.correctAnswer === i} onChange={() => updateQuestion(q.id, "correctAnswer", i)} style={{ accentColor: "#2563a8" }} />
-                    <input value={opt} onChange={e => { const opts = [...q.options]; opts[i] = e.target.value; updateQuestion(q.id, "options", opts); }} placeholder={`Antwort ${String.fromCharCode(65 + i)}`}
-                      style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
+        {/* Questions & Sections */}
+        {questions.map((q, index) => {
+
+          // ── SECTION ──
+          if (q.type === "section") {
+            const pts = getSectionPoints(index);
+            return (
+              <div key={q.id} style={{ marginBottom: "8px" }}>
+                <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "14px", padding: "20px 24px", color: "#fff" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <button onClick={() => moveQuestion(index, -1)} disabled={index === 0} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", color: index === 0 ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.7)", fontSize: "12px", padding: 0 }}>▲</button>
+                        <button onClick={() => moveQuestion(index, 1)} disabled={index === questions.length - 1} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.7)", fontSize: "12px", padding: 0 }}>▼</button>
+                      </div>
+                      <span style={{ fontSize: "16px" }}>📂</span>
+                      <span style={{ fontSize: "13px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "0.5px" }}>ABSCHNITT</span>
+                      {pts > 0 && <span style={{ fontSize: "12px", background: "rgba(255,255,255,0.15)", borderRadius: "6px", padding: "2px 8px" }}>{pts} Pkt.</span>}
+                    </div>
+                    <button onClick={() => removeQuestion(q.id)} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "7px", padding: "5px 12px", cursor: "pointer", fontSize: "13px" }}>✕ Entfernen</button>
                   </div>
-                ))}
-                <p style={{ gridColumn: "span 2", fontSize: "11px", color: "#94a3b8", margin: "2px 0 0" }}>○ Richtige Antwort markieren</p>
-              </div>
-            )}
-            {q.type === "true_false" && (
-              <div style={{ marginTop: "12px", display: "flex", gap: "10px" }}>
-                {["Wahr", "Falsch"].map((opt, i) => (
-                  <button key={i} onClick={() => updateQuestion(q.id, "correctAnswer", i)}
-                    style={{ padding: "9px 24px", border: `2px solid ${q.correctAnswer === i ? "#2563a8" : "#e5e7eb"}`, borderRadius: "9px", background: q.correctAnswer === i ? "#2563a8" : "#fff", color: q.correctAnswer === i ? "#fff" : "#374151", fontWeight: 600, fontSize: "14px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>
-                ))}
-              </div>
-            )}
-            {q.type === "open" && (
-              <div style={{ marginTop: "10px", background: "#f0f7ff", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#2563a8", border: "1px solid #bfdbfe" }}>
-                🤖 Diese Aufgabe wird automatisch von der KI bewertet.
-              </div>
-            )}
-            {q.type === "fill_blank" && (
-              <div style={{ marginTop: "10px", fontSize: "13px", color: "#64748b" }}>
-                Nutze <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: "4px" }}>[Lücke]</code> in der Aufgabenstellung.
-              </div>
-            )}
-            {q.type === "flashcard" && (
-              <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe für Schüler)</label>
-                  <input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)}
-                    placeholder="z.B. der Hund"
-                    style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (erwartete Antwort)</label>
-                  <input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)}
-                    placeholder="z.B. the dog"
-                    style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-                </div>
-                <div style={{ gridColumn: "span 2", fontSize: "12px", color: "#94a3b8" }}>
-                  Die Aufgabenstellung oben ist optional (z.B. „Übersetze ins Englische:"). Schüler sehen die A-Seite und tippen die B-Seite.
-                </div>
-              </div>
-            )}
-            {q.type === "assignment" && (
-              <div style={{ marginTop: "12px" }}>
-                {q.pairs.map((pair, i) => (
-                  <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
-                    <input value={pair.left} placeholder={`Begriff ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], left: e.target.value }; updateQuestion(q.id, "pairs", p); }}
-                      style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
-                    <span style={{ color: "#94a3b8" }}>→</span>
-                    <input value={pair.right} placeholder={`Definition ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], right: e.target.value }; updateQuestion(q.id, "pairs", p); }}
-                      style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
-                    {q.pairs.length > 1 && <button onClick={() => updateQuestion(q.id, "pairs", q.pairs.filter((_, pi) => pi !== i))} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Abschnittstitel</label>
+                      <input value={q.sectionTitle || ""} onChange={e => updateQuestion(q.id, "sectionTitle", e.target.value)}
+                        placeholder="z.B. Teil A – Leseverstehen"
+                        style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Anweisung (optional)</label>
+                      <input value={q.sectionInstruction || ""} onChange={e => updateQuestion(q.id, "sectionInstruction", e.target.value)}
+                        placeholder="z.B. Lies den Text und beantworte die Fragen."
+                        style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} />
+                    </div>
                   </div>
-                ))}
-                <button onClick={() => updateQuestion(q.id, "pairs", [...q.pairs, { left: "", right: "" }])} style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer" }}>+ Paar hinzufügen</button>
-              </div>
-            )}
-            <details style={{ marginTop: "12px" }}>
-              <summary style={{ cursor: "pointer", fontSize: "12px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "6px 0" }}>
-                📝 Lösung / Erwartungshorizont & Teilbepunktung
-              </summary>
-              <div style={{ marginTop: "10px", background: "#f8fafc", borderRadius: "10px", padding: "14px", border: "1px solid #e2e8f0" }}>
-                <div style={{ marginBottom: "10px" }}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Musterlösung / Erwartete Antwort</label>
-                  <textarea value={q.solution || ""} onChange={e => updateQuestion(q.id, "solution", e.target.value)}
-                    placeholder="z.B. Der Schüler soll erklären, dass... Alternativ akzeptabel: ..."
-                    rows={3}
-                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                  <div style={{ marginBottom: "12px" }}>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>📝 Text / Lesetext (optional)</label>
+                    <textarea value={q.sectionText || ""} onChange={e => updateQuestion(q.id, "sectionText", e.target.value)}
+                      placeholder="Füge hier einen Lesetext, Gedicht, Dialog o.ä. ein..."
+                      rows={4}
+                      style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} />
+                  </div>
+                  <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ background: "rgba(255,255,255,0.15)", border: "1px dashed rgba(255,255,255,0.4)", borderRadius: "6px", padding: "5px 10px" }}>🎬 Bild / Audio / Video anhängen</span>
+                    <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }}
+                      onChange={e => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const t = file.type.startsWith("image") ? "image" : file.type.startsWith("audio") ? "audio" : "video";
+                        updateQuestion(q.id, "sectionMedia", file.name);
+                        updateQuestion(q.id, "sectionMediaType", t);
+                      }} />
+                    {q.sectionMedia && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)" }}>✓ {q.sectionMedia}</span>}
+                  </label>
                 </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Teilbepunktung</label>
-                  {(q.partialPoints || []).map((p, i) => (
-                    <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
-                      <input type="number" value={p.points} min={0} max={q.points} step={0.5}
-                        onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], points: Number(e.target.value) }; updateQuestion(q.id, "partialPoints", pp); }}
-                        style={{ width: "60px", padding: "6px 8px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", textAlign: "center" }} />
-                      <span style={{ fontSize: "12px", color: "#94a3b8" }}>Pkt. für:</span>
-                      <input value={p.description} placeholder="z.B. Nennung des Begriffs"
-                        onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], description: e.target.value }; updateQuestion(q.id, "partialPoints", pp); }}
-                        style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }} />
-                      <button onClick={() => updateQuestion(q.id, "partialPoints", (q.partialPoints || []).filter((_, pi) => pi !== i))}
-                        style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
+              </div>
+            );
+          }
+
+          // ── REGULAR QUESTION ──
+          return (
+            <div key={q.id} style={{ background: "#fff", borderRadius: "16px", padding: "22px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <button onClick={() => moveQuestion(index, -1)} disabled={index === 0} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", color: index === 0 ? "#e2e8f0" : "#94a3b8", fontSize: "12px", padding: 0 }}>▲</button>
+                    <button onClick={() => moveQuestion(index, 1)} disabled={index === questions.length - 1} style={{ background: "none", border: "none", cursor: index === questions.length - 1 ? "default" : "pointer", color: index === questions.length - 1 ? "#e2e8f0" : "#94a3b8", fontSize: "12px", padding: 0 }}>▼</button>
+                  </div>
+                  <span style={{ background: "#2563a8", color: "#fff", borderRadius: "8px", padding: "3px 10px", fontSize: "13px", fontWeight: 700 }}>{getQuestionNumber(index)}</span>
+                  <span style={{ fontSize: "13px", color: "#64748b" }}>{QUESTION_TYPES.find(t => t.id === q.type)?.icon} {QUESTION_TYPES.find(t => t.id === q.type)?.label}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <label style={{ fontSize: "13px", color: "#64748b" }}>Punkte:</label>
+                  <input type="number" value={q.points} min={0.5} step={0.5} onChange={e => updateQuestion(q.id, "points", e.target.value)}
+                    style={{ width: "56px", padding: "5px 8px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", fontWeight: 700, textAlign: "center" }} />
+                  <button onClick={() => removeQuestion(q.id)} style={{ background: "#fef2f2", border: "none", color: "#dc2626", borderRadius: "7px", padding: "5px 10px", cursor: "pointer" }}>✕</button>
+                </div>
+              </div>
+
+              <textarea value={q.text} onChange={e => updateQuestion(q.id, "text", e.target.value)} placeholder="Aufgabenstellung eingeben..." rows={2}
+                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} />
+
+              {q.type === "multiple_choice" && (
+                <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  {q.options.map((opt, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <input type="radio" name={`correct-${q.id}`} checked={q.correctAnswer === i} onChange={() => updateQuestion(q.id, "correctAnswer", i)} style={{ accentColor: "#2563a8" }} />
+                      <input value={opt} onChange={e => { const opts = [...q.options]; opts[i] = e.target.value; updateQuestion(q.id, "options", opts); }} placeholder={`Antwort ${String.fromCharCode(65 + i)}`}
+                        style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
                     </div>
                   ))}
-                  <button onClick={() => updateQuestion(q.id, "partialPoints", [...(q.partialPoints || []), { points: 0.5, description: "" }])}
-                    style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>
-                    + Teilpunkt hinzufügen
-                  </button>
+                  <p style={{ gridColumn: "span 2", fontSize: "11px", color: "#94a3b8", margin: "2px 0 0" }}>○ Richtige Antwort markieren</p>
                 </div>
-              </div>
-            </details>
-            <div style={{ marginTop: "12px" }}>
-              <label style={{ fontSize: "12px", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "6px", padding: "5px 10px" }}>📎 Datei anhängen</span>
-                <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }} onChange={e => updateQuestion(q.id, "attachment", e.target.files[0]?.name)} />
-                {q.attachment && <span style={{ fontSize: "12px", color: "#16a34a" }}>✓ {q.attachment}</span>}
-              </label>
-            </div>
-          </div>
-        ))}
+              )}
+              {q.type === "true_false" && (
+                <div style={{ marginTop: "12px", display: "flex", gap: "10px" }}>
+                  {["Wahr", "Falsch"].map((opt, i) => (
+                    <button key={i} onClick={() => updateQuestion(q.id, "correctAnswer", i)}
+                      style={{ padding: "9px 24px", border: `2px solid ${q.correctAnswer === i ? "#2563a8" : "#e5e7eb"}`, borderRadius: "9px", background: q.correctAnswer === i ? "#2563a8" : "#fff", color: q.correctAnswer === i ? "#fff" : "#374151", fontWeight: 600, fontSize: "14px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>
+                  ))}
+                </div>
+              )}
+              {q.type === "open" && (
+                <div style={{ marginTop: "10px", background: "#f0f7ff", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#2563a8", border: "1px solid #bfdbfe" }}>
+                  🤖 Diese Aufgabe wird automatisch von der KI bewertet.
+                </div>
+              )}
+              {q.type === "fill_blank" && (
+                <div style={{ marginTop: "10px", fontSize: "13px", color: "#64748b" }}>
+                  Nutze <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: "4px" }}>[Lücke]</code> in der Aufgabenstellung.
+                </div>
+              )}
+              {q.type === "flashcard" && (
+                <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe)</label>
+                    <input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)} placeholder="z.B. der Hund"
+                      style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (Antwort)</label>
+                    <input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)} placeholder="z.B. the dog"
+                      style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+                  </div>
+                </div>
+              )}
+              {q.type === "assignment" && (
+                <div style={{ marginTop: "12px" }}>
+                  {q.pairs.map((pair, i) => (
+                    <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
+                      <input value={pair.left} placeholder={`Begriff ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], left: e.target.value }; updateQuestion(q.id, "pairs", p); }}
+                        style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
+                      <span style={{ color: "#94a3b8" }}>→</span>
+                      <input value={pair.right} placeholder={`Definition ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], right: e.target.value }; updateQuestion(q.id, "pairs", p); }}
+                        style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
+                      {q.pairs.length > 1 && <button onClick={() => updateQuestion(q.id, "pairs", q.pairs.filter((_, pi) => pi !== i))} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>}
+                    </div>
+                  ))}
+                  <button onClick={() => updateQuestion(q.id, "pairs", [...q.pairs, { left: "", right: "" }])} style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer" }}>+ Paar hinzufügen</button>
+                </div>
+              )}
 
-        <div style={{ position: "relative" }}>
-          <button onClick={() => setShowTypeMenu(m => !m)} style={{ width: "100%", padding: "14px", border: "2px dashed #cbd5e1", borderRadius: "14px", background: "#fff", color: "#2563a8", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
-            onMouseOver={e => e.currentTarget.style.borderColor = "#2563a8"}
-            onMouseOut={e => e.currentTarget.style.borderColor = "#cbd5e1"}>
-            + Aufgabe hinzufügen
-          </button>
-          {showTypeMenu && (
-            <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0, background: "#fff", borderRadius: "14px", border: "1px solid #e2e8f0", boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 10 }}>
-              {QUESTION_TYPES.map(t => (
-                <button key={t.id} onClick={() => addQuestion(t.id)} style={{ width: "100%", padding: "13px 20px", border: "none", background: "#fff", textAlign: "left", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid #f8fafc", fontFamily: "inherit" }}
-                  onMouseOver={e => e.currentTarget.style.background = "#f0f7ff"}
-                  onMouseOut={e => e.currentTarget.style.background = "#fff"}>
-                  <span style={{ fontSize: "20px" }}>{t.icon}</span>
-                  <div style={{ fontWeight: 600, color: "#0f172a" }}>{t.label}</div>
-                </button>
-              ))}
+              <details style={{ marginTop: "12px" }}>
+                <summary style={{ cursor: "pointer", fontSize: "12px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "6px 0" }}>
+                  📝 Lösung / Erwartungshorizont & Teilbepunktung
+                </summary>
+                <div style={{ marginTop: "10px", background: "#f8fafc", borderRadius: "10px", padding: "14px", border: "1px solid #e2e8f0" }}>
+                  <div style={{ marginBottom: "10px" }}>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Musterlösung</label>
+                    <textarea value={q.solution || ""} onChange={e => updateQuestion(q.id, "solution", e.target.value)}
+                      placeholder="z.B. Der Schüler soll erklären, dass..." rows={3}
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Teilbepunktung</label>
+                    {(q.partialPoints || []).map((p, i) => (
+                      <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
+                        <input type="number" value={p.points} min={0} max={q.points} step={0.5}
+                          onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], points: Number(e.target.value) }; updateQuestion(q.id, "partialPoints", pp); }}
+                          style={{ width: "60px", padding: "6px 8px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", textAlign: "center" }} />
+                        <span style={{ fontSize: "12px", color: "#94a3b8" }}>Pkt. für:</span>
+                        <input value={p.description} placeholder="z.B. Nennung des Begriffs"
+                          onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], description: e.target.value }; updateQuestion(q.id, "partialPoints", pp); }}
+                          style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }} />
+                        <button onClick={() => updateQuestion(q.id, "partialPoints", (q.partialPoints || []).filter((_, pi) => pi !== i))}
+                          style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
+                      </div>
+                    ))}
+                    <button onClick={() => updateQuestion(q.id, "partialPoints", [...(q.partialPoints || []), { points: 0.5, description: "" }])}
+                      style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>+ Teilpunkt hinzufügen</button>
+                  </div>
+                </div>
+              </details>
+
+              <div style={{ marginTop: "12px" }}>
+                <label style={{ fontSize: "12px", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "6px", padding: "5px 10px" }}>📎 Datei anhängen</span>
+                  <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }} onChange={e => updateQuestion(q.id, "attachment", e.target.files[0]?.name)} />
+                  {q.attachment && <span style={{ fontSize: "12px", color: "#16a34a" }}>✓ {q.attachment}</span>}
+                </label>
+              </div>
             </div>
-          )}
+          );
+        })}
+
+        {/* Bottom buttons */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+          <button onClick={addSection} style={{ padding: "14px", border: "2px dashed #c7d2fe", borderRadius: "14px", background: "#fff", color: "#4f46e5", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
+            onMouseOver={e => e.currentTarget.style.borderColor = "#4f46e5"}
+            onMouseOut={e => e.currentTarget.style.borderColor = "#c7d2fe"}>
+            + Abschnitt hinzufügen
+          </button>
+          <div style={{ position: "relative" }}>
+            <button onClick={() => setShowTypeMenu(m => !m)} style={{ width: "100%", padding: "14px", border: "2px dashed #cbd5e1", borderRadius: "14px", background: "#fff", color: "#2563a8", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
+              onMouseOver={e => e.currentTarget.style.borderColor = "#2563a8"}
+              onMouseOut={e => e.currentTarget.style.borderColor = "#cbd5e1"}>
+              + Aufgabe hinzufügen
+            </button>
+            {showTypeMenu && (
+              <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0, background: "#fff", borderRadius: "14px", border: "1px solid #e2e8f0", boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 10 }}>
+                {QUESTION_TYPES.map(t => (
+                  <button key={t.id} onClick={() => addQuestion(t.id)} style={{ width: "100%", padding: "13px 20px", border: "none", background: "#fff", textAlign: "left", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid #f8fafc", fontFamily: "inherit" }}
+                    onMouseOver={e => e.currentTarget.style.background = "#f0f7ff"}
+                    onMouseOut={e => e.currentTarget.style.background = "#fff"}>
+                    <span style={{ fontSize: "20px" }}>{t.icon}</span>
+                    <div style={{ fontWeight: 600, color: "#0f172a" }}>{t.label}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+
       </div>
     </TeacherLayout>
   );
