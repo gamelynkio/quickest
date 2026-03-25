@@ -47,6 +47,104 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     [next[index], next[swap]] = [next[swap], next[index]]; setQuestions(next);
   };
 
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImporting(true);
+    setImportError("");
+
+    try {
+      const ext = file.name.split(".").pop().toLowerCase();
+      let contentBlocks = [];
+
+      if (ext === "pdf" || ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp") {
+        // Send as base64 image/document
+        const base64 = await new Promise((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result.split(",")[1]);
+          reader.onerror = rej;
+          reader.readAsDataURL(file);
+        });
+        const mediaType = ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`;
+        contentBlocks = [
+          ext === "pdf"
+            ? { type: "document", source: { type: "base64", media_type: mediaType, data: base64 } }
+            : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: `Analysiere diesen Test/diese Prüfungsarbeit und extrahiere alle Aufgaben. Gib das Ergebnis als reines JSON-Array zurück (keine Markdown-Backticks, kein Text drumherum). Jede Aufgabe hat folgende Felder:
+- type: "multiple_choice" | "true_false" | "open" | "fill_blank" | "assignment" | "flashcard"
+- text: Aufgabenstellung
+- points: Punktzahl (Zahl, default 1)
+- options: Array mit Antwortoptionen (nur bei multiple_choice, sonst [])
+- correctAnswer: Index der richtigen Antwort (nur bei multiple_choice/true_false, sonst null)
+- pairs: Array von {left, right} Objekten (nur bei assignment, sonst [])
+- cardFront: Vorderseite (nur bei flashcard, sonst "")
+- cardBack: Rückseite / erwartete Antwort (nur bei flashcard, sonst "")
+- solution: Musterlösung oder Erwartungshorizont als Text (optional)
+- partialPoints: [] (leer lassen)
+
+Erkenne den Aufgabentyp automatisch. Multiple Choice wenn Auswahloptionen vorhanden. Wahr/Falsch bei solchen Fragen. Zuordnung bei Zuordnungsaufgaben. Karteikarte bei Vokabel/Begriff-Paaren. Offene Antwort sonst.` }
+        ];
+      } else if (ext === "docx") {
+        // For DOCX: extract text first, then send as text
+        const arrayBuffer = await file.arrayBuffer();
+        // Simple DOCX text extraction (read XML)
+        const uint8 = new Uint8Array(arrayBuffer);
+        const base64 = btoa(String.fromCharCode(...uint8.slice(0, Math.min(uint8.length, 500000))));
+        contentBlocks = [
+          { type: "document", source: { type: "base64", media_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", data: base64 } },
+          { type: "text", text: `Analysiere dieses Word-Dokument und extrahiere alle Aufgaben als JSON-Array. Kein Markdown, nur reines JSON. Jede Aufgabe: { type, text, points, options, correctAnswer, pairs, cardFront, cardBack, solution, partialPoints }. Typen: multiple_choice, true_false, open, fill_blank, assignment, flashcard.` }
+        ];
+      }
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4000,
+          messages: [{ role: "user", content: contentBlocks }],
+        }),
+      });
+
+      const data = await response.json();
+      const text = data.content?.find(b => b.type === "text")?.text || "";
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+
+      if (!Array.isArray(parsed)) throw new Error("Kein Array erhalten");
+
+      const importedQuestions = parsed.map(q => ({
+        id: Date.now() + Math.random(),
+        type: q.type || "open",
+        text: q.text || "",
+        points: Number(q.points) || 1,
+        options: q.options || [],
+        correctAnswer: q.correctAnswer ?? null,
+        pairs: q.pairs || [],
+        cardFront: q.cardFront || "",
+        cardBack: q.cardBack || "",
+        solution: q.solution || "",
+        partialPoints: q.partialPoints || [],
+        attachment: null,
+      }));
+
+      setQuestions(prev => [...prev, ...importedQuestions]);
+
+      // Try to extract title from filename
+      if (!title) setTitle(file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
+
+    } catch (err) {
+      setImportError("Fehler beim Importieren. Bitte prüfe das Format der Datei.");
+      console.error(err);
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  };
+
   const totalPoints = questions.reduce((sum, q) => sum + Number(q.points || 0), 0);
 
   const handleSave = async () => {
@@ -80,9 +178,36 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
             <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: 0 }}>{editingTest ? "Vorlage bearbeiten" : "Neue Vorlage erstellen"}</h1>
             <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}><strong>{totalPoints} Punkte</strong> · {questions.length} Aufgaben</p>
           </div>
-          <button onClick={handleSave} disabled={saving} style={{ padding: "10px 24px", background: saved ? "#16a34a" : "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: saving ? "not-allowed" : "pointer", transition: "background 0.3s" }}>
-            {saving ? "Wird gespeichert..." : saved ? "✓ Gespeichert!" : "Vorlage speichern"}
-          </button>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <label style={{
+              padding: "10px 16px", background: importing ? "#f1f5f9" : "#f0f7ff",
+              color: importing ? "#94a3b8" : "#2563a8", border: "1px solid #bfdbfe",
+              borderRadius: "10px", fontWeight: 600, fontSize: "13px",
+              cursor: importing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "6px"
+            }}>
+              {importing ? "⏳ Wird analysiert..." : "📄 Aus Datei importieren"}
+              <input type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.webp" style={{ display: "none" }}
+                onChange={handleImport} disabled={importing} />
+            </label>
+            <button onClick={handleSave} disabled={saving} style={{ padding: "10px 24px", background: saved ? "#16a34a" : "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: saving ? "not-allowed" : "pointer", transition: "background 0.3s" }}>
+              {saving ? "Wird gespeichert..." : saved ? "✓ Gespeichert!" : "Vorlage speichern"}
+            </button>
+          </div>
+        </div>
+
+        {importError && (
+          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#dc2626" }}>
+            ⚠️ {importError}
+          </div>
+        )}
+
+        {importing && (
+          <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "16px", marginBottom: "16px", fontSize: "13px", color: "#2563a8", textAlign: "center" }}>
+            <div style={{ fontSize: "24px", marginBottom: "8px" }}>🤖</div>
+            <strong>Claude analysiert die Datei...</strong>
+            <div style={{ color: "#64748b", marginTop: "4px" }}>Aufgaben werden automatisch erkannt und hinzugefügt.</div>
+          </div>
+        )}
         </div>
 
         <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
