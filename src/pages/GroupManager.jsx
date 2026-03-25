@@ -10,11 +10,8 @@ const generatePin = () => String(Math.floor(1000 + Math.random() * 9000));
 const generateUsernamesGlobal = async (count, alsoExclude = []) => {
   const all = [];
   for (const adj of ADJECTIVES) for (const animal of ANIMALS) all.push(`${adj}-${animal}`);
-
-  // Fetch all taken usernames from DB
   const { data } = await supabase.from("students").select("username");
   const taken = new Set([...(data || []).map(s => s.username), ...alsoExclude]);
-
   const available = all.filter(u => !taken.has(u));
   for (let i = available.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -37,6 +34,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
   const [removingFrom, setRemovingFrom] = useState(null);
   const [selectedToRemove, setSelectedToRemove] = useState(new Set());
   const [regenConfirm, setRegenConfirm] = useState(null);
+  const [studentPins, setStudentPins] = useState({});
 
   useEffect(() => { fetchGroups(); }, []);
 
@@ -47,12 +45,12 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     setLoading(false);
   };
 
-  const [studentPins, setStudentPins] = useState({}); // groupId -> { username -> pin }
+  const openNewForm = () => { setEditingGroup(null); setNewName(""); setNewSubject(""); setNewCount(20); setShowForm(true); };
+  const openEditForm = (g) => { setEditingGroup(g); setNewName(g.name); setNewSubject(g.subject); setNewCount(g.count); setShowForm(true); };
 
   const handleExpand = async (groupId) => {
     if (expandedGroup === groupId) { setExpandedGroup(null); return; }
     setExpandedGroup(groupId);
-    // Fetch real PINs for this group
     const { data } = await supabase.from("students").select("username, pin").eq("group_id", groupId);
     if (data) {
       const pinMap = {};
@@ -60,7 +58,6 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
       setStudentPins(prev => ({ ...prev, [groupId]: pinMap }));
     }
   };
-  const openEditForm = (g) => { setEditingGroup(g); setNewName(g.name); setNewSubject(g.subject); setNewCount(g.count); setShowForm(true); };
 
   const saveGroup = async () => {
     const count = parseInt(newCount, 10);
