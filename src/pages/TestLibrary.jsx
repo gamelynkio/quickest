@@ -27,6 +27,11 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const [assignTimeStart, setAssignTimeStart] = useState("08:00");
   const [assignTimeEnd, setAssignTimeEnd] = useState("10:00");
   const [assignTimezone, setAssignTimezone] = useState("Europe/Berlin");
+  const [assignGradingScale, setAssignGradingScale] = useState([
+    { grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
+    { grade: "3", minPercent: 59 }, { grade: "4", minPercent: 45 },
+    { grade: "5", minPercent: 18 }, { grade: "6", minPercent: 0 },
+  ]);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [assigning, setAssigning] = useState(false);
 
@@ -59,7 +64,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
       timing_mode: assignTimingMode,
       anti_cheat: assignAntiCheat,
       question_data: assignModal.question_data,
-      grading_scale: assignModal.grading_scale,
+      grading_scale: assignGradingScale,
       ...(assignTimingMode === "window" && {
         window_date: assignDate,
         window_start: assignTimeStart,
@@ -147,6 +152,11 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                       setAssignTimingMode(template.timing_mode || "countdown");
                       setAssignAntiCheat(template.anti_cheat || false);
                       setAssignDate(""); setAssignTimeStart("08:00"); setAssignTimeEnd("10:00");
+                      setAssignGradingScale(template.grading_scale?.length ? template.grading_scale : [
+                        { grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
+                        { grade: "3", minPercent: 59 }, { grade: "4", minPercent: 45 },
+                        { grade: "5", minPercent: 18 }, { grade: "6", minPercent: 0 },
+                      ]);
                     }} style={{ flex: 1, padding: "8px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
                       👥 Zuweisen
                     </button>
@@ -240,12 +250,32 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
               </div>
             )}
 
-            <div style={{ marginBottom: "24px" }}>
+            <div style={{ marginBottom: "16px" }}>
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
                 <input type="checkbox" checked={assignAntiCheat} onChange={e => setAssignAntiCheat(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
                 🛡️ Anti-Cheat aktivieren
               </label>
             </div>
+
+            <details style={{ marginBottom: "24px" }}>
+              <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#374151", userSelect: "none" }}>
+                📊 Notenschlüssel anpassen
+              </summary>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
+                {assignGradingScale.map((g, i) => (
+                  <div key={i} style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 12px", border: "1px solid #e2e8f0", fontSize: "13px" }}>
+                    <strong>Note {g.grade}</strong> ab{" "}
+                    <input type="number" value={g.minPercent} min={0} max={100}
+                      onChange={e => {
+                        const updated = [...assignGradingScale];
+                        updated[i] = { ...updated[i], minPercent: Number(e.target.value) };
+                        setAssignGradingScale(updated);
+                      }}
+                      style={{ width: "48px", border: "none", background: "none", fontWeight: 700, fontSize: "13px", color: "#2563a8" }} />%
+                  </div>
+                ))}
+              </div>
+            </details>
 
             <div style={{ display: "flex", gap: "10px" }}>
               <button onClick={() => setAssignModal(null)} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
