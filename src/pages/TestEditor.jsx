@@ -215,6 +215,40 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
                 <button onClick={() => updateQuestion(q.id, "pairs", [...q.pairs, { left: "", right: "" }])} style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer" }}>+ Paar hinzufügen</button>
               </div>
             )}
+            <details style={{ marginTop: "12px" }}>
+              <summary style={{ cursor: "pointer", fontSize: "12px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "6px 0" }}>
+                📝 Lösung / Erwartungshorizont & Teilbepunktung
+              </summary>
+              <div style={{ marginTop: "10px", background: "#f8fafc", borderRadius: "10px", padding: "14px", border: "1px solid #e2e8f0" }}>
+                <div style={{ marginBottom: "10px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Musterlösung / Erwartete Antwort</label>
+                  <textarea value={q.solution || ""} onChange={e => updateQuestion(q.id, "solution", e.target.value)}
+                    placeholder="z.B. Der Schüler soll erklären, dass... Alternativ akzeptabel: ..."
+                    rows={3}
+                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Teilbepunktung</label>
+                  {(q.partialPoints || []).map((p, i) => (
+                    <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
+                      <input type="number" value={p.points} min={0} max={q.points} step={0.5}
+                        onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], points: Number(e.target.value) }; updateQuestion(q.id, "partialPoints", pp); }}
+                        style={{ width: "60px", padding: "6px 8px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", textAlign: "center" }} />
+                      <span style={{ fontSize: "12px", color: "#94a3b8" }}>Pkt. für:</span>
+                      <input value={p.description} placeholder="z.B. Nennung des Begriffs"
+                        onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], description: e.target.value }; updateQuestion(q.id, "partialPoints", pp); }}
+                        style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }} />
+                      <button onClick={() => updateQuestion(q.id, "partialPoints", (q.partialPoints || []).filter((_, pi) => pi !== i))}
+                        style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
+                    </div>
+                  ))}
+                  <button onClick={() => updateQuestion(q.id, "partialPoints", [...(q.partialPoints || []), { points: 0.5, description: "" }])}
+                    style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>
+                    + Teilpunkt hinzufügen
+                  </button>
+                </div>
+              </div>
+            </details>
             <div style={{ marginTop: "12px" }}>
               <label style={{ fontSize: "12px", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "6px", padding: "5px 10px" }}>📎 Datei anhängen</span>
