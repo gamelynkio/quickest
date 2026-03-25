@@ -109,7 +109,8 @@ Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhan
         throw new Error("Nicht unterstütztes Format");
       }
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
