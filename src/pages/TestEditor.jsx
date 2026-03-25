@@ -6,6 +6,7 @@ const QUESTION_TYPES = [
   { id: "multiple_choice", label: "Multiple Choice", icon: "☑️" },
   { id: "true_false", label: "Wahr / Falsch", icon: "⚖️" },
   { id: "fill_blank", label: "Lückentext", icon: "✍️" },
+  { id: "flashcard", label: "Karteikarte (A→B)", icon: "🃏" },
   { id: "open", label: "Offene Antwort (KI-Bewertung)", icon: "🤖" },
   { id: "assignment", label: "Zuordnungsaufgabe", icon: "🔗" },
 ];
@@ -15,6 +16,8 @@ const newQuestion = (type) => ({
   type, text: "", points: 1,
   options: type === "multiple_choice" ? ["", "", "", ""] : [],
   correctAnswer: null,
+  cardFront: "",
+  cardBack: "",
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
   attachment: null,
 });
@@ -176,6 +179,25 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
             {q.type === "fill_blank" && (
               <div style={{ marginTop: "10px", fontSize: "13px", color: "#64748b" }}>
                 Nutze <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: "4px" }}>[Lücke]</code> in der Aufgabenstellung.
+              </div>
+            )}
+            {q.type === "flashcard" && (
+              <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe für Schüler)</label>
+                  <input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)}
+                    placeholder="z.B. der Hund"
+                    style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (erwartete Antwort)</label>
+                  <input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)}
+                    placeholder="z.B. the dog"
+                    style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+                </div>
+                <div style={{ gridColumn: "span 2", fontSize: "12px", color: "#94a3b8" }}>
+                  Die Aufgabenstellung oben ist optional (z.B. „Übersetze ins Englische:"). Schüler sehen die A-Seite und tippen die B-Seite.
+                </div>
               </div>
             )}
             {q.type === "assignment" && (
