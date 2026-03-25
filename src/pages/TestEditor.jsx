@@ -495,16 +495,33 @@ Erkenne den Typ automatisch.`;
                 </div>
               )}
               {q.type === "flashcard" && (
-                <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <div>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe)</label>
-                    <input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)} placeholder="z.B. der Hund"
-                      style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+                <div style={{ marginTop: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe)</label>
+                      <input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)} placeholder="z.B. der Hund"
+                        style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (Hauptantwort)</label>
+                      <input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)} placeholder="z.B. the dog"
+                        style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+                    </div>
                   </div>
-                  <div>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (Antwort)</label>
-                    <input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)} placeholder="z.B. the dog"
-                      style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: "12px", color: "#94a3b8" }}>Auch akzeptiert:</span>
+                    {(q.cardBackAlternatives || []).map((alt, ai) => (
+                      <span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                        {alt}
+                        <button onClick={() => updateQuestion(q.id, "cardBackAlternatives", (q.cardBackAlternatives || []).filter((_, i) => i !== ai))}
+                          style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "12px", padding: 0 }}>✕</button>
+                      </span>
+                    ))}
+                    <button onClick={() => {
+                      const alt = prompt("Alternative Lösung eingeben:");
+                      if (!alt?.trim()) return;
+                      updateQuestion(q.id, "cardBackAlternatives", [...(q.cardBackAlternatives || []), alt.trim()]);
+                    }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
                   </div>
                 </div>
               )}
