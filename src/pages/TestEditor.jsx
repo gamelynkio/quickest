@@ -75,11 +75,19 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
 Erkenne den Typ automatisch. Multiple Choice wenn Auswahloptionen (a/b/c) vorhanden. Wahr/Falsch bei solchen Fragen. Zuordnung bei Zuordnungsaufgaben. Karteikarte bei Vokabel-Paaren. Offene Antwort sonst.`;
 
       if (ext === "docx") {
-        // Use mammoth to extract text from DOCX
-        const mammoth = await import("mammoth");
+        // Extract text from DOCX (it's a ZIP with XML inside)
         const arrayBuffer = await file.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer });
-        const text = result.value;
+        const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const xmlFile = zip.file("word/document.xml");
+        if (!xmlFile) throw new Error("Ungültige DOCX-Datei");
+        const xml = await xmlFile.async("string");
+        // Extract plain text from XML by removing all tags
+        const text = xml
+          .replace(/<w:p[ >]/g, "\n<w:p ")
+          .replace(/<[^>]+>/g, "")
+          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+          .replace(/\n{3,}/g, "\n\n").trim();
         if (!text.trim()) throw new Error("Kein Text extrahiert");
         contentBlocks = [{ type: "text", text: `${PROMPT}\n\nInhalt der Datei:\n\n${text}` }];
 
