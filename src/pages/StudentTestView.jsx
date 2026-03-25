@@ -25,11 +25,34 @@ const autoCorrect = (questions, answers) => {
       corrections[q.id] = { points: correct ? maxPoints : 0, maxPoints, correct, studentAnswer: String(studentAnswer || ""), comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.cardBack || "–"}`, solution: q.solution || null, partialPoints: q.partialPoints || [] };
       score += correct ? maxPoints : 0;
     } else if (q.type === "fill_blank") {
-      const expected = String(q.blanks?.[0] || "").toLowerCase().trim();
-      const given = String(studentAnswer || "").toLowerCase().trim();
-      const correct = !!expected && given === expected;
-      corrections[q.id] = { points: correct ? maxPoints : 0, maxPoints, correct, studentAnswer: String(studentAnswer || ""), comment: correct ? "Richtig" : "Bitte manuell prüfen", solution: q.solution || null, partialPoints: q.partialPoints || [] };
-      score += correct ? maxPoints : 0;
+      const blanks = q.blanks || [];
+      if (blanks.length === 0) {
+        // Legacy: single blank via q.blanks[0]
+        corrections[q.id] = { points: 0, maxPoints, correct: false, studentAnswer: String(studentAnswer || ""), comment: "Keine Lösung hinterlegt", solution: q.solution || null, partialPoints: q.partialPoints || [] };
+      } else {
+        // Multiple blanks: studentAnswer is array or object
+        const studentAnswers = Array.isArray(studentAnswer) ? studentAnswer : (typeof studentAnswer === "object" && studentAnswer !== null ? Object.values(studentAnswer) : [String(studentAnswer || "")]);
+        let correctCount = 0;
+        const blankResults = blanks.map((blank, i) => {
+          const given = String(studentAnswers[i] || "").toLowerCase().trim();
+          const accepted = [blank.solution, ...(blank.alternatives || [])].map(s => s.toLowerCase().trim());
+          const correct = accepted.includes(given);
+          if (correct) correctCount++;
+          return { given: studentAnswers[i] || "", correct, solution: blank.solution };
+        });
+        const ptsPerBlank = blanks.length > 0 ? maxPoints / blanks.length : 0;
+        const earnedPoints = Math.round(correctCount * ptsPerBlank * 2) / 2;
+        corrections[q.id] = {
+          points: earnedPoints, maxPoints,
+          correct: correctCount === blanks.length,
+          studentAnswer: studentAnswers.join(", "),
+          comment: `${correctCount} von ${blanks.length} Lücken richtig`,
+          blankResults,
+          solution: blanks.map((b, i) => `Lücke ${i+1}: ${b.solution}`).join(" | "),
+          partialPoints: q.partialPoints || [],
+        };
+        score += earnedPoints;
+      }
     } else if (q.type === "open") {
       corrections[q.id] = { points: null, maxPoints, correct: null, studentAnswer: String(studentAnswer || ""), comment: "⏳ Wartet auf manuelle Bewertung", solution: q.solution || null, partialPoints: q.partialPoints || [], needsReview: true };
     } else if (q.type === "assignment") {
@@ -180,9 +203,14 @@ export default function StudentTestView({ currentUser, onFinish }) {
       <div style={{ maxWidth: "700px", margin: "0 auto", padding: "28px 24px" }}>
         {/* Progress dots — only real questions */}
         <div style={{ marginBottom: "16px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
-          {realQuestions.map((q, i) => (
-            <div key={q.id} style={{ width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 700, background: answers[q.id] !== undefined ? "#2563a8" : "#e2e8f0", color: answers[q.id] !== undefined ? "#fff" : "#94a3b8" }}>{i + 1}</div>
-          ))}
+          {realQuestions.map((q, i) => {
+            const answered = q.type === "fill_blank" && q.blanks?.length > 0
+              ? (Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim()))
+              : answers[q.id] !== undefined && answers[q.id] !== "";
+            return (
+              <div key={q.id} style={{ width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 700, background: answered ? "#2563a8" : "#e2e8f0", color: answered ? "#fff" : "#94a3b8" }}>{i + 1}</div>
+            );
+          })}
         </div>
 
         {questions.map((q, index) => {
@@ -244,9 +272,39 @@ export default function StudentTestView({ currentUser, onFinish }) {
                     style={{ width: "100%", padding: "12px 14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "10px", fontSize: "16px", background: "rgba(255,255,255,0.7)", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }} />
                 </div>
               )}
-              {(q.type === "open" || q.type === "fill_blank") && (
-                <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={q.type === "open" ? 4 : 2}
+              {(q.type === "open") && (
+                <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={4}
                   style={{ width: "100%", padding: "12px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "10px", fontSize: "14px", resize: "vertical", background: "rgba(255,255,255,0.7)", fontFamily: "inherit", boxSizing: "border-box" }} />
+              )}
+              {q.type === "fill_blank" && (
+                <div style={{ marginTop: "8px" }}>
+                  {(q.blanks || []).length > 0 ? (
+                    // New format: inline blanks in text
+                    <div style={{ fontSize: "15px", lineHeight: 2.2 }}>
+                      {(q.fullText || q.text || "").split("[Lücke]").map((part, i, arr) => (
+                        <span key={i}>
+                          {part}
+                          {i < arr.length - 1 && (
+                            <input
+                              value={(answers[q.id] || [])[i] || ""}
+                              onChange={e => {
+                                const cur = Array.isArray(answers[q.id]) ? [...answers[q.id]] : [];
+                                cur[i] = e.target.value;
+                                setAnswers(a => ({ ...a, [q.id]: cur }));
+                              }}
+                              placeholder={`Lücke ${i + 1}`}
+                              style={{ display: "inline-block", width: "120px", padding: "2px 8px", border: "none", borderBottom: "2px solid #2563a8", background: "transparent", fontSize: "15px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }}
+                            />
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    // Legacy format
+                    <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={2}
+                      style={{ width: "100%", padding: "12px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "10px", fontSize: "14px", resize: "vertical", background: "rgba(255,255,255,0.7)", fontFamily: "inherit", boxSizing: "border-box" }} />
+                  )}
+                </div>
               )}
               {q.type === "assignment" && (
                 <div>
