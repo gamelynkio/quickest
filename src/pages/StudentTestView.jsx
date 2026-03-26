@@ -114,29 +114,25 @@ export default function StudentTestView({ currentUser, onFinish }) {
     setLoading(false);
   };
 
-  // Poll for lobby start
+  // Poll for lobby start every 2 seconds
   useEffect(() => {
     if (!lobbyWaiting || !assignment) return;
-    const channel = supabase
-      .channel(`lobby-student-${assignment.id}`)
-      .on("postgres_changes", {
-        event: "UPDATE", schema: "public", table: "assignments",
-        filter: `id=eq.${assignment.id}`
-      }, (payload) => {
-        if (payload.new.lobby_started_at) {
-          setLobbyWaiting(false);
-          setAssignment(prev => ({ ...prev, lobby_started_at: payload.new.lobby_started_at }));
-        }
-      })
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "lobby_presence",
-        filter: `assignment_id=eq.${assignment.id}`
-      }, async () => {
-        const { count } = await supabase.from("lobby_presence").select("*", { count: "exact", head: true }).eq("assignment_id", assignment.id);
-        setLobbyPlayerCount(count || 0);
-      })
-      .subscribe();
-    return () => supabase.removeChannel(channel);
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from("assignments")
+        .select("lobby_started_at")
+        .eq("id", assignment.id)
+        .single();
+      if (data?.lobby_started_at) {
+        setLobbyWaiting(false);
+        setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
+      }
+      // Also update player count
+      const { data: presenceData } = await supabase
+        .from("lobby_presence").select("username").eq("assignment_id", assignment.id);
+      setLobbyPlayerCount(presenceData?.length || 0);
+    }, 2000);
+    return () => clearInterval(interval);
   }, [lobbyWaiting, assignment]);
 
   useEffect(() => {
