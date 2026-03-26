@@ -228,6 +228,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                 </div>
               </div>
             )}
+            {assignTimingMode === "window" && (
               <div style={{ background: "#f0f7ff", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #bfdbfe" }}>
                 <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e3a5f", marginBottom: "12px" }}>📅 Prüfungszeitfenster</div>
                 <div style={{ marginBottom: "10px" }}>
