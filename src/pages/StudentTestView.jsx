@@ -76,6 +76,9 @@ export default function StudentTestView({ currentUser, onFinish }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  const [lobbyWaiting, setLobbyWaiting] = useState(false);
+  const [lobbyPlayerCount, setLobbyPlayerCount] = useState(0);
+
   useEffect(() => { fetchAssignment(); }, []);
 
   const fetchAssignment = async () => {
@@ -93,12 +96,49 @@ export default function StudentTestView({ currentUser, onFinish }) {
       } else {
         setQuestions(qs);
       }
+      // If lobby mode and not yet started → join lobby
+      if (data.timing_mode === "lobby" && !data.lobby_started_at) {
+        setLobbyWaiting(true);
+        // Register presence
+        await supabase.from("lobby_presence").upsert(
+          { assignment_id: data.id, username: currentUser.username },
+          { onConflict: "assignment_id,username" }
+        );
+        // Fetch current count
+        const { count } = await supabase.from("lobby_presence").select("*", { count: "exact", head: true }).eq("assignment_id", data.id);
+        setLobbyPlayerCount(count || 0);
+      }
     }
     setLoading(false);
   };
 
+  // Poll for lobby start
   useEffect(() => {
-    if (!timeLeft || submitted || loading) return;
+    if (!lobbyWaiting || !assignment) return;
+    const channel = supabase
+      .channel(`lobby-student-${assignment.id}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "assignments",
+        filter: `id=eq.${assignment.id}`
+      }, (payload) => {
+        if (payload.new.lobby_started_at) {
+          setLobbyWaiting(false);
+          setAssignment(prev => ({ ...prev, lobby_started_at: payload.new.lobby_started_at }));
+        }
+      })
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "lobby_presence",
+        filter: `assignment_id=eq.${assignment.id}`
+      }, async () => {
+        const { count } = await supabase.from("lobby_presence").select("*", { count: "exact", head: true }).eq("assignment_id", assignment.id);
+        setLobbyPlayerCount(count || 0);
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [lobbyWaiting, assignment]);
+
+  useEffect(() => {
+    if (!timeLeft || submitted || loading || lobbyWaiting) return;
     const timer = setInterval(() => {
       setTimeLeft(t => { if (t <= 1) { clearInterval(timer); handleSubmit(); return 0; } return t - 1; });
     }, 1000);
@@ -143,6 +183,37 @@ export default function StudentTestView({ currentUser, onFinish }) {
         <div style={{ fontSize: "56px", marginBottom: "16px" }}>⚡</div>
         <div style={{ fontSize: "18px", fontWeight: 600 }}>Test wird geladen...</div>
       </div>
+    </div>
+  );
+
+  // LOBBY WAITING ROOM
+  if (lobbyWaiting) return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f, #4c1d95)", fontFamily: "'Segoe UI', system-ui, sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+      <div style={{ textAlign: "center", maxWidth: "420px", width: "100%" }}>
+        <div style={{ fontSize: "64px", marginBottom: "16px" }}>🎮</div>
+        <h1 style={{ fontSize: "28px", fontWeight: 900, color: "#fff", margin: "0 0 8px" }}>Bereit!</h1>
+        <p style={{ color: "rgba(255,255,255,0.8)", fontSize: "16px", marginBottom: "32px" }}>Warte auf den Start durch deine Lehrkraft...</p>
+
+        <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "20px", padding: "24px", marginBottom: "24px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.7)", marginBottom: "12px", letterSpacing: "1px" }}>DEIN NAME</div>
+          <div style={{ fontSize: "22px", fontWeight: 800, color: "#fff" }}>{currentUser.username}</div>
+        </div>
+
+        <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "20px", padding: "20px", marginBottom: "24px" }}>
+          <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)", marginBottom: "8px" }}>TEST</div>
+          <div style={{ fontSize: "17px", fontWeight: 700, color: "#fff" }}>{assignment?.title}</div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.7)", fontSize: "14px" }}>
+          <div style={{ display: "flex", gap: "4px" }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#fff", opacity: 0.6, animation: `pulse ${0.6 + i * 0.2}s ease-in-out infinite alternate` }} />
+            ))}
+          </div>
+          <span>{lobbyPlayerCount} Schüler/in{lobbyPlayerCount !== 1 ? "nen" : ""} in der Lobby</span>
+        </div>
+      </div>
+      <style>{`@keyframes pulse { from { opacity: 0.3; transform: scale(0.8); } to { opacity: 1; transform: scale(1.2); } }`}</style>
     </div>
   );
 
