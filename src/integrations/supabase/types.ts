@@ -21,6 +21,7 @@ export type Database = {
           grading_scale: Json
           group_id: number
           id: number
+          lobby_started_at: string | null
           question_data: Json
           status: string
           teacher_id: string
@@ -37,6 +38,7 @@ export type Database = {
           grading_scale?: Json
           group_id: number
           id?: number
+          lobby_started_at?: string | null
           question_data?: Json
           status?: string
           teacher_id: string
@@ -53,6 +55,7 @@ export type Database = {
           grading_scale?: Json
           group_id?: number
           id?: number
+          lobby_started_at?: string | null
           question_data?: Json
           status?: string
           teacher_id?: string

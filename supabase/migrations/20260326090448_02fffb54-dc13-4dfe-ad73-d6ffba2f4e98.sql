@@ -1,0 +1,1 @@
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS lobby_started_at timestamptz;
