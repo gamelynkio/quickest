@@ -215,11 +215,19 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                   style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: assignGroupId ? "#fff" : "#f8fafc", boxSizing: "border-box", color: assignGroupId ? "#0f172a" : "#94a3b8" }}>
                   <option value="countdown">Countdown ab Start</option>
                   <option value="window">Festes Zeitfenster</option>
+                  <option value="lobby">Lobby (Kahoot-Modus)</option>
                 </select>
               </div>
             </div>
 
-            {assignGroupId && assignTimingMode === "window" && (
+            {assignGroupId && assignTimingMode === "lobby" && (
+              <div style={{ background: "#f5f3ff", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #e9d5ff" }}>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#6d28d9", marginBottom: "8px" }}>🎮 Lobby-Modus</div>
+                <div style={{ fontSize: "13px", color: "#374151", lineHeight: 1.6 }}>
+                  Schüler loggen sich ein und landen in einem Warteraum. Du siehst wer bereits da ist und startest den Test manuell — wie bei Kahoot. Ein QR-Code wird im Dashboard angezeigt.
+                </div>
+              </div>
+            )}
               <div style={{ background: "#f0f7ff", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #bfdbfe" }}>
                 <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e3a5f", marginBottom: "12px" }}>📅 Prüfungszeitfenster</div>
                 <div style={{ marginBottom: "10px" }}>
