@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-const COLORS = ["#fff3cd", "#d4edda", "#d1ecf1", "#f8d7da", "#e2d9f3", "#fde2e4"];
+const COLORS = ["#fff8e7", "#f0fdf4", "#f0f9ff", "#fdf2f8", "#f5f3ff", "#fff1f2"];
 
 const autoCorrect = (questions, answers) => {
   let score = 0;
@@ -27,11 +27,9 @@ const autoCorrect = (questions, answers) => {
     } else if (q.type === "fill_blank") {
       const blanks = q.blanks || [];
       if (blanks.length === 0) {
-        // Legacy: single blank via q.blanks[0]
-        corrections[q.id] = { points: 0, maxPoints, correct: false, studentAnswer: String(studentAnswer || ""), comment: "Keine Lösung hinterlegt", solution: q.solution || null, partialPoints: q.partialPoints || [] };
+        corrections[q.id] = { points: 0, maxPoints, correct: false, studentAnswer: String(studentAnswer || ""), comment: "Keine Lösung hinterlegt", solution: null, partialPoints: [] };
       } else {
-        // Multiple blanks: studentAnswer is array or object
-        const studentAnswers = Array.isArray(studentAnswer) ? studentAnswer : (typeof studentAnswer === "object" && studentAnswer !== null ? Object.values(studentAnswer) : [String(studentAnswer || "")]);
+        const studentAnswers = Array.isArray(studentAnswer) ? studentAnswer : [String(studentAnswer || "")];
         let correctCount = 0;
         const blankResults = blanks.map((blank, i) => {
           const given = String(studentAnswers[i] || "").toLowerCase().trim();
@@ -42,15 +40,7 @@ const autoCorrect = (questions, answers) => {
         });
         const ptsPerBlank = blanks.length > 0 ? maxPoints / blanks.length : 0;
         const earnedPoints = Math.round(correctCount * ptsPerBlank * 2) / 2;
-        corrections[q.id] = {
-          points: earnedPoints, maxPoints,
-          correct: correctCount === blanks.length,
-          studentAnswer: studentAnswers.join(", "),
-          comment: `${correctCount} von ${blanks.length} Lücken richtig`,
-          blankResults,
-          solution: blanks.map((b, i) => `Lücke ${i+1}: ${b.solution}`).join(" | "),
-          partialPoints: q.partialPoints || [],
-        };
+        corrections[q.id] = { points: earnedPoints, maxPoints, correct: correctCount === blanks.length, studentAnswer: studentAnswers.join(", "), comment: `${correctCount} von ${blanks.length} Lücken richtig`, blankResults, solution: blanks.map((b, i) => `Lücke ${i+1}: ${b.solution}`).join(" | "), partialPoints: q.partialPoints || [] };
         score += earnedPoints;
       }
     } else if (q.type === "open") {
@@ -95,13 +85,11 @@ export default function StudentTestView({ currentUser, onFinish }) {
       setAssignment(data);
       setTimeLeft(data.time_limit || 1200);
       const qs = data.question_data || [];
-      const nonSectionQs = qs.filter(q => q.type !== "section");
       if (data.anti_cheat) {
-        // Shuffle only questions, keep sections in place
-        const shuffled = [...nonSectionQs].sort(() => Math.random() - 0.5);
-        // Rebuild array preserving section positions
-        let qIdx = 0;
-        setQuestions(qs.map(q => q.type === "section" ? q : shuffled[qIdx++]));
+        const nonSections = qs.filter(q => q.type !== "section");
+        const shuffled = [...nonSections].sort(() => Math.random() - 0.5);
+        let qi = 0;
+        setQuestions(qs.map(q => q.type === "section" ? q : shuffled[qi++]));
       } else {
         setQuestions(qs);
       }
@@ -134,10 +122,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
       assignment_id: assignment.id,
       student_id: currentUser.id,
       username: currentUser.username,
-      answers,
-      score,
-      total_points: totalPoints,
-      grade,
+      answers, score, total_points: totalPoints, grade,
       ai_corrections: corrections,
       reviewed: !hasOpenQuestions,
     });
@@ -146,141 +131,192 @@ export default function StudentTestView({ currentUser, onFinish }) {
     setSubmitting(false);
   };
 
+  const S = {
+    page: { minHeight: "100vh", fontFamily: "'Segoe UI', system-ui, sans-serif" },
+    center: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px" },
+    card: { textAlign: "center", background: "#fff", borderRadius: "24px", padding: "48px 40px", maxWidth: "440px", width: "100%" },
+  };
+
   if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-      <div style={{ textAlign: "center", color: "#fff" }}><div style={{ fontSize: "48px", marginBottom: "16px" }}>⚡</div><div style={{ fontSize: "16px" }}>Test wird geladen...</div></div>
+    <div style={S.center}>
+      <div style={{ textAlign: "center", color: "#fff" }}>
+        <div style={{ fontSize: "56px", marginBottom: "16px" }}>⚡</div>
+        <div style={{ fontSize: "18px", fontWeight: 600 }}>Test wird geladen...</div>
+      </div>
     </div>
   );
 
   if (!assignment) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-      <div style={{ textAlign: "center", background: "#fff", borderRadius: "24px", padding: "48px 40px", maxWidth: "400px" }}>
+    <div style={S.center}>
+      <div style={S.card}>
         <div style={{ fontSize: "64px", marginBottom: "16px" }}>📭</div>
         <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Kein aktiver Test</h2>
-        <p style={{ color: "#64748b", marginBottom: "24px" }}>Für deine Klasse gibt es aktuell keinen aktiven Test.</p>
-        <button onClick={onFinish} style={{ padding: "10px 24px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Abmelden</button>
+        <p style={{ color: "#64748b", marginBottom: "28px", fontSize: "15px" }}>Für deine Klasse gibt es aktuell keinen aktiven Test.</p>
+        <button onClick={onFinish} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Abmelden</button>
       </div>
     </div>
   );
 
   if (submitted) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-      <div style={{ textAlign: "center", background: "#fff", borderRadius: "24px", padding: "48px 40px", maxWidth: "400px" }}>
-        <div style={{ fontSize: "64px", marginBottom: "16px" }}>✅</div>
-        <h2 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Test abgegeben!</h2>
-        <p style={{ color: "#64748b", marginBottom: "24px" }}>Deine Antworten wurden gespeichert.</p>
-        <button onClick={onFinish} style={{ padding: "12px 28px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer" }}>Fertig</button>
+    <div style={S.center}>
+      <div style={S.card}>
+        <div style={{ fontSize: "72px", marginBottom: "16px" }}>✅</div>
+        <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Test abgegeben!</h2>
+        <p style={{ color: "#64748b", marginBottom: "28px", fontSize: "15px", lineHeight: 1.5 }}>Deine Antworten wurden gespeichert. Deine Lehrkraft wird das Ergebnis bald veröffentlichen.</p>
+        <button onClick={onFinish} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Fertig</button>
       </div>
     </div>
   );
 
   const realQuestions = questions.filter(q => q.type !== "section");
+  const answeredCount = realQuestions.filter(q => {
+    if (q.type === "fill_blank" && q.blanks?.length > 0) return Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim());
+    return answers[q.id] !== undefined && answers[q.id] !== "";
+  }).length;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-      {/* Header */}
-      <div style={{ position: "sticky", top: 0, background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "0 24px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", zIndex: 100 }}>
-        <div style={{ maxWidth: "700px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0" }}>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: "16px", color: "#0f172a" }}>⚡ {assignment.title}</div>
-            <div style={{ fontSize: "12px", color: "#64748b" }}>{currentUser.username}</div>
+    <div style={{ ...S.page, background: "#f1f5f9" }}>
+      {/* Sticky header */}
+      <div style={{ position: "sticky", top: 0, background: "#fff", borderBottom: "2px solid #e2e8f0", zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
+        <div style={{ maxWidth: "800px", margin: "0 auto", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+          {/* Title + user */}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: "17px", color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>⚡ {assignment.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b" }}>{currentUser.username} · {answeredCount}/{realQuestions.length} beantwortet</div>
           </div>
+          {/* Timer */}
           {timeLeft !== null && (
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "28px", fontWeight: 800, color: timeColor, fontVariantNumeric: "tabular-nums" }}>{formatTime(timeLeft)}</div>
-              <div style={{ height: "4px", background: "#e2e8f0", borderRadius: "4px", width: "100px", marginTop: "4px" }}>
-                <div style={{ height: "4px", borderRadius: "4px", background: timeColor, width: `${timePercent}%`, transition: "width 1s linear" }} />
+            <div style={{ textAlign: "center", flexShrink: 0 }}>
+              <div style={{ fontSize: "32px", fontWeight: 900, color: timeColor, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{formatTime(timeLeft)}</div>
+              <div style={{ height: "5px", background: "#e2e8f0", borderRadius: "4px", width: "90px", marginTop: "5px" }}>
+                <div style={{ height: "5px", borderRadius: "4px", background: timeColor, width: `${timePercent}%`, transition: "width 1s linear" }} />
               </div>
-              <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Restzeit</div>
             </div>
           )}
-          <button onClick={() => setShowConfirm(true)} style={{ padding: "9px 18px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
-            Test abgeben
+          {/* Submit button */}
+          <button onClick={() => setShowConfirm(true)}
+            style={{ padding: "12px 20px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", flexShrink: 0, touchAction: "manipulation" }}>
+            Abgeben
           </button>
         </div>
       </div>
 
-      <div style={{ maxWidth: "700px", margin: "0 auto", padding: "28px 24px" }}>
-        {/* Progress dots — only real questions */}
-        <div style={{ marginBottom: "16px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
-          {realQuestions.map((q, i) => {
-            const answered = q.type === "fill_blank" && q.blanks?.length > 0
-              ? (Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim()))
-              : answers[q.id] !== undefined && answers[q.id] !== "";
-            return (
-              <div key={q.id} style={{ width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 700, background: answered ? "#2563a8" : "#e2e8f0", color: answered ? "#fff" : "#94a3b8" }}>{i + 1}</div>
-            );
-          })}
+      <div style={{ maxWidth: "800px", margin: "0 auto", padding: "20px 16px 40px" }}>
+
+        {/* Progress bar */}
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b", marginBottom: "6px" }}>
+            <span>Fortschritt</span>
+            <span>{answeredCount} / {realQuestions.length}</span>
+          </div>
+          <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "6px" }}>
+            <div style={{ height: "6px", borderRadius: "6px", background: "#2563a8", width: `${realQuestions.length > 0 ? (answeredCount / realQuestions.length) * 100 : 0}%`, transition: "width 0.3s" }} />
+          </div>
         </div>
 
         {questions.map((q, index) => {
           // SECTION
-          if (q.type === "section") {
-            return (
-              <div key={q.id} style={{ marginBottom: "8px", marginTop: index > 0 ? "16px" : 0 }}>
-                <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "14px", padding: "18px 22px", color: "#fff" }}>
-                  {q.sectionTitle && <div style={{ fontSize: "17px", fontWeight: 800, marginBottom: "4px" }}>{q.sectionTitle}</div>}
-                  {q.sectionInstruction && <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)", marginBottom: q.sectionText ? "10px" : 0 }}>{q.sectionInstruction}</div>}
-                  {q.sectionText && (
-                    <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "10px", padding: "14px", fontSize: "14px", lineHeight: 1.7, whiteSpace: "pre-wrap", marginTop: "8px" }}>
-                      {q.sectionText}
-                    </div>
-                  )}
-                </div>
+          if (q.type === "section") return (
+            <div key={q.id} style={{ marginBottom: "12px", marginTop: index > 0 ? "24px" : 0 }}>
+              <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "16px", padding: "20px 24px", color: "#fff" }}>
+                {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800, marginBottom: "6px" }}>{q.sectionTitle}</div>}
+                {q.sectionInstruction && <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.85)", marginBottom: q.sectionText ? "12px" : 0 }}>{q.sectionInstruction}</div>}
+                {q.sectionText && (
+                  <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "12px", padding: "16px", fontSize: "15px", lineHeight: 1.8, whiteSpace: "pre-wrap", marginTop: "8px" }}>
+                    {q.sectionText}
+                  </div>
+                )}
               </div>
-            );
-          }
+            </div>
+          );
 
-          // REGULAR QUESTION
+          // QUESTION
           const qIndex = questions.slice(0, index).filter(x => x.type !== "section").length;
+          const isAnswered = q.type === "fill_blank" && q.blanks?.length > 0
+            ? Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim())
+            : answers[q.id] !== undefined && answers[q.id] !== "";
+
           return (
-            <div key={q.id} style={{ background: assignment.anti_cheat ? COLORS[qIndex % COLORS.length] : "#fff", borderRadius: "16px", padding: "22px", marginBottom: "16px", border: "2px solid rgba(0,0,0,0.06)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                  <span style={{ background: "#0f172a", color: "#fff", borderRadius: "8px", padding: "3px 10px", fontSize: "13px", fontWeight: 700 }}>{qIndex + 1}</span>
-                  <span style={{ fontSize: "15px", fontWeight: 600, color: "#0f172a" }}>{q.text}</span>
+            <div key={q.id} style={{
+              background: assignment.anti_cheat ? COLORS[qIndex % COLORS.length] : "#fff",
+              borderRadius: "16px", padding: "22px", marginBottom: "14px",
+              border: isAnswered ? "2px solid #bfdbfe" : "2px solid #e2e8f0",
+              transition: "border-color 0.2s"
+            }}>
+              {/* Question header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px", gap: "12px" }}>
+                <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", flex: 1 }}>
+                  <span style={{ background: isAnswered ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "8px", padding: "4px 12px", fontSize: "14px", fontWeight: 700, flexShrink: 0 }}>{qIndex + 1}</span>
+                  <span style={{ fontSize: "16px", fontWeight: 600, color: "#0f172a", lineHeight: 1.5 }}>{q.text}</span>
                 </div>
-                <span style={{ fontSize: "12px", color: "#94a3b8", whiteSpace: "nowrap", marginLeft: "8px" }}>{q.points} Pkt.</span>
+                <span style={{ fontSize: "13px", color: "#94a3b8", whiteSpace: "nowrap", flexShrink: 0, background: "#f1f5f9", borderRadius: "6px", padding: "3px 8px" }}>{q.points} Pkt.</span>
               </div>
 
+              {/* Multiple choice — single column on tablet for easier tapping */}
               {q.type === "multiple_choice" && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {q.options.map((opt, i) => (
                     <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))}
-                      style={{ padding: "11px 14px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "rgba(0,0,0,0.12)"}`, borderRadius: "10px", background: answers[q.id] === i ? "#2563a8" : "rgba(255,255,255,0.7)", color: answers[q.id] === i ? "#fff" : "#374151", cursor: "pointer", fontWeight: answers[q.id] === i ? 700 : 400, fontSize: "14px", textAlign: "left", fontFamily: "inherit" }}>
-                      <span style={{ marginRight: "8px", opacity: 0.7 }}>{String.fromCharCode(65 + i)}.</span>{opt}
+                      style={{
+                        padding: "16px 18px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "rgba(0,0,0,0.1)"}`,
+                        borderRadius: "12px", background: answers[q.id] === i ? "#2563a8" : "rgba(255,255,255,0.8)",
+                        color: answers[q.id] === i ? "#fff" : "#374151",
+                        cursor: "pointer", fontWeight: answers[q.id] === i ? 700 : 500,
+                        fontSize: "15px", textAlign: "left", fontFamily: "inherit",
+                        display: "flex", alignItems: "center", gap: "12px",
+                        touchAction: "manipulation", transition: "all 0.15s"
+                      }}>
+                      <span style={{ width: "28px", height: "28px", borderRadius: "50%", border: `2px solid ${answers[q.id] === i ? "rgba(255,255,255,0.5)" : "#d1d5db"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, flexShrink: 0, background: answers[q.id] === i ? "rgba(255,255,255,0.2)" : "transparent" }}>
+                        {String.fromCharCode(65 + i)}
+                      </span>
+                      {opt}
                     </button>
                   ))}
                 </div>
               )}
+
+              {/* True/False — full width buttons */}
               {q.type === "true_false" && (
-                <div style={{ display: "flex", gap: "10px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                   {["Wahr", "Falsch"].map((opt, i) => (
                     <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))}
-                      style={{ padding: "11px 24px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "rgba(0,0,0,0.12)"}`, borderRadius: "10px", background: answers[q.id] === i ? "#2563a8" : "rgba(255,255,255,0.7)", color: answers[q.id] === i ? "#fff" : "#374151", cursor: "pointer", fontWeight: 600, fontSize: "14px", fontFamily: "inherit" }}>{opt}</button>
+                      style={{
+                        padding: "18px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "rgba(0,0,0,0.1)"}`,
+                        borderRadius: "12px", background: answers[q.id] === i ? "#2563a8" : "rgba(255,255,255,0.8)",
+                        color: answers[q.id] === i ? "#fff" : "#374151",
+                        cursor: "pointer", fontWeight: 700, fontSize: "17px", fontFamily: "inherit",
+                        touchAction: "manipulation", transition: "all 0.15s"
+                      }}>{opt}</button>
                   ))}
                 </div>
               )}
+
+              {/* Flashcard */}
               {q.type === "flashcard" && (
                 <div>
-                  <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: "12px", padding: "20px 24px", marginBottom: "12px", border: "2px solid rgba(0,0,0,0.1)", textAlign: "center" }}>
-                    <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>A-SEITE</div>
-                    <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>
+                  <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: "14px", padding: "24px", marginBottom: "14px", border: "2px solid rgba(0,0,0,0.08)", textAlign: "center" }}>
+                    <div style={{ fontSize: "12px", fontWeight: 700, color: "#94a3b8", letterSpacing: "1px", marginBottom: "10px" }}>A-SEITE</div>
+                    <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>
                   </div>
                   <input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
                     placeholder="B-Seite eingeben..."
-                    style={{ width: "100%", padding: "12px 14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "10px", fontSize: "16px", background: "rgba(255,255,255,0.7)", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }} />
+                    style={{ width: "100%", padding: "16px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "18px", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }} />
                 </div>
               )}
-              {(q.type === "open") && (
-                <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={4}
-                  style={{ width: "100%", padding: "12px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "10px", fontSize: "14px", resize: "vertical", background: "rgba(255,255,255,0.7)", fontFamily: "inherit", boxSizing: "border-box" }} />
+
+              {/* Open */}
+              {q.type === "open" && (
+                <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+                  placeholder="Deine Antwort..."
+                  rows={5}
+                  style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", lineHeight: 1.6 }} />
               )}
+
+              {/* Fill blank */}
               {q.type === "fill_blank" && (
-                <div style={{ marginTop: "8px" }}>
+                <div>
                   {(q.blanks || []).length > 0 ? (
-                    // New format: inline blanks in text
-                    <div style={{ fontSize: "15px", lineHeight: 2.2 }}>
+                    <div style={{ fontSize: "16px", lineHeight: 2.5, background: "rgba(255,255,255,0.8)", borderRadius: "12px", padding: "16px" }}>
                       {(q.fullText || q.text || "").split("[Lücke]").map((part, i, arr) => (
                         <span key={i}>
                           {part}
@@ -292,28 +328,29 @@ export default function StudentTestView({ currentUser, onFinish }) {
                                 cur[i] = e.target.value;
                                 setAnswers(a => ({ ...a, [q.id]: cur }));
                               }}
-                              placeholder={`Lücke ${i + 1}`}
-                              style={{ display: "inline-block", width: "120px", padding: "2px 8px", border: "none", borderBottom: "2px solid #2563a8", background: "transparent", fontSize: "15px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }}
+                              placeholder="___"
+                              style={{ display: "inline-block", width: "110px", padding: "4px 8px", border: "none", borderBottom: "3px solid #2563a8", background: "transparent", fontSize: "16px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }}
                             />
                           )}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    // Legacy format
-                    <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={2}
-                      style={{ width: "100%", padding: "12px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "10px", fontSize: "14px", resize: "vertical", background: "rgba(255,255,255,0.7)", fontFamily: "inherit", boxSizing: "border-box" }} />
+                    <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={3}
+                      style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box" }} />
                   )}
                 </div>
               )}
+
+              {/* Assignment */}
               {q.type === "assignment" && (
-                <div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {(q.pairs || []).map((pair, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                      <span style={{ background: "rgba(255,255,255,0.7)", borderRadius: "6px", padding: "6px 10px", fontWeight: 600, fontSize: "13px" }}>{pair.left}</span>
-                      <span style={{ color: "#94a3b8" }}>→</span>
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", background: "rgba(255,255,255,0.8)", borderRadius: "10px", padding: "10px 14px" }}>
+                      <span style={{ fontWeight: 700, fontSize: "15px", minWidth: "80px" }}>{pair.left}</span>
+                      <span style={{ color: "#94a3b8", fontSize: "18px" }}>→</span>
                       <select value={(answers[q.id] || {})[i] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [i]: e.target.value } }))}
-                        style={{ flex: 1, padding: "6px 10px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "6px", fontSize: "13px", background: "rgba(255,255,255,0.7)", fontFamily: "inherit" }}>
+                        style={{ flex: 1, padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "15px", background: "#fff", fontFamily: "inherit" }}>
                         <option value="">– auswählen –</option>
                         {(q.pairs || []).map((p, j) => <option key={j} value={p.right}>{p.right}</option>)}
                       </select>
@@ -325,21 +362,31 @@ export default function StudentTestView({ currentUser, onFinish }) {
           );
         })}
 
-        <button onClick={() => setShowConfirm(true)} style={{ width: "100%", padding: "14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "15px", cursor: "pointer", marginTop: "8px" }}>
+        {/* Submit button at bottom */}
+        <button onClick={() => setShowConfirm(true)}
+          style={{ width: "100%", padding: "18px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "14px", fontWeight: 800, fontSize: "17px", cursor: "pointer", marginTop: "8px", touchAction: "manipulation" }}>
           Test abgeben
         </button>
       </div>
 
+      {/* Confirm modal */}
       {showConfirm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", borderRadius: "20px", padding: "36px", maxWidth: "380px", textAlign: "center" }}>
-            <div style={{ fontSize: "48px", marginBottom: "12px" }}>🤔</div>
-            <h3 style={{ fontSize: "20px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" }}>Schon fertig?</h3>
-            <p style={{ color: "#64748b", marginBottom: "24px", fontSize: "14px" }}>Bist du sicher? Du kannst danach keine Antworten mehr ändern.</p>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={() => setShowConfirm(false)} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Zurück zum Test</button>
-              <button onClick={handleSubmit} disabled={submitting} style={{ flex: 1, padding: "11px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer" }}>
-                {submitting ? "Wird gespeichert..." : "Ja, abgeben!"}
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "24px", padding: "36px 32px", maxWidth: "420px", width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: "56px", marginBottom: "16px" }}>🤔</div>
+            <h3 style={{ fontSize: "22px", fontWeight: 800, margin: "0 0 10px", color: "#0f172a" }}>Schon fertig?</h3>
+            <p style={{ color: "#64748b", marginBottom: "10px", fontSize: "15px", lineHeight: 1.5 }}>
+              Du hast <strong>{answeredCount} von {realQuestions.length}</strong> Fragen beantwortet.
+            </p>
+            <p style={{ color: "#94a3b8", marginBottom: "28px", fontSize: "14px" }}>Nach dem Abgeben kannst du keine Antworten mehr ändern.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button onClick={handleSubmit} disabled={submitting}
+                style={{ padding: "16px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 800, fontSize: "16px", cursor: submitting ? "not-allowed" : "pointer", touchAction: "manipulation" }}>
+                {submitting ? "Wird gespeichert..." : "Ja, jetzt abgeben"}
+              </button>
+              <button onClick={() => setShowConfirm(false)}
+                style={{ padding: "16px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "16px", cursor: "pointer", touchAction: "manipulation" }}>
+                Zurück zum Test
               </button>
             </div>
           </div>
