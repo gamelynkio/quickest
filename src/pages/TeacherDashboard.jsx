@@ -100,7 +100,18 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
     setLobbyStudents([]);
   };
 
-  const appUrl = "https://quickest.lovable.app";
+  const appUrl = "https://quickest.lovable.app?role=student";
+
+  // Auto-refresh lobby students every 3 seconds when modal is open
+  useEffect(() => {
+    if (!lobbyModal) return;
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from("lobby_presence").select("username").eq("assignment_id", lobbyModal.id);
+      setLobbyStudents((data || []).map(d => d.username));
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [lobbyModal]);
 
   const stats = [
     { label: "Tests gesamt", value: assignments.length, icon: "📋", color: "#2563a8" },
