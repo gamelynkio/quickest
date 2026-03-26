@@ -260,7 +260,10 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                 </div>
                 {assignDate && assignTimeStart && assignTimeEnd && (
                   <div style={{ marginTop: "10px", fontSize: "12px", color: "#2563a8", fontWeight: 600 }}>
-                    ✓ {new Date(assignDate).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })} · {assignTimeStart}–{assignTimeEnd} Uhr
+                    {(() => {
+                      const formatted = new Date(assignDate).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+                      return `✓ ${formatted} · ${assignTimeStart}–${assignTimeEnd} Uhr`;
+                    })()}
                   </div>
                 )}
               </div>
