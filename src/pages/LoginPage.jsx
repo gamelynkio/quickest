@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function LoginPage({ onLogin }) {
-  const [role, setRole] = useState("teacher");
+  const [role, setRole] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("role") === "student" ? "student" : "teacher";
+  });
   const [isRegister, setIsRegister] = useState(false);
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -35,6 +38,7 @@ export default function LoginPage({ onLogin }) {
           .eq("username", username)
           .eq("pin", password)
           .single();
+        console.log("student login:", { username, password, data, error });
         if (error || !data) { setError("Ungültiger Benutzername oder PIN."); return; }
         onLogin("student", data);
       }
