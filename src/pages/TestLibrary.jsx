@@ -228,6 +228,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                 </div>
               </div>
             )}
+            {assignTimingMode === "window" && (
               <div style={{ background: "#f0f7ff", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #bfdbfe" }}>
                 <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e3a5f", marginBottom: "12px" }}>📅 Prüfungszeitfenster</div>
                 <div style={{ marginBottom: "10px" }}>
@@ -260,7 +261,10 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                 </div>
                 {assignDate && assignTimeStart && assignTimeEnd && (
                   <div style={{ marginTop: "10px", fontSize: "12px", color: "#2563a8", fontWeight: 600 }}>
-                    ✓ {new Date(assignDate).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })} · {assignTimeStart}–{assignTimeEnd} Uhr
+                    {(() => {
+                      const formatted = new Date(assignDate).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+                      return `✓ ${formatted} · ${assignTimeStart}–${assignTimeEnd} Uhr`;
+                    })()}
                   </div>
                 )}
               </div>
