@@ -113,6 +113,35 @@ export type Database = {
         }
         Relationships: []
       }
+      lobby_presence: {
+        Row: {
+          assignment_id: number | null
+          id: number
+          joined_at: string | null
+          username: string
+        }
+        Insert: {
+          assignment_id?: number | null
+          id?: number
+          joined_at?: string | null
+          username: string
+        }
+        Update: {
+          assignment_id?: number | null
+          id?: number
+          joined_at?: string | null
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lobby_presence_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
