@@ -1,0 +1,1 @@
+ALTER TABLE lobby_presence DROP CONSTRAINT IF EXISTS lobby_presence_assignment_username_unique;
