@@ -21,13 +21,11 @@ export default function App() {
       setSession(session ?? null);
       if (session?.user) fetchProfile(session.user.id);
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session ?? null);
       if (session?.user) fetchProfile(session.user.id);
       else setProfile(null);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -47,10 +45,22 @@ export default function App() {
     setCurrentPage("studentTest");
   };
 
+  const handleStudentFinish = async (assignmentId?: number) => {
+    // Clean up lobby presence if applicable
+    if (assignmentId) {
+      await supabase.from("lobby_presence")
+        .delete()
+        .eq("assignment_id", assignmentId)
+        .eq("username", studentUser?.username);
+    }
+    setStudentUser(null);
+    setCurrentPage("login");
+  };
+
   const handleLogout = async () => {
     if (studentUser) {
       setStudentUser(null);
-      setCurrentPage("dashboard");
+      setCurrentPage("login");
     } else {
       await supabase.auth.signOut();
       setProfile(null);
@@ -67,8 +77,8 @@ export default function App() {
     </div>
   );
 
-  if (studentUser) return <StudentTestView currentUser={studentUser} onFinish={handleLogout} />;
-  if (!session) return <LoginPage onLogin={handleLogin} />;
+  if (studentUser) return <StudentTestView currentUser={studentUser} onFinish={handleStudentFinish} />;
+  if (!session || currentPage === "login") return <LoginPage onLogin={handleLogin} />;
 
   const teacherNav = { navigate, onLogout: handleLogout, currentUser: profile };
   if (currentPage === "dashboard") return <TeacherDashboard {...teacherNav} />;
@@ -76,6 +86,5 @@ export default function App() {
   if (currentPage === "library") return <TestLibrary {...teacherNav} />;
   if (currentPage === "groups") return <GroupManager {...teacherNav} />;
   if (currentPage === "results") return <ResultsView {...teacherNav} assignment={viewingResults} />;
-
   return <TeacherDashboard {...teacherNav} />;
 }
