@@ -99,20 +99,18 @@ export default function StudentTestView({ currentUser, onFinish }) {
       // If lobby mode and not yet started → join lobby
       if (data.timing_mode === "lobby" && !data.lobby_started_at) {
         setLobbyWaiting(true);
-        // Register presence — try insert, ignore if already exists
-        // Delete old entry first, then insert fresh
+        // Always delete first (handles mobile where beforeunload doesn't fire)
         await supabase.from("lobby_presence")
           .delete()
           .eq("assignment_id", data.id)
           .eq("username", currentUser.username);
-        const { error: presenceError } = await supabase
-          .from("lobby_presence")
+        // Then insert fresh entry
+        await supabase.from("lobby_presence")
           .insert({ assignment_id: data.id, username: currentUser.username, last_seen: new Date().toISOString() });
-        console.log("Lobby presence insert:", { assignmentId: data.id, username: currentUser.username, error: presenceError });
         // Fetch current count
-        const { data: presenceData, error: countError } = await supabase
-          .from("lobby_presence").select("username").eq("assignment_id", data.id);
-        console.log("Lobby presence count:", { presenceData, countError });
+        const { data: presenceData } = await supabase
+          .from("lobby_presence").select("username").eq("assignment_id", data.id)
+          .gte("last_seen", new Date(Date.now() - 15000).toISOString());
         setLobbyPlayerCount(presenceData?.length || 0);
       }
     }
