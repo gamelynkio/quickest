@@ -114,8 +114,29 @@ export default function StudentTestView({ currentUser, onFinish }) {
     setLoading(false);
   };
 
-  // Poll for lobby start every 2 seconds
+  // Heartbeat: update last_seen every 5 seconds while in lobby
   useEffect(() => {
+    if (!lobbyWaiting || !assignment) return;
+    const heartbeat = setInterval(async () => {
+      await supabase.from("lobby_presence")
+        .update({ last_seen: new Date().toISOString() })
+        .eq("assignment_id", assignment.id)
+        .eq("username", currentUser.username);
+    }, 5000);
+    // Remove from lobby on unmount/leave
+    const cleanup = async () => {
+      await supabase.from("lobby_presence")
+        .delete()
+        .eq("assignment_id", assignment.id)
+        .eq("username", currentUser.username);
+    };
+    window.addEventListener("beforeunload", cleanup);
+    return () => {
+      clearInterval(heartbeat);
+      window.removeEventListener("beforeunload", cleanup);
+      cleanup();
+    };
+  }, [lobbyWaiting, assignment]);
     if (!lobbyWaiting || !assignment) return;
     const interval = setInterval(async () => {
       const { data } = await supabase
