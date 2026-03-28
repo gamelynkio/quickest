@@ -1,0 +1,1 @@
+ALTER TABLE lobby_presence ADD CONSTRAINT lobby_presence_assignment_username_unique UNIQUE (assignment_id, username);
