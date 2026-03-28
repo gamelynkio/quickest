@@ -35,11 +35,14 @@ export default function LoginPage({ onLogin }) {
         const { data, error } = await supabase
           .from("students")
           .select("*, groups(name, subject)")
-          .eq("username", username)
-          .eq("pin", password)
+          .ilike("username", username.trim())
+          .eq("pin", password.trim())
           .single();
         console.log("student login:", { username, password, data, error });
-        if (error || !data) { setError("Ungültiger Benutzername oder PIN."); return; }
+        if (error || !data) {
+          setError(`Ungültiger Benutzername oder PIN. [${error?.code ?? "null"}: ${error?.message ?? "no data"}]`);
+          return;
+        }
         onLogin("student", data);
       }
     } finally {
@@ -86,7 +89,8 @@ export default function LoginPage({ onLogin }) {
                 {role === "teacher" ? "E-Mail-Adresse" : "Benutzername"}
               </label>
               <input type={role === "teacher" ? "email" : "text"} value={username} onChange={e => setUsername(e.target.value)}
-                placeholder={role === "teacher" ? "name@schule.de" : "z.B. blauer-Adler"} required style={inputStyle} />
+                placeholder={role === "teacher" ? "name@schule.de" : "z.B. blauer-Adler"} required style={inputStyle}
+                autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false" />
             </div>
             <div style={{ marginBottom: "20px" }}>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
