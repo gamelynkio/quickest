@@ -1,0 +1,1 @@
+CREATE POLICY "Anyone can update lobby presence" ON lobby_presence FOR UPDATE USING (true) WITH CHECK (true);
