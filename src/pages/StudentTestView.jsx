@@ -196,6 +196,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
     setSubmitted(true);
     setShowConfirm(false);
     setSubmitting(false);
+    // Don't call onFinish here — student stays on submitted screen
   };
 
   const S = {
@@ -250,7 +251,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
         <div style={{ fontSize: "64px", marginBottom: "16px" }}>📭</div>
         <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Kein aktiver Test</h2>
         <p style={{ color: "#64748b", marginBottom: "28px", fontSize: "15px" }}>Für deine Klasse gibt es aktuell keinen aktiven Test.</p>
-        <button onClick={onFinish} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Abmelden</button>
+        <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Abmelden</button>
       </div>
     </div>
   );
@@ -261,7 +262,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
         <div style={{ fontSize: "72px", marginBottom: "16px" }}>✅</div>
         <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Test abgegeben!</h2>
         <p style={{ color: "#64748b", marginBottom: "28px", fontSize: "15px", lineHeight: 1.5 }}>Deine Antworten wurden gespeichert. Deine Lehrkraft wird das Ergebnis bald veröffentlichen.</p>
-        <button onClick={onFinish} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Fertig</button>
+        <button onClick={() => onFinish(assignment?.id)} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Fertig</button>
       </div>
     </div>
   );
