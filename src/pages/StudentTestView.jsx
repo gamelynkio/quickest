@@ -100,13 +100,15 @@ export default function StudentTestView({ currentUser, onFinish }) {
       if (data.timing_mode === "lobby" && !data.lobby_started_at) {
         setLobbyWaiting(true);
         // Register presence — try insert, ignore if already exists
+        // Delete old entry first, then insert fresh
+        await supabase.from("lobby_presence")
+          .delete()
+          .eq("assignment_id", data.id)
+          .eq("username", currentUser.username);
         const { error: presenceError } = await supabase
           .from("lobby_presence")
-          .upsert(
-            { assignment_id: data.id, username: currentUser.username, last_seen: new Date().toISOString() },
-            { onConflict: "assignment_id,username" }
-          );
-        console.log("Lobby presence upsert:", { assignmentId: data.id, username: currentUser.username, error: presenceError });
+          .insert({ assignment_id: data.id, username: currentUser.username, last_seen: new Date().toISOString() });
+        console.log("Lobby presence insert:", { assignmentId: data.id, username: currentUser.username, error: presenceError });
         // Fetch current count
         const { data: presenceData, error: countError } = await supabase
           .from("lobby_presence").select("username").eq("assignment_id", data.id);
