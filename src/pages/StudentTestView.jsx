@@ -99,15 +99,18 @@ export default function StudentTestView({ currentUser, onFinish }) {
       // If lobby mode and not yet started → join lobby
       if (data.timing_mode === "lobby" && !data.lobby_started_at) {
         setLobbyWaiting(true);
-        // Always delete first (handles mobile where beforeunload doesn't fire)
-        await supabase.from("lobby_presence")
-          .delete()
+        const now = new Date().toISOString();
+        // Try update first (for returning students)
+        const { data: updated } = await supabase.from("lobby_presence")
+          .update({ last_seen: now })
           .eq("assignment_id", data.id)
-          .eq("username", currentUser.username);
-        // Then insert fresh entry
-        await supabase.from("lobby_presence")
-          .insert({ assignment_id: data.id, username: currentUser.username, last_seen: new Date().toISOString() });
-        // Fetch current count
+          .eq("username", currentUser.username)
+          .select();
+        // If no row was updated, insert fresh
+        if (!updated || updated.length === 0) {
+          await supabase.from("lobby_presence")
+            .insert({ assignment_id: data.id, username: currentUser.username, last_seen: now });
+        }
         const { data: presenceData } = await supabase
           .from("lobby_presence").select("username").eq("assignment_id", data.id)
           .gte("last_seen", new Date(Date.now() - 15000).toISOString());
