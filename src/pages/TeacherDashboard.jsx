@@ -55,12 +55,12 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const openLobby = async (assignment) => {
     setLobbyModal(assignment);
     setLobbyStudents([]);
-
-    // Fetch students already in lobby (submitted lobby_joined event)
+    const cutoff = new Date(Date.now() - 15000).toISOString();
     const { data } = await supabase
       .from("lobby_presence")
       .select("username")
-      .eq("assignment_id", assignment.id);
+      .eq("assignment_id", assignment.id)
+      .gte("last_seen", cutoff);
     setLobbyStudents((data || []).map(d => d.username));
   };
 
@@ -106,8 +106,12 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   useEffect(() => {
     if (!lobbyModal) return;
     const interval = setInterval(async () => {
+      const cutoff = new Date(Date.now() - 15000).toISOString();
       const { data } = await supabase
-        .from("lobby_presence").select("username").eq("assignment_id", lobbyModal.id);
+        .from("lobby_presence")
+        .select("username")
+        .eq("assignment_id", lobbyModal.id)
+        .gte("last_seen", cutoff);
       setLobbyStudents((data || []).map(d => d.username));
     }, 3000);
     return () => clearInterval(interval);
