@@ -112,7 +112,9 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
         .select("username")
         .eq("assignment_id", lobbyModal.id)
         .gte("last_seen", cutoff);
-      setLobbyStudents((data || []).map(d => d.username));
+      // Deduplicate by username
+      const unique = [...new Set((data || []).map(d => d.username))];
+      setLobbyStudents(unique);
     }, 3000);
     return () => clearInterval(interval);
   }, [lobbyModal]);
