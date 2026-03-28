@@ -118,18 +118,21 @@ export type Database = {
           assignment_id: number | null
           id: number
           joined_at: string | null
+          last_seen: string | null
           username: string
         }
         Insert: {
           assignment_id?: number | null
           id?: number
           joined_at?: string | null
+          last_seen?: string | null
           username: string
         }
         Update: {
           assignment_id?: number | null
           id?: number
           joined_at?: string | null
+          last_seen?: string | null
           username?: string
         }
         Relationships: [
