@@ -1,0 +1,1 @@
+ALTER TABLE lobby_presence ADD COLUMN IF NOT EXISTS last_seen timestamptz DEFAULT now();
