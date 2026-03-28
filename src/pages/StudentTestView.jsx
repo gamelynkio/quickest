@@ -137,6 +137,9 @@ export default function StudentTestView({ currentUser, onFinish }) {
       cleanup();
     };
   }, [lobbyWaiting, assignment]);
+
+  // Poll for lobby start
+  useEffect(() => {
     if (!lobbyWaiting || !assignment) return;
     const interval = setInterval(async () => {
       const { data } = await supabase
