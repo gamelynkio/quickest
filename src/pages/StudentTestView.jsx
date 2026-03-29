@@ -85,6 +85,18 @@ export default function StudentTestView({ currentUser, onFinish }) {
     setLoading(true);
     const { data } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
     if (data) {
+      // Check if window has expired
+      if (data.timing_mode === "window" && data.window_date && data.window_end) {
+        const windowEnd = new Date(`${data.window_date}T${data.window_end}`);
+        if (new Date() > windowEnd) {
+          await supabase.from("assignments").update({ status: "beendet" }).eq("id", data.id);
+          setLoading(false);
+          return; // No active assignment
+        }
+        // Set timer to remaining window time
+        const remaining = Math.max(0, Math.floor((windowEnd - new Date()) / 1000));
+        data.time_limit = remaining;
+      }
       setAssignment(data);
       setTimeLeft(data.time_limit || 1200);
       const qs = data.question_data || [];
@@ -196,10 +208,23 @@ export default function StudentTestView({ currentUser, onFinish }) {
       ai_corrections: corrections,
       reviewed: !hasOpenQuestions,
     });
+
+    // Auto-close: check if all students have submitted (lobby + countdown mode)
+    if (assignment.timing_mode === "lobby" || assignment.timing_mode === "countdown") {
+      const { count: submissionCount } = await supabase
+        .from("submissions").select("*", { count: "exact", head: true })
+        .eq("assignment_id", assignment.id);
+      const { data: group } = await supabase
+        .from("groups").select("count").eq("id", assignment.group_id).single();
+      const groupSize = group?.count || 0;
+      if (groupSize > 0 && submissionCount >= groupSize) {
+        await supabase.from("assignments").update({ status: "beendet" }).eq("id", assignment.id);
+      }
+    }
+
     setSubmitted(true);
     setShowConfirm(false);
     setSubmitting(false);
-    // Don't call onFinish here — student stays on submitted screen
   };
 
   const S = {
