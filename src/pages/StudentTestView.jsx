@@ -170,6 +170,8 @@ export default function StudentTestView({ currentUser, onFinish }) {
       if (data?.lobby_started_at) {
         setLobbyWaiting(false);
         setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
+        // Reset timer so it starts fresh from lobby start
+        setTimeLeft(assignment.time_limit || 1200);
       }
       // Also update player count
       const { data: presenceData } = await supabase
