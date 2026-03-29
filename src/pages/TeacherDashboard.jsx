@@ -57,7 +57,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const openLobby = async (assignment) => {
     setLobbyModal(assignment);
     setLobbyStudents([]);
-    const cutoff = new Date(Date.now() - 8000).toISOString();
+    const cutoff = new Date(Date.now() - 12000).toISOString();
     const { data } = await supabase
       .from("lobby_presence")
       .select("username")
@@ -109,7 +109,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   useEffect(() => {
     if (!lobbyModal) return;
     const tick = async () => {
-      const cutoff = new Date(Date.now() - 8000).toISOString();
+      const cutoff = new Date(Date.now() - 12000).toISOString();
       const [{ data: presence }, { data: subs }] = await Promise.all([
         supabase.from("lobby_presence").select("username").eq("assignment_id", lobbyModal.id).gte("last_seen", cutoff),
         supabase.from("submissions").select("username").eq("assignment_id", lobbyModal.id),
