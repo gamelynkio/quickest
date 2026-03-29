@@ -55,7 +55,7 @@ export default function App() {
   };
 
   const handleStudentFinish = async () => {
-    // Return to student dashboard after test
+    console.log("handleStudentFinish called, setting studentPage to dashboard");
     setStudentPage("dashboard");
   };
 
