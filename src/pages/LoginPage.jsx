@@ -38,11 +38,7 @@ export default function LoginPage({ onLogin }) {
           .ilike("username", username.trim())
           .eq("pin", password.trim())
           .single();
-        console.log("student login:", { username, password, data, error });
-        if (error || !data) {
-          setError(`Ungültiger Benutzername oder PIN. [${error?.code ?? "null"}: ${error?.message ?? "no data"}]`);
-          return;
-        }
+        if (error || !data) { setError("Ungültiger Benutzername oder PIN."); return; }
         onLogin("student", data);
       }
     } finally {
