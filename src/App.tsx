@@ -25,7 +25,10 @@ export default function App() {
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session ?? null);
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        setCurrentPage("dashboard"); // Reset from any previous "login" state
+      }
       else setProfile(null);
     });
     return () => subscription.unsubscribe();
