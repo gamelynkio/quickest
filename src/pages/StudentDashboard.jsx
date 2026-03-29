@@ -12,13 +12,15 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
   const fetchData = async () => {
     setLoading(true);
-    const [{ data: asgn }, { data: subs }] = await Promise.all([
+    console.log("fetchData — currentUser:", { id: currentUser.id, group_id: currentUser.group_id, username: currentUser.username });
+    const [{ data: asgn }, { data: subs, error: subsError }] = await Promise.all([
       supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv"),
       supabase.from("submissions")
         .select("*, assignments(title)")
         .eq("student_id", currentUser.id)
         .order("submitted_at", { ascending: false }),
     ]);
+    console.log("subs:", subs, "subsError:", subsError);
     setAssignments(asgn || []);
     setSubmissions(subs || []);
     setLoading(false);
