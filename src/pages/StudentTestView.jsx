@@ -78,7 +78,6 @@ export default function StudentTestView({ currentUser, onFinish }) {
 
   const [lobbyWaiting, setLobbyWaiting] = useState(false);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState(0);
-  const [lobbyDebug, setLobbyDebug] = useState("");
 
   useEffect(() => { fetchAssignment(); }, []);
 
@@ -114,7 +113,6 @@ export default function StudentTestView({ currentUser, onFinish }) {
             .insert({ assignment_id: data.id, username: currentUser.username, last_seen: now });
           insertError = ie;
         }
-        setLobbyDebug(`update: ${updated?.length ?? "?"} rows, updateErr: ${updateError?.message ?? "none"}, insertErr: ${insertError?.message ?? "none"}`);
         const { data: presenceData } = await supabase
           .from("lobby_presence").select("username").eq("assignment_id", data.id)
           .gte("last_seen", new Date(Date.now() - 15000).toISOString());
@@ -245,11 +243,6 @@ export default function StudentTestView({ currentUser, onFinish }) {
           </div>
           <span>{lobbyPlayerCount} Schüler/in{lobbyPlayerCount !== 1 ? "nen" : ""} in der Lobby</span>
         </div>
-        {lobbyDebug ? (
-          <div style={{ marginTop: "16px", background: "rgba(255,255,255,0.15)", borderRadius: "10px", padding: "10px 14px", fontSize: "11px", color: "rgba(255,255,255,0.9)", wordBreak: "break-all", textAlign: "left" }}>
-            🔍 {lobbyDebug}
-          </div>
-        ) : null}
       </div>
       <style>{`@keyframes pulse { from { opacity: 0.3; transform: scale(0.8); } to { opacity: 1; transform: scale(1.2); } }`}</style>
     </div>
