@@ -5,6 +5,7 @@ import TeacherDashboard from "./pages/TeacherDashboard";
 import TestEditor from "./pages/TestEditor";
 import TestLibrary from "./pages/TestLibrary";
 import StudentTestView from "./pages/StudentTestView";
+import StudentDashboard from "./pages/StudentDashboard";
 import GroupManager from "./pages/GroupManager";
 import ResultsView from "./pages/ResultsView";
 
@@ -12,6 +13,7 @@ export default function App() {
   const [session, setSession] = useState(undefined);
   const [profile, setProfile] = useState(null);
   const [studentUser, setStudentUser] = useState(null);
+  const [studentPage, setStudentPage] = useState("dashboard"); // "dashboard" | "test"
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [editingTest, setEditingTest] = useState(null);
   const [viewingResults, setViewingResults] = useState(null);
@@ -42,24 +44,22 @@ export default function App() {
 
   const handleLogin = (_role, userData) => {
     setStudentUser(userData);
-    setCurrentPage("studentTest");
+    setStudentPage("dashboard");
   };
 
-  const handleStudentFinish = async (assignmentId?: number) => {
-    // Clean up lobby presence if applicable
-    if (assignmentId) {
-      await supabase.from("lobby_presence")
-        .delete()
-        .eq("assignment_id", assignmentId)
-        .eq("username", studentUser?.username);
-    }
-    setStudentUser(null);
-    setCurrentPage("login");
+  const handleStudentStartTest = () => {
+    setStudentPage("test");
+  };
+
+  const handleStudentFinish = async () => {
+    // Return to student dashboard after test
+    setStudentPage("dashboard");
   };
 
   const handleLogout = async () => {
     if (studentUser) {
       setStudentUser(null);
+      setStudentPage("dashboard");
       setCurrentPage("login");
     } else {
       await supabase.auth.signOut();
@@ -77,7 +77,14 @@ export default function App() {
     </div>
   );
 
-  if (studentUser) return <StudentTestView currentUser={studentUser} onFinish={handleStudentFinish} />;
+  // Student flow
+  if (studentUser) {
+    if (studentPage === "test") {
+      return <StudentTestView currentUser={studentUser} onFinish={handleStudentFinish} />;
+    }
+    return <StudentDashboard currentUser={studentUser} onStartTest={handleStudentStartTest} onLogout={handleLogout} />;
+  }
+
   if (!session || currentPage === "login") return <LoginPage onLogin={handleLogin} />;
 
   const teacherNav = { navigate, onLogout: handleLogout, currentUser: profile };
