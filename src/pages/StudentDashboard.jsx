@@ -25,6 +25,8 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
   };
 
   const submittedIds = new Set(submissions.map(s => String(s.assignment_id)));
+  console.log("submittedIds:", [...submittedIds]);
+  console.log("assignments:", assignments.map(a => ({ id: String(a.id), title: a.title })));
 
   // Lobby tests waiting for teacher to start
   const lobbyWaiting = assignments.filter(a =>
