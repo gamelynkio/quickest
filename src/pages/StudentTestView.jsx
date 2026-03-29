@@ -130,7 +130,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
         .update({ last_seen: new Date().toISOString() })
         .eq("assignment_id", assignment.id)
         .eq("username", currentUser.username);
-    }, 5000);
+    }, 3000);
     // Remove from lobby on unmount/leave
     const cleanup = async () => {
       await supabase.from("lobby_presence")
