@@ -1,0 +1,1 @@
+CREATE POLICY "Anyone can read submissions" ON submissions FOR SELECT USING (true);
