@@ -159,9 +159,9 @@ export default function StudentTestView({ currentUser, onFinish }) {
     setLoading(false);
   };
 
-  // Heartbeat: update last_seen every 5 seconds while in lobby
+  // Heartbeat: update last_seen every 5 seconds while in lobby OR during test
   useEffect(() => {
-    if (!lobbyWaiting || !assignment) return;
+    if (!assignment || submitted) return;
     const heartbeat = setInterval(async () => {
       await supabase.from("lobby_presence")
         .update({ last_seen: new Date().toISOString() })
@@ -179,9 +179,8 @@ export default function StudentTestView({ currentUser, onFinish }) {
     return () => {
       clearInterval(heartbeat);
       window.removeEventListener("beforeunload", cleanup);
-      cleanup();
     };
-  }, [lobbyWaiting, assignment]);
+  }, [assignment, submitted]);
 
   // Poll for lobby start every 2 seconds
   useEffect(() => {
@@ -209,12 +208,33 @@ export default function StudentTestView({ currentUser, onFinish }) {
   }, [lobbyWaiting, assignment]);
 
   useEffect(() => {
-    if (!timeLeft || submitted || loading || lobbyWaiting) return;
+    if (submitted || loading || lobbyWaiting || !assignment) return;
     const timer = setInterval(() => {
-      setTimeLeft(t => { if (t <= 1) { clearInterval(timer); handleSubmit(); return 0; } return t - 1; });
+      let remaining;
+      if (assignment.timing_mode === "lobby" && assignment.lobby_started_at) {
+        // Lobby: always calculate from server timestamp — immune to screen sleep
+        const elapsed = Math.floor((Date.now() - new Date(assignment.lobby_started_at).getTime()) / 1000);
+        remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
+      } else if (assignment.timing_mode === "countdown") {
+        const storageKey = `qt_start_${assignment.id}_${currentUser.id}`;
+        const storedStart = localStorage.getItem(storageKey);
+        if (storedStart) {
+          const elapsed = Math.floor((Date.now() - Number(storedStart)) / 1000);
+          remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
+        } else {
+          remaining = (timeLeft || 0) - 1;
+        }
+      } else {
+        remaining = (timeLeft || 0) - 1;
+      }
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(timer);
+        handleSubmit();
+      }
     }, 1000);
     return () => clearInterval(timer);
-  }, [timeLeft, submitted, loading]);
+  }, [submitted, loading, lobbyWaiting, assignment]);
 
   const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   const timePercent = assignment ? (timeLeft / assignment.time_limit) * 100 : 100;
@@ -251,8 +271,12 @@ export default function StudentTestView({ currentUser, onFinish }) {
       }
     }
 
-    // Clear stored start time
+    // Clear stored start time and lobby presence
     localStorage.removeItem(`qt_start_${assignment.id}_${currentUser.id}`);
+    await supabase.from("lobby_presence")
+      .delete()
+      .eq("assignment_id", assignment.id)
+      .eq("username", currentUser.username);
 
     setSubmitted(true);
     setShowConfirm(false);
