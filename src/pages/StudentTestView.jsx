@@ -98,7 +98,32 @@ export default function StudentTestView({ currentUser, onFinish }) {
         data.time_limit = remaining;
       }
       setAssignment(data);
-      setTimeLeft(data.time_limit || 1200);
+
+      // Calculate remaining time based on when test was started
+      const storageKey = `qt_start_${data.id}_${currentUser.id}`;
+      const timeLimit = data.time_limit || 1200;
+
+      if (data.timing_mode === "lobby" && data.lobby_started_at) {
+        // Lobby: time runs from lobby_started_at
+        const elapsed = Math.floor((Date.now() - new Date(data.lobby_started_at).getTime()) / 1000);
+        const remaining = Math.max(0, timeLimit - elapsed);
+        setTimeLeft(remaining);
+      } else if (data.timing_mode === "window" && data.window_date && data.window_end) {
+        // Window: already handled above
+        setTimeLeft(timeLimit);
+      } else {
+        // Countdown: use localStorage to track start time
+        const storedStart = localStorage.getItem(storageKey);
+        if (storedStart) {
+          const elapsed = Math.floor((Date.now() - Number(storedStart)) / 1000);
+          const remaining = Math.max(0, timeLimit - elapsed);
+          setTimeLeft(remaining);
+        } else {
+          // First time loading — store start time
+          localStorage.setItem(storageKey, String(Date.now()));
+          setTimeLeft(timeLimit);
+        }
+      }
       const qs = data.question_data || [];
       if (data.anti_cheat) {
         const nonSections = qs.filter(q => q.type !== "section");
@@ -170,8 +195,10 @@ export default function StudentTestView({ currentUser, onFinish }) {
       if (data?.lobby_started_at) {
         setLobbyWaiting(false);
         setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
-        // Reset timer so it starts fresh from lobby start
-        setTimeLeft(assignment.time_limit || 1200);
+        // Calculate remaining time from lobby_started_at
+        const elapsed = Math.floor((Date.now() - new Date(data.lobby_started_at).getTime()) / 1000);
+        const remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
+        setTimeLeft(remaining);
       }
       // Also update player count
       const { data: presenceData } = await supabase
@@ -223,6 +250,9 @@ export default function StudentTestView({ currentUser, onFinish }) {
         await supabase.from("assignments").update({ status: "beendet" }).eq("id", assignment.id);
       }
     }
+
+    // Clear stored start time
+    localStorage.removeItem(`qt_start_${assignment.id}_${currentUser.id}`);
 
     setSubmitted(true);
     setShowConfirm(false);
