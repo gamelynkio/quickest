@@ -55,7 +55,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const openLobby = async (assignment) => {
     setLobbyModal(assignment);
     setLobbyStudents([]);
-    const cutoff = new Date(Date.now() - 15000).toISOString();
+    const cutoff = new Date(Date.now() - 8000).toISOString();
     const { data } = await supabase
       .from("lobby_presence")
       .select("username")
@@ -102,11 +102,11 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
 
   const appUrl = "https://quickest.lovable.app?role=student";
 
-  // Auto-refresh lobby students every 3 seconds when modal is open
+  // Auto-refresh lobby students every 1 second when modal is open
   useEffect(() => {
     if (!lobbyModal) return;
     const interval = setInterval(async () => {
-      const cutoff = new Date(Date.now() - 15000).toISOString();
+      const cutoff = new Date(Date.now() - 8000).toISOString();
       const { data } = await supabase
         .from("lobby_presence")
         .select("username")
@@ -115,7 +115,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
       // Deduplicate by username
       const unique = [...new Set((data || []).map(d => d.username))];
       setLobbyStudents(unique);
-    }, 3000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [lobbyModal]);
 
