@@ -24,6 +24,8 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [lobbyModal, setLobbyModal] = useState(null); // assignment in lobby view
   const [lobbyStudents, setLobbyStudents] = useState([]);
+  const [lobbySubmissions, setLobbySubmissions] = useState([]);
+  const [lobbyTimeLeft, setLobbyTimeLeft] = useState(null);
   const [starting, setStarting] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
@@ -31,7 +33,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const fetchData = async () => {
     setLoading(true);
     const [{ data: asgn }, { data: grps }] = await Promise.all([
-      supabase.from("assignments").select("*, groups(name, subject, count)").order("created_at", { ascending: false }),
+      supabase.from("assignments").select("*, groups(name, subject, count, usernames)").order("created_at", { ascending: false }),
       supabase.from("groups").select("*"),
     ]);
     setAssignments(asgn || []);
@@ -101,21 +103,29 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   };
 
   const appUrl = "https://quickest.lovable.app?role=student";
+  const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   // Auto-refresh lobby students every 1 second when modal is open
   useEffect(() => {
     if (!lobbyModal) return;
-    const interval = setInterval(async () => {
+    const tick = async () => {
       const cutoff = new Date(Date.now() - 8000).toISOString();
-      const { data } = await supabase
-        .from("lobby_presence")
-        .select("username")
-        .eq("assignment_id", lobbyModal.id)
-        .gte("last_seen", cutoff);
-      // Deduplicate by username
-      const unique = [...new Set((data || []).map(d => d.username))];
+      const [{ data: presence }, { data: subs }] = await Promise.all([
+        supabase.from("lobby_presence").select("username").eq("assignment_id", lobbyModal.id).gte("last_seen", cutoff),
+        supabase.from("submissions").select("username").eq("assignment_id", lobbyModal.id),
+      ]);
+      const unique = [...new Set((presence || []).map(d => d.username))];
       setLobbyStudents(unique);
-    }, 1000);
+      setLobbySubmissions((subs || []).map(s => s.username));
+      // Update countdown if test has started
+      if (lobbyModal.lobby_started_at) {
+        const elapsed = Math.floor((Date.now() - new Date(lobbyModal.lobby_started_at).getTime()) / 1000);
+        const remaining = Math.max(0, (lobbyModal.time_limit || 1200) - elapsed);
+        setLobbyTimeLeft(remaining);
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [lobbyModal]);
 
@@ -190,7 +200,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                       <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>
                         {isLobby ? (
                           <span style={{ background: "#f5f3ff", color: "#6d28d9", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>
-                            🎮 Lobby{lobbyStarted ? " · Gestartet" : " · Wartet"}
+                            🎮 Lobby{lobbyStarted ? ` · Gestartet` : " · Wartet"}
                           </span>
                         ) : (
                           <>
@@ -250,47 +260,85 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
       {/* LOBBY MODAL */}
       {lobbyModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-          <div style={{ background: "#fff", borderRadius: "24px", padding: "32px", maxWidth: "600px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+          <div style={{ background: "#fff", borderRadius: "24px", padding: "32px", maxWidth: "640px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
               <div>
                 <div style={{ fontSize: "13px", fontWeight: 600, color: "#6d28d9", marginBottom: "4px" }}>🎮 LOBBY</div>
                 <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", margin: 0 }}>{lobbyModal.title}</h2>
                 <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>{lobbyModal.groups?.name}</div>
               </div>
-              <button onClick={() => setLobbyModal(null)} style={{ background: "#f1f5f9", border: "none", borderRadius: "8px", padding: "8px 12px", cursor: "pointer", fontSize: "13px", color: "#374151" }}>✕ Schließen</button>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "24px" }}>
-              {/* QR Code */}
-              <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "20px", textAlign: "center", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>📱 QR-Code für Schüler</div>
-                <QRCode url={appUrl} size={150} />
-                <div style={{ fontSize: "12px", color: "#64748b", marginTop: "10px" }}>{appUrl}</div>
-                <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>Schüler scannen → einloggen → warten</div>
-              </div>
-
-              {/* Students in lobby */}
-              <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "20px", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
-                  👥 In der Lobby ({lobbyStudents.length} / {lobbyModal.groups?.count || "?"})
-                </div>
-                {lobbyStudents.length === 0 ? (
-                  <div style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", paddingTop: "20px" }}>
-                    <div style={{ fontSize: "28px", marginBottom: "8px" }}>⏳</div>
-                    Noch niemand da...
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "160px", overflowY: "auto" }}>
-                    {lobbyStudents.map((name, i) => (
-                      <div key={i} style={{ background: "#dcfce7", borderRadius: "8px", padding: "6px 12px", fontSize: "13px", fontWeight: 600, color: "#16a34a", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span>✓</span> {name}
-                      </div>
-                    ))}
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                {lobbyModal.lobby_started_at && lobbyTimeLeft !== null && (
+                  <div style={{ textAlign: "center", background: lobbyTimeLeft < 120 ? "#fef2f2" : "#f0fdf4", borderRadius: "12px", padding: "8px 16px", border: `1px solid ${lobbyTimeLeft < 120 ? "#fecaca" : "#bbf7d0"}` }}>
+                    <div style={{ fontSize: "24px", fontWeight: 900, color: lobbyTimeLeft < 120 ? "#dc2626" : "#16a34a", fontVariantNumeric: "tabular-nums" }}>{formatTime(lobbyTimeLeft)}</div>
+                    <div style={{ fontSize: "11px", color: "#64748b" }}>Restzeit</div>
                   </div>
                 )}
+                <button onClick={() => setLobbyModal(null)} style={{ background: "#f1f5f9", border: "none", borderRadius: "8px", padding: "8px 12px", cursor: "pointer", fontSize: "13px", color: "#374151" }}>✕</button>
               </div>
             </div>
+
+            {!lobbyModal.lobby_started_at ? (
+              /* PRE-START: QR + waiting list */
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+                <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "20px", textAlign: "center", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>📱 QR-Code für Schüler</div>
+                  <QRCode url={appUrl} size={140} />
+                  <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px" }}>Schüler scannen → einloggen → warten</div>
+                </div>
+                <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "20px", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
+                    👥 Warteraum ({lobbyStudents.length} / {lobbyModal.groups?.count || "?"})
+                  </div>
+                  {lobbyStudents.length === 0 ? (
+                    <div style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", paddingTop: "20px" }}>
+                      <div style={{ fontSize: "28px", marginBottom: "8px" }}>⏳</div>Noch niemand da...
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "160px", overflowY: "auto" }}>
+                      {lobbyStudents.map((name, i) => (
+                        <div key={i} style={{ background: "#dcfce7", borderRadius: "8px", padding: "6px 12px", fontSize: "13px", fontWeight: 600, color: "#16a34a", display: "flex", alignItems: "center", gap: "6px" }}>
+                          ✓ {name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* LIVE: student status during test */
+              <div style={{ marginBottom: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>
+                    📊 {lobbySubmissions.length} / {lobbyModal.groups?.count || "?"} abgegeben
+                  </div>
+                  <div style={{ height: "8px", flex: 1, margin: "0 12px", background: "#e2e8f0", borderRadius: "8px" }}>
+                    <div style={{ height: "8px", borderRadius: "8px", background: "#16a34a", width: `${lobbyModal.groups?.count ? (lobbySubmissions.length / lobbyModal.groups.count) * 100 : 0}%`, transition: "width 0.5s" }} />
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px", maxHeight: "240px", overflowY: "auto" }}>
+                  {(lobbyModal.groups?.usernames || []).map((name, i) => {
+                    const submitted = lobbySubmissions.includes(name);
+                    const active = lobbyStudents.includes(name);
+                    return (
+                      <div key={i} style={{ borderRadius: "8px", padding: "8px 10px", fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px",
+                        background: submitted ? "#dcfce7" : active ? "#fef9c3" : "#f8fafc",
+                        color: submitted ? "#16a34a" : active ? "#92400e" : "#94a3b8",
+                        border: `1px solid ${submitted ? "#bbf7d0" : active ? "#fde68a" : "#e2e8f0"}` }}>
+                        <span>{submitted ? "✅" : active ? "✍️" : "⏳"}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "flex", gap: "12px", marginTop: "10px", fontSize: "12px", color: "#64748b" }}>
+                  <span>✅ Abgegeben</span>
+                  <span>✍️ Schreibt noch</span>
+                  <span>⏳ Nicht eingeloggt</span>
+                </div>
+              </div>
+            )}
 
             {/* Start / Reset */}
             {!lobbyModal.lobby_started_at ? (
@@ -299,14 +347,9 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                 {starting ? "Wird gestartet..." : lobbyStudents.length === 0 ? "Warte auf Schüler..." : `🚀 Test jetzt starten (${lobbyStudents.length} Schüler)`}
               </button>
             ) : (
-              <div>
-                <div style={{ background: "#dcfce7", borderRadius: "12px", padding: "14px", textAlign: "center", marginBottom: "12px", color: "#16a34a", fontWeight: 700, fontSize: "15px" }}>
-                  ✅ Test läuft — alle Schüler in der Lobby haben gestartet
-                </div>
-                <button onClick={resetLobby} style={{ width: "100%", padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
-                  🔄 Lobby zurücksetzen
-                </button>
-              </div>
+              <button onClick={resetLobby} style={{ width: "100%", padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+                🔄 Lobby zurücksetzen
+              </button>
             )}
           </div>
         </div>
