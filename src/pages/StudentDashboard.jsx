@@ -24,16 +24,16 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     setLoading(false);
   };
 
-  const submittedIds = new Set(submissions.map(s => s.assignment_id));
+  const submittedIds = new Set(submissions.map(s => String(s.assignment_id)));
 
   // Lobby tests waiting for teacher to start
   const lobbyWaiting = assignments.filter(a =>
-    !submittedIds.has(a.id) && a.timing_mode === "lobby" && !a.lobby_started_at
+    !submittedIds.has(String(a.id)) && a.timing_mode === "lobby" && !a.lobby_started_at
   );
 
   // Tests the student can start right now
   const active = assignments.filter(a => {
-    if (submittedIds.has(a.id)) return false;
+    if (submittedIds.has(String(a.id))) return false;
     if (a.timing_mode === "lobby") return !!a.lobby_started_at;
     if (a.timing_mode === "window") {
       if (!a.window_date || !a.window_start || !a.window_end) return false;
@@ -47,7 +47,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
   // Tests coming up but not yet open (window not started)
   const upcoming = assignments.filter(a => {
-    if (submittedIds.has(a.id)) return false;
+    if (submittedIds.has(String(a.id))) return false;
     if (a.timing_mode === "lobby" && !a.lobby_started_at) return false; // shown in lobbyWaiting
     if (a.timing_mode === "window" && a.window_date) {
       const start = new Date(`${a.window_date}T${a.window_start}`);
