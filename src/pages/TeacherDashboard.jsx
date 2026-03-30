@@ -185,57 +185,74 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                 </tr>
               </thead>
               <tbody>
-                {assignments.map((a, i) => {
-                  const s = STATUS_STYLE[a.status] || STATUS_STYLE.entwurf;
-                  const mins = Math.round((a.time_limit || 0) / 60);
-                  const isLobby = a.timing_mode === "lobby";
-                  const lobbyStarted = isLobby && !!a.lobby_started_at;
-                  return (
-                    <tr key={a.id} style={{ borderBottom: i < assignments.length - 1 ? "1px solid #f8fafc" : "none" }}>
-                      <td style={{ padding: "14px 20px", fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>{a.title}</td>
-                      <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>
-                        {a.groups?.name || "–"}
-                        {a.groups?.subject && <span style={{ color: "#94a3b8", marginLeft: "4px" }}>({a.groups.subject})</span>}
-                      </td>
-                      <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>
-                        {isLobby ? (
-                          <span style={{ background: "#f5f3ff", color: "#6d28d9", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>
-                            🎮 Lobby{lobbyStarted ? ` · Gestartet` : " · Wartet"}
-                          </span>
-                        ) : (
-                          <>
-                            {mins > 0 ? `${mins} Min.` : "–"}
-                            {a.timing_mode === "window" && a.window_date && (
-                              <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
-                                📅 {new Date(a.window_date).toLocaleDateString("de-DE")} {a.window_start}–{a.window_end}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </td>
-                      <td style={{ padding: "14px 20px" }}>
-                        <span style={{ background: s.bg, color: s.color, borderRadius: "6px", padding: "3px 10px", fontSize: "12px", fontWeight: 600 }}>{s.label}</span>
-                        {a.anti_cheat && <span style={{ marginLeft: "6px", fontSize: "11px", color: "#7c3aed" }}>🛡️</span>}
-                      </td>
-                      <td style={{ padding: "14px 20px" }}>
-                        <div style={{ display: "flex", gap: "6px" }}>
-                          {isLobby && a.status === "aktiv" && (
-                            <button onClick={() => openLobby(a)} style={{ padding: "5px 10px", border: "1px solid #e9d5ff", borderRadius: "7px", background: "#f5f3ff", fontSize: "12px", cursor: "pointer", color: "#6d28d9", fontWeight: 600 }}>
-                              🎮 Lobby
-                            </button>
+                {(() => {
+                  // Sort: parent tests first, then their children directly below
+                  const parents = assignments.filter(a => !a.parent_assignment_id);
+                  const children = assignments.filter(a => !!a.parent_assignment_id);
+                  const sorted = [];
+                  parents.forEach(p => {
+                    sorted.push({ ...p, isChild: false });
+                    children.filter(c => c.parent_assignment_id === p.id).forEach(c => sorted.push({ ...c, isChild: true }));
+                  });
+                  // Also add orphaned children (parent not in current list)
+                  children.filter(c => !parents.find(p => p.id === c.parent_assignment_id)).forEach(c => sorted.push({ ...c, isChild: true }));
+
+                  return sorted.map((a, i) => {
+                    const s = STATUS_STYLE[a.status] || STATUS_STYLE.entwurf;
+                    const mins = Math.round((a.time_limit || 0) / 60);
+                    const isLobby = a.timing_mode === "lobby";
+                    const lobbyStarted = isLobby && !!a.lobby_started_at;
+                    return (
+                      <tr key={a.id} style={{ borderBottom: i < sorted.length - 1 ? "1px solid #f8fafc" : "none", background: a.isChild ? "#fafbff" : "transparent" }}>
+                        <td style={{ padding: a.isChild ? "10px 20px 10px 40px" : "14px 20px", fontWeight: 600, fontSize: "14px", color: a.isChild ? "#4b5563" : "#0f172a" }}>
+                          {a.isChild && <span style={{ color: "#94a3b8", marginRight: "8px", fontSize: "16px" }}>↳</span>}
+                          {a.title}
+                          {a.isChild && <span style={{ marginLeft: "6px", fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>Nachtest</span>}
+                        </td>
+                        <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>
+                          {a.groups?.name || "–"}
+                          {a.groups?.subject && <span style={{ color: "#94a3b8", marginLeft: "4px" }}>({a.groups.subject})</span>}
+                        </td>
+                        <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>
+                          {isLobby ? (
+                            <span style={{ background: "#f5f3ff", color: "#6d28d9", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>
+                              🎮 Lobby{lobbyStarted ? ` · Gestartet` : " · Wartet"}
+                            </span>
+                          ) : (
+                            <>
+                              {mins > 0 ? `${mins} Min.` : "–"}
+                              {a.timing_mode === "window" && a.window_date && (
+                                <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
+                                  📅 {new Date(a.window_date).toLocaleDateString("de-DE")} {a.window_start}–{a.window_end}
+                                </div>
+                              )}
+                            </>
                           )}
-                          <button onClick={() => navigate("results", a)} style={{ padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151" }}>
-                            📊 Ergebnisse
-                          </button>
-                          <button onClick={() => toggleStatus(a.id, a.status)} style={{ padding: "5px 10px", border: `1px solid ${a.status === "aktiv" ? "#fecaca" : "#bbf7d0"}`, borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer", color: a.status === "aktiv" ? "#dc2626" : "#16a34a" }}>
-                            {a.status === "aktiv" ? "⏸ Pausieren" : "▶ Aktivieren"}
-                          </button>
-                          <button onClick={() => setDeleteConfirm(a.id)} style={{ padding: "5px 10px", border: "1px solid #fecaca", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#dc2626" }}>🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td style={{ padding: "14px 20px" }}>
+                          <span style={{ background: s.bg, color: s.color, borderRadius: "6px", padding: "3px 10px", fontSize: "12px", fontWeight: 600 }}>{s.label}</span>
+                          {a.anti_cheat && <span style={{ marginLeft: "6px", fontSize: "11px", color: "#7c3aed" }}>🛡️</span>}
+                        </td>
+                        <td style={{ padding: "14px 20px" }}>
+                          <div style={{ display: "flex", gap: "6px" }}>
+                            {isLobby && a.status === "aktiv" && (
+                              <button onClick={() => openLobby(a)} style={{ padding: "5px 10px", border: "1px solid #e9d5ff", borderRadius: "7px", background: "#f5f3ff", fontSize: "12px", cursor: "pointer", color: "#6d28d9", fontWeight: 600 }}>
+                                🎮 Lobby
+                              </button>
+                            )}
+                            <button onClick={() => navigate("results", a)} style={{ padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151" }}>
+                              📊 Ergebnisse
+                            </button>
+                            <button onClick={() => toggleStatus(a.id, a.status)} style={{ padding: "5px 10px", border: `1px solid ${a.status === "aktiv" ? "#fecaca" : "#bbf7d0"}`, borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer", color: a.status === "aktiv" ? "#dc2626" : "#16a34a" }}>
+                              {a.status === "aktiv" ? "⏸ Pausieren" : "▶ Aktivieren"}
+                            </button>
+                            <button onClick={() => setDeleteConfirm(a.id)} style={{ padding: "5px 10px", border: "1px solid #fecaca", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#dc2626" }}>🗑</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           )}
