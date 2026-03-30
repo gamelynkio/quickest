@@ -20,12 +20,15 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
         .order("submitted_at", { ascending: false }),
     ]);
 
-    // Filter out makeup tests where this student already submitted the original
+    // Filter out makeup tests where this student is not in makeup_usernames
+    // or where this student already submitted the original
     const submittedAssignmentIds = new Set((subs || []).map(s => String(s.assignment_id)));
     const filteredAssignments = (asgn || []).filter(a => {
-      // Makeup test: only show if student hasn't submitted the parent assignment
       if (a.parent_assignment_id) {
-        return !submittedAssignmentIds.has(String(a.parent_assignment_id));
+        // Only show if student is in makeup list
+        if (a.makeup_usernames?.length && !a.makeup_usernames.includes(currentUser.username)) return false;
+        // Don't show if already submitted the original
+        if (submittedAssignmentIds.has(String(a.parent_assignment_id))) return false;
       }
       return true;
     });
