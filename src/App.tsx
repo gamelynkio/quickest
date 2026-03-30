@@ -12,7 +12,13 @@ import ResultsView from "./pages/ResultsView";
 export default function App() {
   const [session, setSession] = useState(undefined);
   const [profile, setProfile] = useState(null);
-  const [studentUser, setStudentUser] = useState(null);
+  const [studentUser, setStudentUser] = useState(() => {
+    // Restore student session from sessionStorage on reload
+    try {
+      const stored = sessionStorage.getItem("qt_student");
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
   const [studentPage, setStudentPage] = useState("dashboard"); // "dashboard" | "test"
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [editingTest, setEditingTest] = useState(null);
@@ -46,6 +52,7 @@ export default function App() {
   };
 
   const handleLogin = (_role, userData) => {
+    sessionStorage.setItem("qt_student", JSON.stringify(userData));
     setStudentUser(userData);
     setStudentPage("dashboard");
   };
@@ -55,12 +62,12 @@ export default function App() {
   };
 
   const handleStudentFinish = async () => {
-    console.log("handleStudentFinish called, setting studentPage to dashboard");
     setStudentPage("dashboard");
   };
 
   const handleLogout = async () => {
     if (studentUser) {
+      sessionStorage.removeItem("qt_student");
       setStudentUser(null);
       setStudentPage("dashboard");
       setCurrentPage("login");
