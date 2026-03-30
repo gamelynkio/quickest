@@ -326,16 +326,21 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
             ) : (
               /* LIVE: student status during test */
               <div style={{ marginBottom: "20px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>
-                    📊 {lobbySubmissions.length} / {lobbyModal.groups?.count || "?"} abgegeben
-                  </div>
-                  <div style={{ height: "8px", flex: 1, margin: "0 12px", background: "#e2e8f0", borderRadius: "8px" }}>
-                    <div style={{ height: "8px", borderRadius: "8px", background: "#16a34a", width: `${lobbyModal.groups?.count ? (lobbySubmissions.length / lobbyModal.groups.count) * 100 : 0}%`, transition: "width 0.5s" }} />
-                  </div>
-                </div>
+                {(() => {
+                  const totalCount = lobbyModal.makeup_usernames?.length || lobbyModal.groups?.count || 0;
+                  return (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>
+                        📊 {lobbySubmissions.length} / {totalCount} abgegeben
+                      </div>
+                      <div style={{ height: "8px", flex: 1, margin: "0 12px", background: "#e2e8f0", borderRadius: "8px" }}>
+                        <div style={{ height: "8px", borderRadius: "8px", background: "#16a34a", width: `${totalCount ? (lobbySubmissions.length / totalCount) * 100 : 0}%`, transition: "width 0.5s" }} />
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px", maxHeight: "240px", overflowY: "auto" }}>
-                  {(lobbyModal.groups?.usernames || []).map((name, i) => {
+                  {(lobbyModal.makeup_usernames?.length ? lobbyModal.makeup_usernames : (lobbyModal.groups?.usernames || [])).map((name, i) => {
                     const submitted = lobbySubmissions.includes(name);
                     const active = lobbyStudents.includes(name);
                     return (
