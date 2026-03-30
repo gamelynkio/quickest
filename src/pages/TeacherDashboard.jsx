@@ -306,7 +306,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                 </div>
                 <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "20px", border: "1px solid #e2e8f0" }}>
                   <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
-                    👥 Warteraum ({lobbyStudents.length} / {lobbyModal.groups?.count || "?"})
+                    👥 Warteraum ({lobbyStudents.length} / {lobbyModal.makeup_usernames?.length || lobbyModal.groups?.count || "?"})
                   </div>
                   {lobbyStudents.length === 0 ? (
                     <div style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", paddingTop: "20px" }}>
