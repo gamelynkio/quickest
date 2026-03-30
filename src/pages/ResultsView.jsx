@@ -16,7 +16,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [makeupSelected, setMakeupSelected] = useState(new Set());
   const [makeupTemplateId, setMakeupTemplateId] = useState("");
   const [makeupTimeLimit, setMakeupTimeLimit] = useState(20);
-  const [makeupTimingMode, setMakeupTimingMode] = useState("countdown");
+  const [makeupTimingMode, setMakeupTimingMode] = useState("lobby");
   const [makeupAntiCheat, setMakeupAntiCheat] = useState(false);
   const [creatingMakeup, setCreatingMakeup] = useState(false);
 
@@ -334,8 +334,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                 <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Timer-Modus</label>
                 <select value={makeupTimingMode} onChange={e => setMakeupTimingMode(e.target.value)}
                   style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
-                  <option value="countdown">Countdown ab Start</option>
                   <option value="lobby">Lobby</option>
+                  <option value="countdown">Countdown ab Start</option>
+                  <option value="window">Festes Zeitfenster</option>
                 </select>
               </div>
             </div>
