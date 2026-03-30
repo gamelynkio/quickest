@@ -23,7 +23,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     // Filter out makeup tests where this student already submitted the original
     const submittedAssignmentIds = new Set((subs || []).map(s => String(s.assignment_id)));
     const filteredAssignments = (asgn || []).filter(a => {
-      // If it's a makeup test, only show it if the student hasn't submitted the original
+      // Makeup test: only show if student hasn't submitted the parent assignment
       if (a.parent_assignment_id) {
         return !submittedAssignmentIds.has(String(a.parent_assignment_id));
       }
