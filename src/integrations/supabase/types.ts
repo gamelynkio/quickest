@@ -22,6 +22,7 @@ export type Database = {
           group_id: number
           id: number
           lobby_started_at: string | null
+          makeup_usernames: string[] | null
           parent_assignment_id: number | null
           question_data: Json
           status: string
@@ -40,6 +41,7 @@ export type Database = {
           group_id: number
           id?: number
           lobby_started_at?: string | null
+          makeup_usernames?: string[] | null
           parent_assignment_id?: number | null
           question_data?: Json
           status?: string
@@ -58,6 +60,7 @@ export type Database = {
           group_id?: number
           id?: number
           lobby_started_at?: string | null
+          makeup_usernames?: string[] | null
           parent_assignment_id?: number | null
           question_data?: Json
           status?: string
