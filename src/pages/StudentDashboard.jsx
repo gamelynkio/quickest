@@ -24,6 +24,8 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     // or where this student already submitted the original
     const submittedAssignmentIds = new Set((subs || []).map(s => String(s.assignment_id)));
     const filteredAssignments = (asgn || []).filter(a => {
+      // Already submitted this assignment
+      if (submittedAssignmentIds.has(String(a.id))) return false;
       if (a.parent_assignment_id) {
         // Only show if student is in makeup list
         if (a.makeup_usernames?.length && !a.makeup_usernames.includes(currentUser.username)) return false;
