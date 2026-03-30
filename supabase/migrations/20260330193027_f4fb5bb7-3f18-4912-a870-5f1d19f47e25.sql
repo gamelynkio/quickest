@@ -1,0 +1,1 @@
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS parent_assignment_id integer REFERENCES assignments(id) ON DELETE SET NULL;
