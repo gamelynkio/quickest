@@ -12,22 +12,30 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
   const fetchData = async () => {
     setLoading(true);
-    console.log("fetchData — currentUser:", { id: currentUser.id, group_id: currentUser.group_id, username: currentUser.username });
-    const [{ data: asgn }, { data: subs, error: subsError }] = await Promise.all([
+    const [{ data: asgn }, { data: subs }] = await Promise.all([
       supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv"),
       supabase.from("submissions")
         .select("*, assignments(title)")
         .eq("student_id", currentUser.id)
         .order("submitted_at", { ascending: false }),
     ]);
-    console.log("subs:", subs, "subsError:", subsError);
-    setAssignments(asgn || []);
+
+    // Filter out makeup tests where this student already submitted the original
+    const submittedAssignmentIds = new Set((subs || []).map(s => String(s.assignment_id)));
+    const filteredAssignments = (asgn || []).filter(a => {
+      // If it's a makeup test, only show it if the student hasn't submitted the original
+      if (a.parent_assignment_id) {
+        return !submittedAssignmentIds.has(String(a.parent_assignment_id));
+      }
+      return true;
+    });
+
+    setAssignments(filteredAssignments);
     setSubmissions(subs || []);
     setLoading(false);
   };
 
   const submittedIds = new Set(submissions.map(s => String(s.assignment_id)));
-  console.log("StudentDashboard render — submittedIds:", [...submittedIds], "assignments:", assignments.map(a => String(a.id)));
 
   // Lobby tests waiting for teacher to start
   const lobbyWaiting = assignments.filter(a =>
