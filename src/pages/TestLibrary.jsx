@@ -22,7 +22,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const [assignModal, setAssignModal] = useState(null);
   const [assignGroupId, setAssignGroupId] = useState("");
   const [assignTimeLimit, setAssignTimeLimit] = useState(20);
-  const [assignTimingMode, setAssignTimingMode] = useState("countdown");
+  const [assignTimingMode, setAssignTimingMode] = useState("lobby");
   const [assignAntiCheat, setAssignAntiCheat] = useState(false);
   const [assignDate, setAssignDate] = useState("");
   const [assignTimeStart, setAssignTimeStart] = useState("08:00");
@@ -156,7 +156,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                       setAssignModal(template);
                       setAssignGroupId("");
                       setAssignTimeLimit(Math.round((template.time_limit || 1200) / 60));
-                      setAssignTimingMode("countdown");
+                      setAssignTimingMode("lobby");
                       setAssignAntiCheat(template.anti_cheat || false);
                       setAssignDate(""); setAssignTimeStart("08:00"); setAssignTimeEnd("10:00");
                       setAssignGradingScale(template.grading_scale?.length ? template.grading_scale : [
