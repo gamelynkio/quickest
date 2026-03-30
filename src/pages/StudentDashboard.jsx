@@ -6,30 +6,45 @@ const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97
 export default function StudentDashboard({ currentUser, onStartTest, onLogout }) {
   const [assignments, setAssignments] = useState([]);
   const [submissions, setSubmissions] = useState([]);
+  const [allMakeupAssignments, setAllMakeupAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     setLoading(true);
-    const [{ data: asgn }, { data: subs }] = await Promise.all([
+    const [{ data: asgn }, { data: subs }, { data: allMakeups }] = await Promise.all([
       supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv"),
       supabase.from("submissions")
         .select("*, assignments(title)")
         .eq("username", currentUser.username)
         .order("submitted_at", { ascending: false }),
+      // Load all makeup assignments to detect if student covered a parent via makeup
+      supabase.from("assignments").select("id, parent_assignment_id")
+        .eq("group_id", currentUser.group_id)
+        .not("parent_assignment_id", "is", null),
     ]);
 
     setAssignments(asgn || []);
     setSubmissions(subs || []);
+    // Store all makeup assignments for coverage detection
+    setAllMakeupAssignments(allMakeups || []);
     setLoading(false);
   };
 
   const submittedIds = new Set(submissions.map(s => String(s.assignment_id)));
 
+  // Find parent IDs covered by a submitted makeup test
+  const coveredByMakeup = new Set(
+    allMakeupAssignments
+      .filter(a => submittedIds.has(String(a.id)))
+      .map(a => String(a.parent_assignment_id))
+  );
+
   // Filter assignments at render time using loaded submissions
   const visibleAssignments = assignments.filter(a => {
     if (submittedIds.has(String(a.id))) return false;
+    if (coveredByMakeup.has(String(a.id))) return false;
     if (a.parent_assignment_id) {
       if (a.makeup_usernames?.length && !a.makeup_usernames.includes(currentUser.username)) return false;
       if (submittedIds.has(String(a.parent_assignment_id))) return false;
