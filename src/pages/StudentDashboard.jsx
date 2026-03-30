@@ -20,35 +20,30 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
         .order("submitted_at", { ascending: false }),
     ]);
 
-    // Filter out makeup tests where this student is not in makeup_usernames
-    // or where this student already submitted the original
-    const submittedAssignmentIds = new Set((subs || []).map(s => String(s.assignment_id)));
-    const filteredAssignments = (asgn || []).filter(a => {
-      // Already submitted this assignment
-      if (submittedAssignmentIds.has(String(a.id))) return false;
-      if (a.parent_assignment_id) {
-        // Only show if student is in makeup list
-        if (a.makeup_usernames?.length && !a.makeup_usernames.includes(currentUser.username)) return false;
-        // Don't show if already submitted the original
-        if (submittedAssignmentIds.has(String(a.parent_assignment_id))) return false;
-      }
-      return true;
-    });
-
-    setAssignments(filteredAssignments);
+    setAssignments(asgn || []);
     setSubmissions(subs || []);
     setLoading(false);
   };
 
   const submittedIds = new Set(submissions.map(s => String(s.assignment_id)));
 
+  // Filter assignments at render time using loaded submissions
+  const visibleAssignments = assignments.filter(a => {
+    if (submittedIds.has(String(a.id))) return false;
+    if (a.parent_assignment_id) {
+      if (a.makeup_usernames?.length && !a.makeup_usernames.includes(currentUser.username)) return false;
+      if (submittedIds.has(String(a.parent_assignment_id))) return false;
+    }
+    return true;
+  });
+
   // Lobby tests waiting for teacher to start
-  const lobbyWaiting = assignments.filter(a =>
+  const lobbyWaiting = visibleAssignments.filter(a =>
     !submittedIds.has(String(a.id)) && a.timing_mode === "lobby" && !a.lobby_started_at
   );
 
   // Tests the student can start right now
-  const active = assignments.filter(a => {
+  const active = visibleAssignments.filter(a => {
     if (submittedIds.has(String(a.id))) return false;
     if (a.timing_mode === "lobby") return !!a.lobby_started_at;
     if (a.timing_mode === "window") {
@@ -62,7 +57,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
   });
 
   // Tests coming up but not yet open (window not started)
-  const upcoming = assignments.filter(a => {
+  const upcoming = visibleAssignments.filter(a => {
     if (submittedIds.has(String(a.id))) return false;
     if (a.timing_mode === "lobby" && !a.lobby_started_at) return false; // shown in lobbyWaiting
     if (a.timing_mode === "window" && a.window_date) {
