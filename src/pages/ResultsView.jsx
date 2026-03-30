@@ -149,7 +149,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                   <div style={{ fontSize: "14px", fontWeight: 700, color: "#92400e" }}>
                     ⚠️ {missingStudents.length} Schüler/in{missingStudents.length !== 1 ? "nen haben" : " hat"} nicht teilgenommen
                   </div>
-                  <button onClick={() => { setMakeupModal(true); setMakeupSelected(new Set(missingStudents)); setMakeupTemplateId(""); setMakeupTimeLimit(Math.round((assignment.time_limit || 1200) / 60)); setMakeupTimingMode("countdown"); setMakeupAntiCheat(assignment.anti_cheat || false); }}
+                  <button onClick={() => { setMakeupModal(true); setMakeupSelected(new Set(missingStudents)); setMakeupTemplateId(""); setMakeupTimeLimit(Math.round((assignment.time_limit || 1200) / 60)); setMakeupTimingMode("lobby"); setMakeupAntiCheat(assignment.anti_cheat || false); }}
                     style={{ padding: "7px 14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
                     + Nachtest erstellen
                   </button>
