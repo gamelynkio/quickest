@@ -12,7 +12,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [overrides, setOverrides] = useState({});
   const [saving, setSaving] = useState(false);
-  const [makeupModal, setMakeupModal] = useState(null); // username for makeup test
+  const [makeupModal, setMakeupModal] = useState(false);
+  const [makeupSelected, setMakeupSelected] = useState(new Set());
   const [makeupTemplateId, setMakeupTemplateId] = useState("");
   const [makeupTimeLimit, setMakeupTimeLimit] = useState(20);
   const [makeupTimingMode, setMakeupTimingMode] = useState("countdown");
@@ -59,22 +60,15 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   };
 
   const createMakeupTest = async () => {
-    if (!makeupTemplateId || !makeupModal) return;
+    if (!makeupTemplateId || makeupSelected.size === 0) return;
     setCreatingMakeup(true);
-    const template = await supabase.from("templates").select("*").eq("id", makeupTemplateId).single();
-    const t = template.data;
+    const { data: t } = await supabase.from("templates").select("*").eq("id", makeupTemplateId).single();
 
-    // Find the student record
-    const { data: student } = await supabase.from("students")
-      .select("id, group_id").eq("username", makeupModal).single();
-
-    // Create a new single-student group or use existing — simplest: create assignment for same group
-    // but with parent_assignment_id pointing to original
-    const { data: newAssignment } = await supabase.from("assignments").insert({
+    await supabase.from("assignments").insert({
       template_id: Number(makeupTemplateId),
       group_id: assignment.group_id,
       teacher_id: currentUser?.id,
-      title: `${t.title} (Nachtest: ${makeupModal})`,
+      title: `${t.title} (Nachtest)`,
       status: "aktiv",
       time_limit: makeupTimeLimit * 60,
       timing_mode: makeupTimingMode,
@@ -82,11 +76,13 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       question_data: t.question_data,
       grading_scale: t.grading_scale || assignment.grading_scale,
       parent_assignment_id: assignment.id,
-    }).select().single();
+    });
 
     setCreatingMakeup(false);
-    setMakeupModal(null);
+    setMakeupModal(false);
+    setMakeupSelected(new Set());
     setMakeupTemplateId("");
+    await fetchSubmissions();
   };
 
   const saveOverrides = async () => {
@@ -145,18 +141,18 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
             {/* Missing students */}
             {missingStudents.length > 0 && (
               <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "14px", padding: "18px 20px", marginBottom: "20px" }}>
-                <div style={{ fontSize: "14px", fontWeight: 700, color: "#92400e", marginBottom: "12px" }}>
-                  ⚠️ {missingStudents.length} Schüler/in{missingStudents.length !== 1 ? "nen haben" : " hat"} nicht teilgenommen
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <div style={{ fontSize: "14px", fontWeight: 700, color: "#92400e" }}>
+                    ⚠️ {missingStudents.length} Schüler/in{missingStudents.length !== 1 ? "nen haben" : " hat"} nicht teilgenommen
+                  </div>
+                  <button onClick={() => { setMakeupModal(true); setMakeupSelected(new Set(missingStudents)); setMakeupTemplateId(""); setMakeupTimeLimit(Math.round((assignment.time_limit || 1200) / 60)); setMakeupTimingMode("countdown"); setMakeupAntiCheat(assignment.anti_cheat || false); }}
+                    style={{ padding: "7px 14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                    + Nachtest erstellen
+                  </button>
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                   {missingStudents.map(u => (
-                    <div key={u} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#fff", border: "1px solid #fde68a", borderRadius: "8px", padding: "6px 10px" }}>
-                      <span style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>{u}</span>
-                      <button onClick={() => { setMakeupModal(u); setMakeupTemplateId(""); setMakeupTimeLimit(Math.round((assignment.time_limit || 1200) / 60)); setMakeupTimingMode("countdown"); setMakeupAntiCheat(assignment.anti_cheat || false); }}
-                        style={{ background: "#2563a8", color: "#fff", border: "none", borderRadius: "6px", padding: "3px 8px", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}>
-                        + Nachtest
-                      </button>
-                    </div>
+                    <span key={u} style={{ background: "#fff", border: "1px solid #fde68a", borderRadius: "6px", padding: "4px 10px", fontSize: "13px", fontWeight: 600, color: "#374151" }}>{u}</span>
                   ))}
                 </div>
               </div>
@@ -280,12 +276,41 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       {/* MAKEUP TEST MODAL */}
       {makeupModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "460px", width: "100%" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "500px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
             <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 4px", color: "#0f172a" }}>Nachtest erstellen</h3>
             <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "24px" }}>
-              Für <strong>{makeupModal}</strong> — Ergebnisse werden dem Original-Test zugeordnet.
+              Ergebnisse werden dem Original-Test „{assignment.title}" zugeordnet.
             </p>
 
+            {/* Student selection */}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "8px" }}>
+                Teilnehmende Schüler/innen
+                <span style={{ marginLeft: "8px", fontWeight: 400, color: "#94a3b8" }}>({makeupSelected.size} ausgewählt)</span>
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                {missingStudents.map(u => {
+                  const selected = makeupSelected.has(u);
+                  return (
+                    <button key={u} onClick={() => setMakeupSelected(prev => {
+                      const next = new Set(prev);
+                      next.has(u) ? next.delete(u) : next.add(u);
+                      return next;
+                    })} style={{ padding: "8px 12px", borderRadius: "8px", cursor: "pointer", textAlign: "left", border: `2px solid ${selected ? "#2563a8" : "#e2e8f0"}`, background: selected ? "#eff6ff" : "#f8fafc", fontFamily: "inherit" }}>
+                      <span style={{ fontSize: "12px", color: selected ? "#2563a8" : "#94a3b8", display: "block" }}>{selected ? "✓ Ausgewählt" : "Nicht ausgewählt"}</span>
+                      <span style={{ fontSize: "13px", fontWeight: 600, color: selected ? "#1e40af" : "#374151" }}>{u}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                <button onClick={() => setMakeupSelected(new Set(missingStudents))} style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Alle auswählen</button>
+                <span style={{ color: "#e2e8f0" }}>|</span>
+                <button onClick={() => setMakeupSelected(new Set())} style={{ fontSize: "12px", color: "#64748b", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Keine</button>
+              </div>
+            </div>
+
+            {/* Test settings */}
             <div style={{ marginBottom: "16px" }}>
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Test-Vorlage wählen *</label>
               <select value={makeupTemplateId} onChange={e => setMakeupTemplateId(e.target.value)}
@@ -316,15 +341,11 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
               🛡️ Anti-Cheat aktivieren
             </label>
 
-            <div style={{ background: "#f0f7ff", borderRadius: "10px", padding: "12px 14px", marginBottom: "20px", fontSize: "13px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
-              ℹ️ Der Nachtest wird für die gesamte Gruppe aktiviert, aber nur <strong>{makeupModal}</strong> hat ihn noch nicht abgegeben. Die Abgabe erscheint in dieser Ergebnisansicht.
-            </div>
-
             <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={() => setMakeupModal(null)} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
-              <button onClick={createMakeupTest} disabled={!makeupTemplateId || creatingMakeup}
-                style={{ flex: 1, padding: "11px", background: makeupTemplateId ? "#2563a8" : "#e2e8f0", color: makeupTemplateId ? "#fff" : "#94a3b8", border: "none", borderRadius: "10px", fontWeight: 700, cursor: makeupTemplateId ? "pointer" : "not-allowed" }}>
-                {creatingMakeup ? "Wird erstellt..." : "Nachtest aktivieren →"}
+              <button onClick={() => setMakeupModal(false)} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
+              <button onClick={createMakeupTest} disabled={!makeupTemplateId || makeupSelected.size === 0 || creatingMakeup}
+                style={{ flex: 1, padding: "11px", background: (makeupTemplateId && makeupSelected.size > 0) ? "#2563a8" : "#e2e8f0", color: (makeupTemplateId && makeupSelected.size > 0) ? "#fff" : "#94a3b8", border: "none", borderRadius: "10px", fontWeight: 700, cursor: (makeupTemplateId && makeupSelected.size > 0) ? "pointer" : "not-allowed" }}>
+                {creatingMakeup ? "Wird erstellt..." : `Nachtest für ${makeupSelected.size} Schüler/in aktivieren →`}
               </button>
             </div>
           </div>
