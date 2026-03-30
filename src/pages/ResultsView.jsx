@@ -76,6 +76,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       question_data: t.question_data,
       grading_scale: t.grading_scale || assignment.grading_scale,
       parent_assignment_id: assignment.id,
+      makeup_usernames: [...makeupSelected],
     });
 
     setCreatingMakeup(false);
@@ -111,7 +112,11 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   };
 
   const submittedUsernames = new Set(submissions.map(s => s.username));
-  const missingStudents = groupUsernames.filter(u => !submittedUsernames.has(u));
+  // For makeup tests only show the selected students, otherwise show full group
+  const relevantUsernames = assignment.makeup_usernames?.length
+    ? assignment.makeup_usernames
+    : groupUsernames;
+  const missingStudents = relevantUsernames.filter(u => !submittedUsernames.has(u));
   const avg = submissions.length > 0
     ? (submissions.reduce((s, r) => s + ((r.score || 0) / (r.total_points || 1)) * 100, 0) / submissions.length).toFixed(1)
     : null;
