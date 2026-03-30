@@ -16,7 +16,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
       supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv"),
       supabase.from("submissions")
         .select("*, assignments(title)")
-        .eq("student_id", currentUser.id)
+        .eq("username", currentUser.username)
         .order("submitted_at", { ascending: false }),
     ]);
 
