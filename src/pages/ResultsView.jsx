@@ -112,8 +112,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   };
 
   const submittedUsernames = new Set(submissions.map(s => s.username));
-  // For makeup tests only show the selected students, otherwise show full group
-  const relevantUsernames = assignment.makeup_usernames?.length
+  const relevantUsernames = assignment?.makeup_usernames?.length
     ? assignment.makeup_usernames
     : groupUsernames;
   const missingStudents = relevantUsernames.filter(u => !submittedUsernames.has(u));
