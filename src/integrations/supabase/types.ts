@@ -22,6 +22,7 @@ export type Database = {
           group_id: number
           id: number
           lobby_started_at: string | null
+          parent_assignment_id: number | null
           question_data: Json
           status: string
           teacher_id: string
@@ -39,6 +40,7 @@ export type Database = {
           group_id: number
           id?: number
           lobby_started_at?: string | null
+          parent_assignment_id?: number | null
           question_data?: Json
           status?: string
           teacher_id: string
@@ -56,6 +58,7 @@ export type Database = {
           group_id?: number
           id?: number
           lobby_started_at?: string | null
+          parent_assignment_id?: number | null
           question_data?: Json
           status?: string
           teacher_id?: string
@@ -72,6 +75,13 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_parent_assignment_id_fkey"
+            columns: ["parent_assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
             referencedColumns: ["id"]
           },
           {
