@@ -85,7 +85,13 @@ export default function StudentTestView({ currentUser, onFinish }) {
     setLoading(true);
     const { data } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
     if (data) {
-      // Check if window has expired
+      // Block access if this is a makeup test and student is not in the list
+      if (data.parent_assignment_id && data.makeup_usernames?.length) {
+        if (!data.makeup_usernames.includes(currentUser.username)) {
+          setLoading(false);
+          return; // Will show "no active test"
+        }
+      }
       if (data.timing_mode === "window" && data.window_date && data.window_end) {
         const windowEnd = new Date(`${data.window_date}T${data.window_end}`);
         if (new Date() > windowEnd) {
