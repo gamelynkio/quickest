@@ -23,8 +23,8 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const [assignGroupId, setAssignGroupId] = useState("");
   const [assignTimeLimit, setAssignTimeLimit] = useState(20);
   const [assignTimingMode, setAssignTimingMode] = useState("lobby");
-  const [assignAntiCheat, setAssignAntiCheat] = useState(false);
-  const [assignRequireSeb, setAssignRequireSeb] = useState(false);
+  const [assignAntiCheat, setAssignAntiCheat] = useState(true);
+  const [assignRequireSeb, setAssignRequireSeb] = useState(true);
   const [assignDate, setAssignDate] = useState("");
   const [assignTimeStart, setAssignTimeStart] = useState("08:00");
   const [assignTimeEnd, setAssignTimeEnd] = useState("10:00");
@@ -159,7 +159,8 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                       setAssignGroupId("");
                       setAssignTimeLimit(Math.round((template.time_limit || 1200) / 60));
                       setAssignTimingMode("lobby");
-                      setAssignAntiCheat(template.anti_cheat || false);
+                      setAssignAntiCheat(template.anti_cheat || true);
+                      setAssignRequireSeb(true);
                       setAssignDate(""); setAssignTimeStart("08:00"); setAssignTimeEnd("10:00");
                       setAssignGradingScale(template.grading_scale?.length ? template.grading_scale : [
                         { grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
