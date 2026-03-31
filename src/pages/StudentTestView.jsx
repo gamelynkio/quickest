@@ -77,6 +77,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
   const [submitting, setSubmitting] = useState(false);
   const [lobbyWaiting, setLobbyWaiting] = useState(false);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState(0);
+  const [sebRequired, setSebRequired] = useState(false);
 
   // Anti-cheat
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
@@ -90,7 +91,15 @@ export default function StudentTestView({ currentUser, onFinish }) {
     setLoading(true);
     const { data } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
     if (data) {
-      // Block access if student already submitted this assignment
+      // Check if SEB is required but not active
+      // SEB identifies itself via the User-Agent string
+      const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
+      if (data.require_seb && !isSEB) {
+        setAssignment(data); // store so we can show the SEB install page
+        setSebRequired(true);
+        setLoading(false);
+        return;
+      }
       const { data: existingSubmission } = await supabase
         .from("submissions")
         .select("id")
@@ -396,6 +405,48 @@ export default function StudentTestView({ currentUser, onFinish }) {
         </div>
       </div>
       <style>{`@keyframes pulse { from { opacity: 0.3; transform: scale(0.8); } to { opacity: 1; transform: scale(1.2); } }`}</style>
+    </div>
+  );
+
+  if (sebRequired) return (
+    <div style={S.center}>
+      <div style={{ ...S.card, maxWidth: "480px" }}>
+        <div style={{ fontSize: "64px", marginBottom: "16px" }}>🔒</div>
+        <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Safe Exam Browser erforderlich</h2>
+        <p style={{ color: "#64748b", marginBottom: "24px", fontSize: "14px", lineHeight: 1.6 }}>
+          Dieser Test muss mit dem <strong>Safe Exam Browser (SEB)</strong> geöffnet werden. SEB verhindert Betrug indem andere Apps, Tabs und die Autokorrektur gesperrt werden.
+        </p>
+
+        <div style={{ background: "#f8fafc", borderRadius: "14px", padding: "18px", marginBottom: "20px", textAlign: "left" }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "12px" }}>📱 So geht's:</div>
+          <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#64748b", lineHeight: 2 }}>
+            <li>Installiere die <strong>Safe Exam Browser</strong> App</li>
+            <li>Öffne nach der Installation diesen Link erneut</li>
+            <li>Tippe unten auf „SEB-Datei herunterladen"</li>
+            <li>Öffne die heruntergeladene Datei → SEB startet automatisch</li>
+          </ol>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+          <a href="https://apps.apple.com/app/safe-exam-browser/id1587573560" target="_blank" rel="noreferrer"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#000", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+            🍎 App Store (iOS)
+          </a>
+          <a href="https://play.google.com/store/apps/details?id=org.safeexambrowser" target="_blank" rel="noreferrer"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#16a34a", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+            🤖 Play Store (Android)
+          </a>
+        </div>
+
+        <a href="/quicktest.seb" download="quicktest.seb"
+          style={{ display: "block", width: "100%", padding: "14px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "15px", cursor: "pointer", textAlign: "center", textDecoration: "none", marginBottom: "12px", boxSizing: "border-box" }}>
+          📥 SEB-Konfigurationsdatei herunterladen
+        </a>
+
+        <button onClick={() => onFinish()} style={{ width: "100%", padding: "12px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+          Zurück zum Dashboard
+        </button>
+      </div>
     </div>
   );
 
