@@ -25,6 +25,7 @@ export type Database = {
           makeup_usernames: string[] | null
           parent_assignment_id: number | null
           question_data: Json
+          require_seb: boolean | null
           status: string
           teacher_id: string
           template_id: number | null
@@ -44,6 +45,7 @@ export type Database = {
           makeup_usernames?: string[] | null
           parent_assignment_id?: number | null
           question_data?: Json
+          require_seb?: boolean | null
           status?: string
           teacher_id: string
           template_id?: number | null
@@ -63,6 +65,7 @@ export type Database = {
           makeup_usernames?: string[] | null
           parent_assignment_id?: number | null
           question_data?: Json
+          require_seb?: boolean | null
           status?: string
           teacher_id?: string
           template_id?: number | null
