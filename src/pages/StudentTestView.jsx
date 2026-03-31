@@ -436,6 +436,14 @@ export default function StudentTestView({ currentUser, onFinish }) {
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#16a34a", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
             🤖 Play Store (Android)
           </a>
+          <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#0078d4", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+            🪟 Download (Windows)
+          </a>
+          <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#6d6d6d", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+            🍏 Download (macOS)
+          </a>
         </div>
 
         <a href="/quicktest.seb" download="quicktest.seb"
