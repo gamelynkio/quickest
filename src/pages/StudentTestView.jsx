@@ -95,8 +95,8 @@ export default function StudentTestView({ currentUser, onFinish }) {
         .from("submissions")
         .select("id")
         .eq("assignment_id", data.id)
-        .eq("student_id", currentUser.id)
-        .single();
+        .eq("username", currentUser.username)
+        .maybeSingle();
       if (existingSubmission) {
         setLoading(false);
         return; // Already submitted — show "no active test"
@@ -303,6 +303,8 @@ export default function StudentTestView({ currentUser, onFinish }) {
       document.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [submitted, loading, lobbyWaiting, assignment]);
+
+  const formatTime = (s) => `${String(Math.floor((s || 0) / 60)).padStart(2, "0")}:${String((s || 0) % 60).padStart(2, "0")}`;
   const timePercent = assignment ? (timeLeft / assignment.time_limit) * 100 : 100;
   const timeColor = timeLeft < 120 ? "#ef4444" : timeLeft < 300 ? "#f97316" : "#16a34a";
 
