@@ -184,6 +184,11 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                         <tr key={s.id} style={{ borderBottom: i < submissions.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent" }}>
                           <td style={{ padding: "13px 16px", fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>
                             {s.username}
+                            {s.cheat_log?.length > 0 && (
+                              <span title={`${s.cheat_log.length}× Tab-Wechsel`} style={{ marginLeft: "6px", fontSize: "11px", background: "#fef2f2", color: "#dc2626", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>
+                                ⚠️ {s.cheat_log.length}×
+                              </span>
+                            )}
                             {s.assignments?.title !== assignment.title && (
                               <span style={{ marginLeft: "6px", fontSize: "10px", background: "#f0f7ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px" }}>Nachtest</span>
                             )}
@@ -215,6 +220,18 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                     <p style={{ margin: "0 0 18px", color: "#64748b", fontSize: "13px" }}>
                       Abgegeben: {new Date(selectedSubmission.submitted_at).toLocaleString("de-DE")}
                     </p>
+                    {selectedSubmission.cheat_log?.length > 0 && (
+                      <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 14px", marginBottom: "16px" }}>
+                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626", marginBottom: "6px" }}>
+                          ⚠️ {selectedSubmission.cheat_log.length}× Tab/App-Wechsel erkannt
+                        </div>
+                        {selectedSubmission.cheat_log.map((e, i) => (
+                          <div key={i} style={{ fontSize: "12px", color: "#64748b" }}>
+                            {new Date(e.time).toLocaleTimeString("de-DE")} — Tab verlassen
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {Object.entries(selectedSubmission.ai_corrections || {}).map(([qId, correction], i) => {
                       const override = overrides[qId];
                       const currentPoints = override !== undefined ? Number(override) : (selectedSubmission.manual_overrides?.[qId] !== undefined ? selectedSubmission.manual_overrides[qId] : correction.points);
