@@ -24,6 +24,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const [assignTimeLimit, setAssignTimeLimit] = useState(20);
   const [assignTimingMode, setAssignTimingMode] = useState("lobby");
   const [assignAntiCheat, setAssignAntiCheat] = useState(false);
+  const [assignRequireSeb, setAssignRequireSeb] = useState(false);
   const [assignDate, setAssignDate] = useState("");
   const [assignTimeStart, setAssignTimeStart] = useState("08:00");
   const [assignTimeEnd, setAssignTimeEnd] = useState("10:00");
@@ -63,6 +64,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
       time_limit: assignTimeLimit * 60,
       timing_mode: assignTimingMode,
       anti_cheat: assignAntiCheat,
+      require_seb: assignRequireSeb,
       question_data: assignModal.question_data,
       grading_scale: assignGradingScale,
       ...(assignTimingMode === "window" && {
@@ -270,7 +272,19 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
             <div style={{ marginBottom: "16px" }}>
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
                 <input type="checkbox" checked={assignAntiCheat} onChange={e => setAssignAntiCheat(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
-                🛡️ Anti-Cheat aktivieren
+                🛡️ Anti-Cheat aktivieren (Tab-Wechsel loggen)
+              </label>
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer" }}>
+                <input type="checkbox" checked={assignRequireSeb} onChange={e => setAssignRequireSeb(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#7c3aed", marginTop: "1px", flexShrink: 0 }} />
+                <div>
+                  🔒 Safe Exam Browser erforderlich
+                  <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 400, marginTop: "2px" }}>
+                    Schüler müssen die SEB-App nutzen. Verhindert Autokorrektur, Tab-Wechsel und andere Apps.
+                  </div>
+                </div>
               </label>
             </div>
 
