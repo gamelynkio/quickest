@@ -557,7 +557,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
                     <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>
                   </div>
                   <input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-                    placeholder="B-Seite eingeben..." spellCheck={false} autoCorrect="off" autoComplete="off"
+                    placeholder="B-Seite eingeben..." autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
                     style={{ width: "100%", padding: "16px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "18px", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }} />
                 </div>
               )}
@@ -567,6 +567,8 @@ export default function StudentTestView({ currentUser, onFinish }) {
                 <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
                   placeholder="Deine Antwort..."
                   rows={5}
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                  data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
                   style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", lineHeight: 1.6 }} />
               )}
 
@@ -586,7 +588,9 @@ export default function StudentTestView({ currentUser, onFinish }) {
                                 cur[i] = e.target.value;
                                 setAnswers(a => ({ ...a, [q.id]: cur }));
                               }}
-                              placeholder="___" spellCheck={false} autoCorrect="off" autoComplete="off"
+                              placeholder="___"
+                              autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                              data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
                               style={{ display: "inline-block", width: "110px", padding: "4px 8px", border: "none", borderBottom: "3px solid #2563a8", background: "transparent", fontSize: "16px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }}
                             />
                           )}
@@ -595,6 +599,8 @@ export default function StudentTestView({ currentUser, onFinish }) {
                     </div>
                   ) : (
                     <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={3}
+                      autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                      data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
                       style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box" }} />
                   )}
                 </div>
