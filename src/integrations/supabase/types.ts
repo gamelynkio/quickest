@@ -216,6 +216,7 @@ export type Database = {
           ai_corrections: Json | null
           answers: Json
           assignment_id: number
+          cheat_log: Json | null
           grade: string | null
           id: number
           manual_overrides: Json | null
@@ -230,6 +231,7 @@ export type Database = {
           ai_corrections?: Json | null
           answers?: Json
           assignment_id: number
+          cheat_log?: Json | null
           grade?: string | null
           id?: number
           manual_overrides?: Json | null
@@ -244,6 +246,7 @@ export type Database = {
           ai_corrections?: Json | null
           answers?: Json
           assignment_id?: number
+          cheat_log?: Json | null
           grade?: string | null
           id?: number
           manual_overrides?: Json | null
