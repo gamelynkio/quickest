@@ -103,6 +103,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   };
 
   const appUrl = "https://quickest.lovable.app?role=student";
+  const sebUrl = "seb://quickest.lovable.app?role=student";
   const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   // Auto-refresh lobby students every 1 second when modal is open
@@ -300,9 +301,20 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
               /* PRE-START: QR + waiting list */
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
                 <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "20px", textAlign: "center", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>📱 QR-Code für Schüler</div>
-                  <QRCode url={appUrl} size={140} />
-                  <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px" }}>Schüler scannen → einloggen → warten</div>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
+                    {lobbyModal.require_seb ? "🔒 QR-Code für SEB" : "📱 QR-Code für Schüler"}
+                  </div>
+                  <QRCode url={lobbyModal.require_seb ? sebUrl : appUrl} size={140} />
+                  <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px" }}>
+                    {lobbyModal.require_seb
+                      ? "Öffnet direkt im Safe Exam Browser"
+                      : "Schüler scannen → einloggen → warten"}
+                  </div>
+                  {lobbyModal.require_seb && (
+                    <div style={{ marginTop: "8px", background: "#f5f3ff", borderRadius: "8px", padding: "6px 10px", fontSize: "11px", color: "#6d28d9", fontWeight: 600 }}>
+                      SEB muss installiert sein
+                    </div>
+                  )}
                 </div>
                 <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "20px", border: "1px solid #e2e8f0" }}>
                   <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
