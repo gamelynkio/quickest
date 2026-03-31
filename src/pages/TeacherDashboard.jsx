@@ -304,15 +304,15 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                   <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
                     {lobbyModal.require_seb ? "🔒 QR-Code für SEB" : "📱 QR-Code für Schüler"}
                   </div>
-                  <QRCode url={lobbyModal.require_seb ? sebUrl : appUrl} size={140} />
+                  <QRCode url={appUrl} size={140} />
                   <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px" }}>
                     {lobbyModal.require_seb
-                      ? "Öffnet direkt im Safe Exam Browser"
+                      ? "Schüler ohne SEB werden zur Installation weitergeleitet"
                       : "Schüler scannen → einloggen → warten"}
                   </div>
                   {lobbyModal.require_seb && (
                     <div style={{ marginTop: "8px", background: "#f5f3ff", borderRadius: "8px", padding: "6px 10px", fontSize: "11px", color: "#6d28d9", fontWeight: 600 }}>
-                      SEB muss installiert sein
+                      🔒 SEB erforderlich
                     </div>
                   )}
                 </div>
