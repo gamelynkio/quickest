@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 const COLORS = ["#fff8e7", "#f0fdf4", "#f0f9ff", "#fdf2f8", "#f5f3ff", "#fff1f2"];
@@ -75,9 +75,14 @@ export default function StudentTestView({ currentUser, onFinish }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-
   const [lobbyWaiting, setLobbyWaiting] = useState(false);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState(0);
+
+  // Anti-cheat
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [showCheatWarning, setShowCheatWarning] = useState(false);
+  const cheatLogRef = useRef([]);
+  const submissionIdRef = useRef(null);
 
   useEffect(() => { fetchAssignment(); }, []);
 
@@ -254,7 +259,50 @@ export default function StudentTestView({ currentUser, onFinish }) {
     return () => clearInterval(timer);
   }, [submitted, loading, lobbyWaiting, assignment]);
 
-  const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  // Anti-cheat: tab/app switch detection + block shortcuts + disable right-click
+  useEffect(() => {
+    if (submitted || loading || lobbyWaiting || !assignment) return;
+
+    const logSwitch = async () => {
+      const entry = { time: new Date().toISOString(), event: "tab_switch" };
+      cheatLogRef.current = [...cheatLogRef.current, entry];
+      const count = cheatLogRef.current.length;
+      setTabSwitchCount(count);
+      setShowCheatWarning(true);
+      // Update cheat_log in DB if submission exists
+      if (submissionIdRef.current) {
+        await supabase.from("submissions")
+          .update({ cheat_log: cheatLogRef.current })
+          .eq("id", submissionIdRef.current);
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) logSwitch();
+    };
+
+    const handleKeyDown = (e) => {
+      // Block Ctrl/Cmd + C, V, A, T, N, W, R, F, P
+      if ((e.ctrlKey || e.metaKey) && ["c","v","a","t","n","w","r","f","p","u"].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      // Block F5, F12
+      if (["F5","F12"].includes(e.key)) e.preventDefault();
+    };
+
+    const handleContextMenu = (e) => e.preventDefault();
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("contextmenu", handleContextMenu);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener("keydown", handleKeyDown, true);
+      document.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, [submitted, loading, lobbyWaiting, assignment]);
   const timePercent = assignment ? (timeLeft / assignment.time_limit) * 100 : 100;
   const timeColor = timeLeft < 120 ? "#ef4444" : timeLeft < 300 ? "#f97316" : "#16a34a";
 
@@ -267,14 +315,16 @@ export default function StudentTestView({ currentUser, onFinish }) {
     const { score, corrections } = autoCorrect(realQuestions, answers);
     const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
     const grade = hasOpenQuestions ? null : calcGrade(score, totalPoints, assignment.grading_scale);
-    await supabase.from("submissions").insert({
+    const { data: newSubmission } = await supabase.from("submissions").insert({
       assignment_id: assignment.id,
       student_id: currentUser.id,
       username: currentUser.username,
       answers, score, total_points: totalPoints, grade,
       ai_corrections: corrections,
       reviewed: !hasOpenQuestions,
-    });
+      cheat_log: cheatLogRef.current,
+    }).select("id").single();
+    if (newSubmission) submissionIdRef.current = newSubmission.id;
 
     // Auto-close: check if all students have submitted (lobby + countdown mode)
     if (assignment.timing_mode === "lobby" || assignment.timing_mode === "countdown") {
@@ -400,6 +450,11 @@ export default function StudentTestView({ currentUser, onFinish }) {
             Abgeben
           </button>
         </div>
+        {tabSwitchCount > 0 && (
+          <div style={{ background: "#fef2f2", borderTop: "1px solid #fecaca", padding: "6px 20px", fontSize: "12px", color: "#dc2626", fontWeight: 600, textAlign: "center" }}>
+            ⚠️ {tabSwitchCount}× Tab/App-Wechsel erkannt — wird dem Lehrer gemeldet
+          </div>
+        )}
       </div>
 
       <div style={{ maxWidth: "800px", margin: "0 auto", padding: "20px 16px 40px" }}>
@@ -500,7 +555,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
                     <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>
                   </div>
                   <input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-                    placeholder="B-Seite eingeben..."
+                    placeholder="B-Seite eingeben..." spellCheck={false} autoCorrect="off" autoComplete="off"
                     style={{ width: "100%", padding: "16px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "18px", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }} />
                 </div>
               )}
@@ -529,7 +584,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
                                 cur[i] = e.target.value;
                                 setAnswers(a => ({ ...a, [q.id]: cur }));
                               }}
-                              placeholder="___"
+                              placeholder="___" spellCheck={false} autoCorrect="off" autoComplete="off"
                               style={{ display: "inline-block", width: "110px", padding: "4px 8px", border: "none", borderBottom: "3px solid #2563a8", background: "transparent", fontSize: "16px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }}
                             />
                           )}
@@ -569,6 +624,26 @@ export default function StudentTestView({ currentUser, onFinish }) {
           Test abgeben
         </button>
       </div>
+
+      {/* Cheat warning */}
+      {showCheatWarning && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: "52px", marginBottom: "12px" }}>⚠️</div>
+            <h3 style={{ fontSize: "20px", fontWeight: 800, color: "#dc2626", margin: "0 0 10px" }}>Tab-Wechsel erkannt!</h3>
+            <p style={{ color: "#374151", fontSize: "14px", marginBottom: "8px", lineHeight: 1.5 }}>
+              Du hast den Test-Tab verlassen. Dies wurde protokolliert und wird deiner Lehrkraft gemeldet.
+            </p>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "24px" }}>
+              Bisher: <strong style={{ color: "#dc2626" }}>{tabSwitchCount}×</strong> erkannt
+            </p>
+            <button onClick={() => setShowCheatWarning(false)}
+              style={{ width: "100%", padding: "14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer" }}>
+              Verstanden — zurück zum Test
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Confirm modal */}
       {showConfirm && (
