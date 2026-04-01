@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>quitURL</key>
-	<string>https://quickest.lovable.app/seb-quit</string>
+	<string>https://quickest.lovable.app/seb-quit.html</string>
 	<key>quitURLConfirm</key>
 	<false/>
 	<key>startURL</key>
