@@ -8,6 +8,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
   const [submissions, setSubmissions] = useState([]);
   const [allMakeupAssignments, setAllMakeupAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sebBlockedAssignment, setSebBlockedAssignment] = useState(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -82,7 +83,48 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     return false;
   });
 
-  const timeLabel = (a) => {
+  const handleStartTest = (assignment) => {
+    const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
+    if (assignment.require_seb && !isSEB) {
+      setSebBlockedAssignment(assignment);
+      return;
+    }
+    onStartTest(assignment);
+  };
+
+  const SEB_MODAL = () => (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+      <div style={{ background: "#fff", borderRadius: "24px", padding: "32px", maxWidth: "480px", width: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: "52px", marginBottom: "12px" }}>🔒</div>
+        <h3 style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Safe Exam Browser erforderlich</h3>
+        <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px", lineHeight: 1.6 }}>
+          Dieser Test muss mit dem <strong>Safe Exam Browser</strong> geöffnet werden. Er verhindert Autokorrektur, Tab-Wechsel und andere Apps während der Prüfung.
+        </p>
+        <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "20px", textAlign: "left" }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "10px" }}>So geht's:</div>
+          <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#64748b", lineHeight: 2 }}>
+            <li>Installiere die <strong>Safe Exam Browser</strong> App</li>
+            <li>Lade die SEB-Konfigurationsdatei herunter</li>
+            <li>Öffne die Datei → SEB startet automatisch</li>
+          </ol>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
+          <a href="https://apps.apple.com/app/safe-exam-browser/id1587573560" target="_blank" rel="noreferrer"
+            style={{ padding: "10px", background: "#000", color: "#fff", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 600 }}>🍎 App Store (iOS)</a>
+          <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
+            style={{ padding: "10px", background: "#0078d4", color: "#fff", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 600 }}>🪟 Windows / macOS</a>
+        </div>
+        <a href="/quicktest.seb" download="quicktest.seb"
+          style={{ display: "block", padding: "14px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "14px", textDecoration: "none", marginBottom: "10px" }}>
+          📥 SEB-Konfigurationsdatei herunterladen
+        </a>
+        <button onClick={() => setSebBlockedAssignment(null)}
+          style={{ width: "100%", padding: "12px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+          Zurück zum Dashboard
+        </button>
+      </div>
+    </div>
+  );
     const mins = Math.round((a.time_limit || 0) / 60);
     if (a.timing_mode === "window" && a.window_date)
       return `${new Date(a.window_date).toLocaleDateString("de-DE")} · ${a.window_start}–${a.window_end} Uhr`;
@@ -129,7 +171,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                   <div key={a.id} style={{ background: "rgba(109,40,217,0.2)", borderRadius: "16px", padding: "18px 20px", marginBottom: "10px", border: "1px solid rgba(109,40,217,0.4)" }}>
                     <div style={{ fontWeight: 700, fontSize: "16px", color: "#fff", marginBottom: "4px" }}>{a.title}</div>
                     <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", marginBottom: "14px" }}>Lobby — warte auf den Startschuss der Lehrkraft</div>
-                    <button onClick={() => onStartTest(a)} style={{ width: "100%", padding: "13px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
+                    <button onClick={() => handleStartTest(a)} style={{ width: "100%", padding: "13px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
                       In Warteraum eintreten →
                     </button>
                   </div>
@@ -147,7 +189,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                       ⏱ {Math.round((a.time_limit || 0) / 60)} Min.
                       {a.timing_mode === "window" && <span style={{ marginLeft: "8px" }}>📅 {timeLabel(a)}</span>}
                     </div>
-                    <button onClick={() => onStartTest(a)} style={{ width: "100%", padding: "14px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer" }}>
+                    <button onClick={() => handleStartTest(a)} style={{ width: "100%", padding: "14px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer" }}>
                       Test starten →
                     </button>
                   </div>
@@ -204,6 +246,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
           </>
         )}
       </div>
+      {sebBlockedAssignment && <SEB_MODAL />}
     </div>
   );
 }
