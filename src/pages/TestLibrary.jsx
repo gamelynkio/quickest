@@ -287,6 +287,11 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                   </div>
                 </div>
               </label>
+              {assignRequireSeb && (
+                <div style={{ marginTop: "10px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", padding: "12px 14px", fontSize: "13px", color: "#92400e", lineHeight: 1.5 }}>
+                  <strong>⚠️ Wichtiger Hinweis für Android-Geräte:</strong> Safe Exam Browser ist für Android nicht verfügbar. Schüler mit Android-Smartphones oder -Tablets können die Systemtastatur mit Autokorrektur und Wörterbuch weiterhin nutzen — dies lässt sich technisch nicht verhindern. Stelle sicher dass alle Schüler ein iPhone, iPad oder Windows/Mac-Gerät verwenden, wenn du eine vollständig gesicherte Prüfungsumgebung benötigst.
+                </div>
+              )}
             </div>
 
             <details style={{ marginBottom: "24px" }}>
