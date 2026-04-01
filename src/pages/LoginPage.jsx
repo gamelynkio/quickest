@@ -42,7 +42,7 @@ export default function LoginPage({ onLogin }) {
             Installiere die kostenlose SEB-App auf deinem Gerät (nur einmalig nötig):
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-            <a href="https://apps.apple.com/app/safe-exam-browser/id1587573560" target="_blank" rel="noreferrer"
+            <a href="https://apps.apple.com/us/app/safeexambrowser/id1155002964" target="_blank" rel="noreferrer"
               style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "10px", background: "#000", color: "#fff", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 600 }}>
               🍎 App Store (iPhone/iPad)
             </a>
@@ -59,7 +59,7 @@ export default function LoginPage({ onLogin }) {
           <p style={{ fontSize: "13px", color: "#374151", margin: "0 0 14px", lineHeight: 1.5 }}>
             Klicke auf den Button unten. SEB öffnet sich automatisch und du kannst dich einloggen.
           </p>
-          <a href="seb://quicktest.lovable.app?role=student"
+          <a href="sebs://quicktest.lovable.app/?role=student"
             style={{ display: "block", width: "100%", padding: "14px", background: "#7c3aed", color: "#fff", borderRadius: "10px", fontWeight: 700, fontSize: "15px", textDecoration: "none", boxSizing: "border-box", textAlign: "center" }}>
             🔒 Safe Exam Browser starten
           </a>
