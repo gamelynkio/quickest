@@ -59,7 +59,7 @@ export default function LoginPage({ onLogin }) {
           <p style={{ fontSize: "13px", color: "#374151", margin: "0 0 14px", lineHeight: 1.5 }}>
             Klicke auf den Button unten. SEB öffnet sich automatisch und du kannst dich einloggen.
           </p>
-          <a href="sebs://quicktest.lovable.app/?role=student"
+          <a href="sebs://quickest.lovable.app/?role=student"
             style={{ display: "block", width: "100%", padding: "14px", background: "#7c3aed", color: "#fff", borderRadius: "10px", fontWeight: 700, fontSize: "15px", textDecoration: "none", boxSizing: "border-box", textAlign: "center" }}>
             🔒 Safe Exam Browser starten
           </a>
