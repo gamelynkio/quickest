@@ -20,7 +20,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
         .select("*, assignments(title)")
         .eq("username", currentUser.username)
         .order("submitted_at", { ascending: false }),
-      // Load all makeup assignments to detect if student covered a parent via makeup
       supabase.from("assignments").select("id, parent_assignment_id")
         .eq("group_id", currentUser.group_id)
         .not("parent_assignment_id", "is", null),
@@ -28,21 +27,18 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
     setAssignments(asgn || []);
     setSubmissions(subs || []);
-    // Store all makeup assignments for coverage detection
     setAllMakeupAssignments(allMakeups || []);
     setLoading(false);
   };
 
   const submittedIds = new Set(submissions.map(s => String(s.assignment_id)));
 
-  // Find parent IDs covered by a submitted makeup test
   const coveredByMakeup = new Set(
     allMakeupAssignments
       .filter(a => submittedIds.has(String(a.id)))
       .map(a => String(a.parent_assignment_id))
   );
 
-  // Filter assignments at render time using loaded submissions
   const visibleAssignments = assignments.filter(a => {
     if (submittedIds.has(String(a.id))) return false;
     if (coveredByMakeup.has(String(a.id))) return false;
@@ -53,14 +49,11 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     return true;
   });
 
-  // Lobby tests waiting for teacher to start
   const lobbyWaiting = visibleAssignments.filter(a =>
-    !submittedIds.has(String(a.id)) && a.timing_mode === "lobby" && !a.lobby_started_at
+    a.timing_mode === "lobby" && !a.lobby_started_at
   );
 
-  // Tests the student can start right now
   const active = visibleAssignments.filter(a => {
-    if (submittedIds.has(String(a.id))) return false;
     if (a.timing_mode === "lobby") return !!a.lobby_started_at;
     if (a.timing_mode === "window") {
       if (!a.window_date || !a.window_start || !a.window_end) return false;
@@ -69,13 +62,11 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
       const end = new Date(`${a.window_date}T${a.window_end}`);
       return now >= start && now <= end;
     }
-    return true; // countdown
+    return true;
   });
 
-  // Tests coming up but not yet open (window not started)
   const upcoming = visibleAssignments.filter(a => {
-    if (submittedIds.has(String(a.id))) return false;
-    if (a.timing_mode === "lobby" && !a.lobby_started_at) return false; // shown in lobbyWaiting
+    if (a.timing_mode === "lobby" && !a.lobby_started_at) return false;
     if (a.timing_mode === "window" && a.window_date) {
       const start = new Date(`${a.window_date}T${a.window_start}`);
       return new Date() < start;
@@ -103,9 +94,9 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
         <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "20px", textAlign: "left" }}>
           <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "10px" }}>So geht's:</div>
           <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#64748b", lineHeight: 2 }}>
-            <li>Installiere die <strong>Safe Exam Browser</strong> App</li>
-            <li>Lade die SEB-Konfigurationsdatei herunter</li>
-            <li>Öffne die Datei → SEB startet automatisch</li>
+            <li>Installiere die <strong>Safe Exam Browser</strong> App (einmalig)</li>
+            <li>Klicke auf „Safe Exam Browser starten" — SEB öffnet sich automatisch</li>
+            <li>Logge dich ein und starte den Test</li>
           </ol>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
@@ -148,7 +139,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 50%, #1e3a5f 100%)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px 16px 40px" }}>
       <div style={{ maxWidth: "500px", margin: "0 auto" }}>
 
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px", paddingTop: "8px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "26px" }}>⚡</span>
@@ -166,7 +156,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
           <div style={{ textAlign: "center", color: "rgba(255,255,255,0.6)", padding: "48px" }}>Wird geladen...</div>
         ) : (
           <>
-            {/* LOBBY WAITING */}
             {lobbyWaiting.length > 0 && (
               <Section title="WARTERAUM" icon="🎮" color="#6d28d9" count={lobbyWaiting.length}>
                 {lobbyWaiting.map(a => (
@@ -181,7 +170,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
               </Section>
             )}
 
-            {/* ACTIVE TESTS */}
             {active.length > 0 && (
               <Section title="JETZT VERFÜGBAR" icon="✅" color="#16a34a" count={active.length}>
                 {active.map(a => (
@@ -199,7 +187,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
               </Section>
             )}
 
-            {/* UPCOMING */}
             {upcoming.length > 0 && (
               <Section title="BALD VERFÜGBAR" icon="📅" color="#ca8a04" count={upcoming.length}>
                 {upcoming.map(a => (
@@ -211,7 +198,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
               </Section>
             )}
 
-            {/* EMPTY STATE */}
             {lobbyWaiting.length === 0 && active.length === 0 && upcoming.length === 0 && submissions.length === 0 && (
               <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: "16px", padding: "48px 24px", textAlign: "center", marginBottom: "24px" }}>
                 <div style={{ fontSize: "48px", marginBottom: "12px" }}>📭</div>
@@ -220,7 +206,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
               </div>
             )}
 
-            {/* COMPLETED */}
             {submissions.length > 0 && (
               <Section title="ABSOLVIERT" icon="📋" color="#2563a8" count={submissions.length}>
                 {submissions.map(s => {
