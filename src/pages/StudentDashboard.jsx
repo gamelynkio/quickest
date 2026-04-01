@@ -105,7 +105,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
           <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
             style={{ padding: "10px", background: "#0078d4", color: "#fff", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 600 }}>🪟 Windows / macOS</a>
         </div>
-        <a href="/quicktest.seb"
+        <a href="seb://quicktest.lovable.app?role=student"
           style={{ display: "block", padding: "14px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "14px", textDecoration: "none", marginBottom: "10px" }}>
           🔒 Safe Exam Browser starten
         </a>
