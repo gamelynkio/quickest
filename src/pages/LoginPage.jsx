@@ -52,10 +52,13 @@ export default function LoginPage({ onLogin }) {
             🪟 Windows / macOS
           </a>
         </div>
-        <a href="/quicktest.seb"
-          style={{ display: "block", width: "100%", padding: "16px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "16px", textDecoration: "none", boxSizing: "border-box" }}>
+        <a href="seb://quicktest.lovable.app?role=student"
+          style={{ display: "block", width: "100%", padding: "16px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "16px", textDecoration: "none", boxSizing: "border-box", marginBottom: "10px" }}>
           🔒 Safe Exam Browser starten
         </a>
+        <p style={{ color: "#94a3b8", fontSize: "12px", margin: "0 0 16px" }}>
+          SEB noch nicht installiert? Installiere es zuerst über die Links oben, dann klicke erneut.
+        </p>
       </div>
     </div>
   );
