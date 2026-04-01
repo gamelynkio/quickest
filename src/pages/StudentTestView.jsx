@@ -445,7 +445,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
           </a>
         </div>
 
-        <a href="/quicktest.seb"
+        <a href="seb://quicktest.lovable.app?role=student"
           style={{ display: "block", width: "100%", padding: "14px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "15px", cursor: "pointer", textAlign: "center", textDecoration: "none", marginBottom: "12px", boxSizing: "border-box" }}>
           🔒 Safe Exam Browser starten
         </a>
