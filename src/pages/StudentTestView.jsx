@@ -469,13 +469,22 @@ export default function StudentTestView({ currentUser, onFinish }) {
     </div>
   );
 
+  const handleFinish = () => {
+    const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
+    if (isSEB) {
+      window.location.href = "https://quickest.lovable.app/seb-quit.html";
+    } else {
+      onFinish();
+    }
+  };
+
   if (submitted) return (
     <div style={S.center}>
       <div style={S.card}>
         <div style={{ fontSize: "72px", marginBottom: "16px" }}>✅</div>
         <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Test abgegeben!</h2>
         <p style={{ color: "#64748b", marginBottom: "28px", fontSize: "15px", lineHeight: 1.5 }}>Deine Antworten wurden gespeichert. Deine Lehrkraft wird das Ergebnis bald veröffentlichen.</p>
-        <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Fertig</button>
+        <button onClick={handleFinish} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Fertig</button>
       </div>
     </div>
   );
