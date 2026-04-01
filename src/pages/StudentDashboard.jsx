@@ -114,9 +114,9 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
           <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
             style={{ padding: "10px", background: "#0078d4", color: "#fff", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 600 }}>🪟 Windows / macOS</a>
         </div>
-        <a href="/quicktest.seb" download="quicktest.seb"
+        <a href="/quicktest.seb"
           style={{ display: "block", padding: "14px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "14px", textDecoration: "none", marginBottom: "10px" }}>
-          📥 SEB-Konfigurationsdatei herunterladen
+          🔒 Safe Exam Browser starten
         </a>
         <button onClick={() => setSebBlockedAssignment(null)}
           style={{ width: "100%", padding: "12px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
@@ -125,8 +125,13 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
       </div>
     </div>
   );
+    const mins = Math.round((a.time_limit || 0) / 60);
+    if (a.timing_mode === "window" && a.window_date)
+      return `${new Date(a.window_date).toLocaleDateString("de-DE")} · ${a.window_start}–${a.window_end} Uhr`;
+    return mins > 0 ? `${mins} Min.` : "";
+  };
 
-  const getTimeInfo = (a) => {
+  const timeLabel = (a) => {
     const mins = Math.round((a.time_limit || 0) / 60);
     if (a.timing_mode === "window" && a.window_date)
       return `${new Date(a.window_date).toLocaleDateString("de-DE")} · ${a.window_start}–${a.window_end} Uhr`;
