@@ -420,10 +420,9 @@ export default function StudentTestView({ currentUser, onFinish }) {
         <div style={{ background: "#f8fafc", borderRadius: "14px", padding: "18px", marginBottom: "20px", textAlign: "left" }}>
           <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "12px" }}>📱 So geht's:</div>
           <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#64748b", lineHeight: 2 }}>
-            <li>Installiere die <strong>Safe Exam Browser</strong> App</li>
-            <li>Öffne nach der Installation diesen Link erneut</li>
-            <li>Tippe unten auf „SEB-Datei herunterladen"</li>
-            <li>Öffne die heruntergeladene Datei → SEB startet automatisch</li>
+            <li>Installiere die <strong>Safe Exam Browser</strong> App (einmalig)</li>
+            <li>Klicke auf „Safe Exam Browser starten" — SEB öffnet sich automatisch</li>
+            <li>Logge dich in SEB ein und starte den Test</li>
           </ol>
         </div>
 
@@ -446,9 +445,9 @@ export default function StudentTestView({ currentUser, onFinish }) {
           </a>
         </div>
 
-        <a href="/quicktest.seb" download="quicktest.seb"
+        <a href="/quicktest.seb"
           style={{ display: "block", width: "100%", padding: "14px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "15px", cursor: "pointer", textAlign: "center", textDecoration: "none", marginBottom: "12px", boxSizing: "border-box" }}>
-          📥 SEB-Konfigurationsdatei herunterladen
+          🔒 Safe Exam Browser starten
         </a>
 
         <button onClick={() => onFinish()} style={{ width: "100%", padding: "12px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
