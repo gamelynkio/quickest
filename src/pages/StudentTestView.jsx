@@ -66,7 +66,7 @@ const calcGrade = (score, totalPoints, gradingScale) => {
   return "6";
 };
 
-export default function StudentTestView({ currentUser, onFinish }) {
+export default function StudentTestView({ currentUser, assignment: assignmentProp, onFinish }) {
   const [assignment, setAssignment] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -85,11 +85,14 @@ export default function StudentTestView({ currentUser, onFinish }) {
   const cheatLogRef = useRef([]);
   const submissionIdRef = useRef(null);
 
-  useEffect(() => { fetchAssignment(); }, []);
+  useEffect(() => { fetchAssignment(assignmentProp || null); }, []);
 
-  const fetchAssignment = async () => {
+  const fetchAssignment = async (preloaded = null) => {
     setLoading(true);
-    const { data } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
+    const data = preloaded || await (async () => {
+      const { data } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
+      return data;
+    })();
     if (data) {
       // Check if SEB is required but not active
       // SEB identifies itself via the User-Agent string
