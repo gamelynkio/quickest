@@ -125,11 +125,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
       </div>
     </div>
   );
-    const mins = Math.round((a.time_limit || 0) / 60);
-    if (a.timing_mode === "window" && a.window_date)
-      return `${new Date(a.window_date).toLocaleDateString("de-DE")} · ${a.window_start}–${a.window_end} Uhr`;
-    return mins > 0 ? `${mins} Min.` : "";
-  };
 
   const timeLabel = (a) => {
     const mins = Math.round((a.time_limit || 0) / 60);
