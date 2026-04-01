@@ -12,6 +12,53 @@ export default function LoginPage({ onLogin }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sebRequired, setSebRequired] = useState(false);
+  const [sebChecked, setSebChecked] = useState(false);
+
+  useEffect(() => {
+    if (role !== "student") { setSebChecked(true); return; }
+    const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
+    if (isSEB) { setSebChecked(true); return; }
+    supabase.from("assignments").select("require_seb").eq("status", "aktiv").eq("require_seb", true).limit(1)
+      .then(({ data }) => {
+        setSebRequired((data || []).length > 0);
+        setSebChecked(true);
+      });
+  }, [role]);
+
+  if (role === "student" && sebChecked && sebRequired) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px" }}>
+      <div style={{ background: "#fff", borderRadius: "24px", padding: "40px 32px", maxWidth: "480px", width: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: "64px", marginBottom: "16px" }}>🔒</div>
+        <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Safe Exam Browser erforderlich</h2>
+        <p style={{ color: "#64748b", marginBottom: "24px", fontSize: "14px", lineHeight: 1.6 }}>
+          Dieser Test muss mit dem <strong>Safe Exam Browser</strong> geöffnet werden. Er verhindert Autokorrektur, Tab-Wechsel und andere Apps.
+        </p>
+        <div style={{ background: "#f8fafc", borderRadius: "14px", padding: "18px", marginBottom: "20px", textAlign: "left" }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "12px" }}>📱 So geht's:</div>
+          <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#64748b", lineHeight: 2 }}>
+            <li>Installiere die <strong>Safe Exam Browser</strong> App (einmalig)</li>
+            <li>Klicke auf „Safe Exam Browser starten" — SEB öffnet sich automatisch</li>
+            <li>Logge dich ein und starte den Test</li>
+          </ol>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+          <a href="https://apps.apple.com/app/safe-exam-browser/id1587573560" target="_blank" rel="noreferrer"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", background: "#000", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+            🍎 App Store (iOS)
+          </a>
+          <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", background: "#0078d4", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
+            🪟 Windows / macOS
+          </a>
+        </div>
+        <a href="/quicktest.seb"
+          style={{ display: "block", width: "100%", padding: "16px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "16px", textDecoration: "none", boxSizing: "border-box" }}>
+          🔒 Safe Exam Browser starten
+        </a>
+      </div>
+    </div>
+  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
