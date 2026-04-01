@@ -358,10 +358,20 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
               </div>
             </div>
 
-            <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", marginBottom: "24px" }}>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", marginBottom: "8px" }}>
               <input type="checkbox" checked={makeupAntiCheat} onChange={e => setMakeupAntiCheat(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
               🛡️ Anti-Cheat aktivieren
             </label>
+
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", marginBottom: makeupRequireSeb ? "8px" : "24px" }}>
+              <input type="checkbox" checked={makeupRequireSeb ?? true} onChange={e => setMakeupRequireSeb?.(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#7c3aed", marginTop: "1px", flexShrink: 0 }} />
+              <div>🔒 Safe Exam Browser erforderlich</div>
+            </label>
+            {(makeupRequireSeb ?? true) && (
+              <div style={{ marginBottom: "24px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", padding: "12px 14px", fontSize: "13px", color: "#92400e", lineHeight: 1.5 }}>
+                <strong>⚠️ Hinweis:</strong> SEB ist für Android nicht verfügbar. Schüler mit Android-Geräten können die Systemtastatur mit Autokorrektur weiterhin nutzen.
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: "10px" }}>
               <button onClick={() => setMakeupModal(false)} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
