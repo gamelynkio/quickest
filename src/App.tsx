@@ -57,7 +57,10 @@ export default function App() {
     setStudentPage("dashboard");
   };
 
-  const handleStudentStartTest = () => {
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
+
+  const handleStudentStartTest = (assignment) => {
+    setSelectedAssignment(assignment);
     setStudentPage("test");
   };
 
@@ -90,7 +93,7 @@ export default function App() {
   // Student flow
   if (studentUser) {
     if (studentPage === "test") {
-      return <StudentTestView currentUser={studentUser} onFinish={handleStudentFinish} />;
+      return <StudentTestView currentUser={studentUser} assignment={selectedAssignment} onFinish={handleStudentFinish} />;
     }
     return <StudentDashboard currentUser={studentUser} onStartTest={handleStudentStartTest} onLogout={handleLogout} />;
   }
