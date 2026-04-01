@@ -427,7 +427,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
-          <a href="https://apps.apple.com/app/safe-exam-browser/id1587573560" target="_blank" rel="noreferrer"
+          <a href="https://apps.apple.com/us/app/safeexambrowser/id1155002964" target="_blank" rel="noreferrer"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#000", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
             🍎 App Store (iOS)
           </a>
@@ -445,7 +445,7 @@ export default function StudentTestView({ currentUser, onFinish }) {
           </a>
         </div>
 
-        <a href="seb://quicktest.lovable.app?role=student"
+        <a href="sebs://quicktest.lovable.app/?role=student"
           style={{ display: "block", width: "100%", padding: "14px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "15px", cursor: "pointer", textAlign: "center", textDecoration: "none", marginBottom: "12px", boxSizing: "border-box" }}>
           🔒 Safe Exam Browser starten
         </a>
