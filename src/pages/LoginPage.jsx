@@ -31,33 +31,42 @@ export default function LoginPage({ onLogin }) {
       <div style={{ background: "#fff", borderRadius: "24px", padding: "40px 32px", maxWidth: "480px", width: "100%", textAlign: "center" }}>
         <div style={{ fontSize: "64px", marginBottom: "16px" }}>🔒</div>
         <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Safe Exam Browser erforderlich</h2>
-        <p style={{ color: "#64748b", marginBottom: "24px", fontSize: "14px", lineHeight: 1.6 }}>
-          Dieser Test muss mit dem <strong>Safe Exam Browser</strong> geöffnet werden. Er verhindert Autokorrektur, Tab-Wechsel und andere Apps.
+        <p style={{ color: "#64748b", marginBottom: "28px", fontSize: "14px", lineHeight: 1.6 }}>
+          Dieser Test kann nur mit dem <strong>Safe Exam Browser (SEB)</strong> geöffnet werden. SEB verhindert Autokorrektur, Tab-Wechsel und andere Apps während der Prüfung.
         </p>
-        <div style={{ background: "#f8fafc", borderRadius: "14px", padding: "18px", marginBottom: "20px", textAlign: "left" }}>
-          <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "12px" }}>📱 So geht's:</div>
-          <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#64748b", lineHeight: 2 }}>
-            <li>Installiere die <strong>Safe Exam Browser</strong> App (einmalig)</li>
-            <li>Klicke auf „Safe Exam Browser starten" — SEB öffnet sich automatisch</li>
-            <li>Logge dich ein und starte den Test</li>
-          </ol>
+
+        {/* Schritt 1 */}
+        <div style={{ background: "#f0f7ff", borderRadius: "14px", padding: "18px 20px", marginBottom: "14px", textAlign: "left", border: "1px solid #bfdbfe" }}>
+          <div style={{ fontSize: "13px", fontWeight: 800, color: "#1e40af", marginBottom: "10px" }}>Schritt 1 — Safe Exam Browser installieren</div>
+          <p style={{ fontSize: "13px", color: "#374151", margin: "0 0 12px", lineHeight: 1.5 }}>
+            Installiere die kostenlose SEB-App auf deinem Gerät (nur einmalig nötig):
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            <a href="https://apps.apple.com/app/safe-exam-browser/id1587573560" target="_blank" rel="noreferrer"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "10px", background: "#000", color: "#fff", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 600 }}>
+              🍎 App Store (iPhone/iPad)
+            </a>
+            <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "10px", background: "#0078d4", color: "#fff", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 600 }}>
+              🪟 Windows / macOS
+            </a>
+          </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
-          <a href="https://apps.apple.com/app/safe-exam-browser/id1587573560" target="_blank" rel="noreferrer"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", background: "#000", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
-            🍎 App Store (iOS)
-          </a>
-          <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", background: "#0078d4", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
-            🪟 Windows / macOS
+
+        {/* Schritt 2 */}
+        <div style={{ background: "#f5f3ff", borderRadius: "14px", padding: "18px 20px", marginBottom: "20px", textAlign: "left", border: "1px solid #e9d5ff" }}>
+          <div style={{ fontSize: "13px", fontWeight: 800, color: "#6d28d9", marginBottom: "10px" }}>Schritt 2 — Safe Exam Browser starten</div>
+          <p style={{ fontSize: "13px", color: "#374151", margin: "0 0 14px", lineHeight: 1.5 }}>
+            Klicke auf den Button unten. SEB öffnet sich automatisch und du kannst dich einloggen.
+          </p>
+          <a href="seb://quicktest.lovable.app?role=student"
+            style={{ display: "block", width: "100%", padding: "14px", background: "#7c3aed", color: "#fff", borderRadius: "10px", fontWeight: 700, fontSize: "15px", textDecoration: "none", boxSizing: "border-box", textAlign: "center" }}>
+            🔒 Safe Exam Browser starten
           </a>
         </div>
-        <a href="seb://quicktest.lovable.app?role=student"
-          style={{ display: "block", width: "100%", padding: "16px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "16px", textDecoration: "none", boxSizing: "border-box", marginBottom: "10px" }}>
-          🔒 Safe Exam Browser starten
-        </a>
-        <p style={{ color: "#94a3b8", fontSize: "12px", margin: "0 0 16px" }}>
-          SEB noch nicht installiert? Installiere es zuerst über die Links oben, dann klicke erneut.
+
+        <p style={{ color: "#94a3b8", fontSize: "12px", margin: 0, lineHeight: 1.5 }}>
+          Der Button funktioniert nur wenn SEB bereits installiert ist. Installiere zuerst die App aus Schritt 1.
         </p>
       </div>
     </div>
