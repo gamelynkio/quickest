@@ -103,7 +103,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   };
 
   const appUrl = "https://quickest.lovable.app?role=student";
-  const sebUrl = "seb://quickest.lovable.app?role=student";
+  const sebUrl = "sebs://quickest.lovable.app/?role=student";
   const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   // Auto-refresh lobby students every 1 second when modal is open
