@@ -1,0 +1,1 @@
+CREATE POLICY "Anyone can read shared templates" ON templates FOR SELECT USING (share_token IS NOT NULL);
