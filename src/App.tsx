@@ -8,6 +8,7 @@ import StudentTestView from "./pages/StudentTestView";
 import StudentDashboard from "./pages/StudentDashboard";
 import GroupManager from "./pages/GroupManager";
 import ResultsView from "./pages/ResultsView";
+import SharePage from "./pages/SharePage";
 
 export default function App() {
   const [session, setSession] = useState(undefined);
@@ -79,6 +80,15 @@ export default function App() {
       setProfile(null);
     }
   };
+
+  // Check for share route: /share/[token]
+  const shareMatch = window.location.pathname.match(/^\/share\/([a-zA-Z0-9]+)$/);
+  if (shareMatch) {
+    return <SharePage token={shareMatch[1]} currentUser={profile} onImported={() => {
+      window.history.pushState({}, "", "/");
+      navigate("library");
+    }} />;
+  }
 
   if (session === undefined) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
