@@ -286,6 +286,7 @@ export type Database = {
           grading_scale: Json
           id: number
           question_data: Json
+          share_active: boolean | null
           share_password: string | null
           share_token: string | null
           subject: string | null
@@ -301,6 +302,7 @@ export type Database = {
           grading_scale?: Json
           id?: number
           question_data?: Json
+          share_active?: boolean | null
           share_password?: string | null
           share_token?: string | null
           subject?: string | null
@@ -316,6 +318,7 @@ export type Database = {
           grading_scale?: Json
           id?: number
           question_data?: Json
+          share_active?: boolean | null
           share_password?: string | null
           share_token?: string | null
           subject?: string | null
