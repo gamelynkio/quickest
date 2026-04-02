@@ -95,7 +95,7 @@ export default function LoginPage({ onLogin }) {
           });
           if (error) { setError(error.message); return; }
           setIsRegister(false);
-          setError("Registrierung erfolgreich! Bitte bestätige deine E-Mail-Adresse, dann kannst du dich einloggen.");
+          setError("Registrierung erfolgreich! Falls du eine Bestätigungsmail erhältst, klicke bitte auf den Link darin. Falls nicht, ist diese E-Mail-Adresse möglicherweise bereits registriert — versuche dich direkt einzuloggen.");
           return;
         }
         const { error } = await supabase.auth.signInWithPassword({ email: username, password });
