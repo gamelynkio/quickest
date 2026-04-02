@@ -72,9 +72,20 @@ export default function LoginPage({ onLogin }) {
     </div>
   );
 
+  const [emailNotConfirmed, setEmailNotConfirmed] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
+
+  const handleResendConfirmation = async () => {
+    setResendLoading(true);
+    const { error } = await supabase.auth.resend({ type: "signup", email: username });
+    setResendLoading(false);
+    if (!error) setResendSuccess(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(""); setLoading(true);
+    setError(""); setEmailNotConfirmed(false); setResendSuccess(false); setLoading(true);
     try {
       if (role === "teacher") {
         if (isRegister) {
@@ -84,11 +95,18 @@ export default function LoginPage({ onLogin }) {
           });
           if (error) { setError(error.message); return; }
           setIsRegister(false);
-          setError("Registrierung erfolgreich! Bitte jetzt einloggen.");
+          setError("Registrierung erfolgreich! Bitte bestätige deine E-Mail-Adresse, dann kannst du dich einloggen.");
           return;
         }
         const { error } = await supabase.auth.signInWithPassword({ email: username, password });
-        if (error) { setError("E-Mail oder Passwort falsch."); return; }
+        if (error) {
+          if (error.message.includes("Email not confirmed") || error.message.includes("email_not_confirmed")) {
+            setEmailNotConfirmed(true);
+          } else {
+            setError("E-Mail oder Passwort falsch.");
+          }
+          return;
+        }
         // App.tsx handles redirect via onAuthStateChange
       } else {
         const { data, error } = await supabase
@@ -154,6 +172,21 @@ export default function LoginPage({ onLogin }) {
               <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                 placeholder={role === "teacher" ? "Mind. 6 Zeichen" : "PIN eingeben"} required style={inputStyle} />
             </div>
+
+            {emailNotConfirmed && (
+              <div style={{ background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "8px", padding: "12px 14px", marginBottom: "16px", fontSize: "13px", color: "#92400e" }}>
+                <div style={{ fontWeight: 700, marginBottom: "6px" }}>📧 E-Mail-Adresse nicht bestätigt</div>
+                <div style={{ marginBottom: "10px" }}>Bitte klicke auf den Bestätigungslink in der E-Mail die wir dir geschickt haben.</div>
+                {resendSuccess ? (
+                  <div style={{ color: "#16a34a", fontWeight: 600 }}>✓ E-Mail wurde erneut gesendet!</div>
+                ) : (
+                  <button onClick={handleResendConfirmation} disabled={resendLoading}
+                    style={{ background: "#92400e", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                    {resendLoading ? "Wird gesendet..." : "Bestätigungsmail erneut senden"}
+                  </button>
+                )}
+              </div>
+            )}
 
             {error && (
               <div style={{ background: error.includes("erfolgreich") ? "#dcfce7" : "#fef2f2", border: `1px solid ${error.includes("erfolgreich") ? "#bbf7d0" : "#fecaca"}`, borderRadius: "8px", padding: "10px 14px", marginBottom: "16px", fontSize: "13px", color: error.includes("erfolgreich") ? "#16a34a" : "#dc2626" }}>
