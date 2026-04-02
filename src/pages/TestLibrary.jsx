@@ -61,12 +61,21 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
     const { error } = await supabase.from("templates").update({
       share_token: token,
       share_password: sharePassword || null,
+      share_active: true,
     }).eq("id", shareModal.id);
     if (!error) {
       const link = `https://quickest.lovable.app/share/${token}`;
       setShareLink(link);
-      setTemplates(prev => prev.map(t => t.id === shareModal.id ? { ...t, share_token: token } : t));
+      setTemplates(prev => prev.map(t => t.id === shareModal.id ? { ...t, share_token: token, share_active: true } : t));
     }
+  };
+
+  const deactivateShareLink = async () => {
+    if (!shareModal) return;
+    await supabase.from("templates").update({ share_active: false }).eq("id", shareModal.id);
+    setShareLink("");
+    setTemplates(prev => prev.map(t => t.id === shareModal.id ? { ...t, share_active: false } : t));
+    setShareModal(prev => ({ ...prev, share_active: false }));
   };
 
   const copyShareLink = () => {
@@ -192,7 +201,11 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                       👥 Zuweisen
                     </button>
                     <button onClick={() => navigate("testEditor", template)} style={{ padding: "8px 12px", background: "#f8fafc", color: "#374151", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>✏️</button>
-                    <button onClick={() => { setShareModal(template); setSharePassword(""); setShareLink(template.share_token ? `https://quickest.lovable.app/share/${template.share_token}` : ""); }} style={{ padding: "8px 12px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>🔗</button>
+                    <button onClick={() => {
+                      setShareModal(template);
+                      setSharePassword("");
+                      setShareLink(template.share_token && template.share_active ? `https://quickest.lovable.app/share/${template.share_token}` : "");
+                    }} style={{ padding: "8px 12px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>🔗</button>
                     <button onClick={() => setDeleteConfirm(template.id)} style={{ padding: "8px 12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>🗑</button>
                   </div>
                 </div>
@@ -365,23 +378,25 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
 
             <button onClick={generateShareLink}
               style={{ width: "100%", padding: "12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer", marginBottom: "16px" }}>
-              🔗 Link generieren
+              🔗 {shareModal.share_active ? "Neuen Link generieren" : "Link generieren"}
             </button>
 
-            {shareLink && (
+            {(shareLink || shareModal.share_active) && (
               <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "14px", marginBottom: "16px" }}>
-                <div style={{ fontSize: "12px", fontWeight: 600, color: "#16a34a", marginBottom: "8px" }}>✅ Link erstellt:</div>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <input readOnly value={shareLink}
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "#16a34a", marginBottom: "8px" }}>✅ Link aktiv:</div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
+                  <input readOnly value={shareLink || `https://quickest.lovable.app/share/${shareModal.share_token}`}
                     style={{ flex: 1, padding: "8px 10px", border: "1px solid #bbf7d0", borderRadius: "6px", fontSize: "12px", background: "#fff", fontFamily: "monospace", color: "#374151" }} />
                   <button onClick={copyShareLink}
                     style={{ padding: "8px 12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
                     Kopieren
                   </button>
                 </div>
-                {sharePassword && (
-                  <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px" }}>🔒 Passwortgeschützt — teile das Passwort separat mit.</div>
-                )}
+                {sharePassword && <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>🔒 Passwortgeschützt</div>}
+                <button onClick={deactivateShareLink}
+                  style={{ width: "100%", padding: "8px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                  🔗 Teilen deaktivieren
+                </button>
               </div>
             )}
 
