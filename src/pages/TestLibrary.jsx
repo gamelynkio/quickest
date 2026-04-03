@@ -131,7 +131,10 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
             <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: 0 }}>Test-Vorlagen</h1>
             <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>Erstelle wiederverwendbare Tests und weise sie beliebigen Lerngruppen zu.</p>
           </div>
-          <button onClick={() => navigate("testEditor", null)} style={{ padding: "10px 20px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>✏️ Neue Vorlage</button>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={() => navigate("share")} style={{ padding: "10px 16px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📥 Code importieren</button>
+            <button onClick={() => navigate("testEditor", null)} style={{ padding: "10px 20px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>✏️ Neue Vorlage</button>
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: "12px", marginBottom: "24px" }}>
@@ -393,6 +396,10 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                   </button>
                 </div>
                 {sharePassword && <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>🔒 Passwortgeschützt</div>}
+                <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "10px 12px", marginBottom: "8px", fontSize: "12px", color: "#1e40af" }}>
+                  <strong>Freigabe-Code:</strong> <span style={{ fontFamily: "monospace", letterSpacing: "1px" }}>{shareModal.share_token}</span>
+                  <div style={{ color: "#64748b", marginTop: "2px" }}>Lehrer können diesen Code auch direkt in ihrer Bibliothek eingeben.</div>
+                </div>
                 <button onClick={deactivateShareLink}
                   style={{ width: "100%", padding: "8px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
                   🔗 Teilen deaktivieren
