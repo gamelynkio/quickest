@@ -9,53 +9,109 @@ export default function SharePage({ token, currentUser, onImported }) {
   const [passwordError, setPasswordError] = useState("");
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(false);
+  const [alreadyImported, setAlreadyImported] = useState(false);
   const [error, setError] = useState("");
+  const [importCode, setImportCode] = useState("");
+  const [importCodeInput, setImportCodeInput] = useState("");
+  const [importCodeError, setImportCodeError] = useState("");
+  const [importCodeLoading, setImportCodeLoading] = useState(false);
 
-  useEffect(() => { fetchTemplate(); }, [token]);
+  useEffect(() => { if (token) fetchTemplate(); else setLoading(false); }, [token]);
 
   const fetchTemplate = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("templates")
-      .select("id, title, description, subject, grade_level, time_limit, question_data, grading_scale, share_password")
+      .select("id, title, description, subject, grade_level, time_limit, question_data, grading_scale, share_password, share_token")
       .eq("share_token", token)
       .eq("share_active", true)
       .single();
-    if (error || !data) {
-      setError("Dieser Link ist ungültig oder abgelaufen.");
-      setLoading(false);
-      return;
-    }
+    if (error || !data) { setError("Dieser Link ist ungültig oder abgelaufen."); setLoading(false); return; }
     setPasswordRequired(!!data.share_password);
     setTemplate(data);
+    // Check if already imported
+    if (currentUser) {
+      const { data: existing } = await supabase.from("templates")
+        .select("id").eq("teacher_id", currentUser.id).eq("title", data.title).limit(1);
+      if (existing?.length > 0) setAlreadyImported(true);
+    }
     setLoading(false);
   };
 
+  const doImport = async (tmpl) => {
+    setImporting(true);
+    const { error } = await supabase.from("templates").insert({
+      teacher_id: currentUser.id,
+      title: tmpl.title,
+      description: tmpl.description,
+      subject: tmpl.subject,
+      grade_level: tmpl.grade_level,
+      time_limit: tmpl.time_limit,
+      question_data: tmpl.question_data,
+      grading_scale: tmpl.grading_scale,
+      anti_cheat: false,
+    });
+    setImporting(false);
+    if (error) { setError("Fehler beim Importieren."); return false; }
+    return true;
+  };
+
   const handleImport = async () => {
-    if (!template || !currentUser) return;
+    if (!template || !currentUser || importing || imported) return;
     if (passwordRequired) {
       if (!password) { setPasswordError("Bitte Passwort eingeben."); return; }
       if (password !== template.share_password) { setPasswordError("Falsches Passwort."); return; }
     }
-    setImporting(true);
-    const { error } = await supabase.from("templates").insert({
-      teacher_id: currentUser.id,
-      title: template.title,
-      description: template.description,
-      subject: template.subject,
-      grade_level: template.grade_level,
-      time_limit: template.time_limit,
-      question_data: template.question_data,
-      grading_scale: template.grading_scale,
-      anti_cheat: false,
-    });
-    if (error) { setError("Fehler beim Importieren."); setImporting(false); return; }
-    setImported(true);
-    setImporting(false);
+    const ok = await doImport(template);
+    if (ok) setImported(true);
+  };
+
+  const handleImportByCode = async () => {
+    if (!currentUser || !importCodeInput.trim()) return;
+    setImportCodeLoading(true);
+    setImportCodeError("");
+    const { data, error } = await supabase
+      .from("templates")
+      .select("id, title, description, subject, grade_level, time_limit, question_data, grading_scale, share_password, share_token")
+      .eq("share_token", importCodeInput.trim().toLowerCase())
+      .eq("share_active", true)
+      .single();
+    if (error || !data) { setImportCodeError("Ungültiger Code."); setImportCodeLoading(false); return; }
+    if (data.share_password) { setImportCodeError("Dieser Test ist passwortgeschützt — bitte nutze den Link."); setImportCodeLoading(false); return; }
+    const ok = await doImport(data);
+    setImportCodeLoading(false);
+    if (ok) setImported(true);
   };
 
   const mins = Math.round((template?.time_limit || 0) / 60);
   const questionCount = (template?.question_data || []).filter(q => q.type !== "section").length;
+
+  // Import by code only (no token in URL)
+  if (!token) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px" }}>
+      <div style={{ background: "#fff", borderRadius: "24px", padding: "40px 32px", maxWidth: "440px", width: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: "48px", marginBottom: "16px" }}>📥</div>
+        <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Test importieren</h2>
+        <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px" }}>Gib den Freigabe-Code ein den du von einem anderen Lehrer erhalten hast.</p>
+        {imported ? (
+          <div style={{ color: "#16a34a", fontWeight: 700, marginBottom: "20px" }}>✅ Erfolgreich importiert!</div>
+        ) : (
+          <>
+            <input value={importCodeInput} onChange={e => { setImportCodeInput(e.target.value); setImportCodeError(""); }}
+              placeholder="z.B. a3f8b2c1d4e5f6a7"
+              style={{ width: "100%", padding: "12px 14px", border: `2px solid ${importCodeError ? "#fca5a5" : "#e5e7eb"}`, borderRadius: "8px", fontSize: "14px", fontFamily: "monospace", boxSizing: "border-box", marginBottom: "8px" }} />
+            {importCodeError && <div style={{ fontSize: "12px", color: "#dc2626", marginBottom: "8px" }}>{importCodeError}</div>}
+            <button onClick={handleImportByCode} disabled={importCodeLoading || !currentUser}
+              style={{ width: "100%", padding: "13px", background: currentUser ? "#16a34a" : "#e2e8f0", color: currentUser ? "#fff" : "#94a3b8", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", marginBottom: "12px" }}>
+              {importCodeLoading ? "Wird importiert..." : "📥 Importieren"}
+            </button>
+            {!currentUser && <p style={{ fontSize: "12px", color: "#94a3b8" }}>Du musst als Lehrer eingeloggt sein.</p>}
+          </>
+        )}
+        {imported && <button onClick={onImported} style={{ width: "100%", padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, cursor: "pointer" }}>Zur Bibliothek →</button>}
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px" }}>
@@ -90,6 +146,12 @@ export default function SharePage({ token, currentUser, onImported }) {
               {mins > 0 && <span>⏱ {mins} Min.</span>}
             </div>
 
+            {alreadyImported && (
+              <div style={{ background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "10px", padding: "10px 14px", marginBottom: "16px", fontSize: "13px", color: "#92400e" }}>
+                ⚠️ Du hast eine Vorlage mit diesem Namen bereits in deiner Bibliothek.
+              </div>
+            )}
+
             {!currentUser ? (
               <div style={{ background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "12px", padding: "14px", marginBottom: "20px", fontSize: "13px", color: "#92400e" }}>
                 ⚠️ Du musst als Lehrer eingeloggt sein um diese Vorlage zu importieren.
@@ -104,7 +166,7 @@ export default function SharePage({ token, currentUser, onImported }) {
               </div>
             )}
 
-            <button onClick={handleImport} disabled={importing || !currentUser}
+            <button onClick={handleImport} disabled={importing || !currentUser || imported}
               style={{ width: "100%", padding: "14px", background: currentUser ? "#16a34a" : "#e2e8f0", color: currentUser ? "#fff" : "#94a3b8", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "15px", cursor: currentUser ? "pointer" : "not-allowed" }}>
               {importing ? "Wird importiert..." : "📥 In meine Bibliothek importieren"}
             </button>
