@@ -77,7 +77,13 @@ export default function SharePage({ token, currentUser, onImported }) {
       .eq("share_active", true)
       .single();
     if (error || !data) { setImportCodeError("Ungültiger Code."); setImportCodeLoading(false); return; }
-    if (data.share_password) { setImportCodeError("Dieser Test ist passwortgeschützt — bitte nutze den Link."); setImportCodeLoading(false); return; }
+    if (data.share_password) {
+      // Show password prompt for this template
+      setTemplate(data);
+      setPasswordRequired(true);
+      setImportCodeLoading(false);
+      return;
+    }
     const ok = await doImport(data);
     setImportCodeLoading(false);
     if (ok) setImported(true);
@@ -94,7 +100,37 @@ export default function SharePage({ token, currentUser, onImported }) {
         <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Test importieren</h2>
         <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px" }}>Gib den Freigabe-Code ein den du von einem anderen Lehrer erhalten hast.</p>
         {imported ? (
-          <div style={{ color: "#16a34a", fontWeight: 700, marginBottom: "20px" }}>✅ Erfolgreich importiert!</div>
+          <>
+            <div style={{ color: "#16a34a", fontWeight: 700, marginBottom: "20px" }}>✅ Erfolgreich importiert!</div>
+            <button onClick={onImported} style={{ width: "100%", padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, cursor: "pointer" }}>Zur Bibliothek →</button>
+          </>
+        ) : template && passwordRequired ? (
+          // Password prompt after code found
+          <>
+            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "12px 14px", marginBottom: "16px", fontSize: "13px", color: "#16a34a", fontWeight: 600 }}>
+              ✓ Test gefunden: „{template.title}"
+            </div>
+            <div style={{ textAlign: "left", marginBottom: "16px" }}>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>🔒 Passwort erforderlich</label>
+              <input type="password" value={password} onChange={e => { setPassword(e.target.value); setPasswordError(""); }}
+                placeholder="Passwort eingeben"
+                style={{ width: "100%", padding: "10px 14px", border: `2px solid ${passwordError ? "#fca5a5" : "#e5e7eb"}`, borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", boxSizing: "border-box" }} />
+              {passwordError && <div style={{ fontSize: "12px", color: "#dc2626", marginTop: "4px" }}>{passwordError}</div>}
+            </div>
+            <button onClick={async () => {
+              if (!password) { setPasswordError("Bitte Passwort eingeben."); return; }
+              if (password !== template.share_password) { setPasswordError("Falsches Passwort."); return; }
+              const ok = await doImport(template);
+              if (ok) setImported(true);
+            }} disabled={importing}
+              style={{ width: "100%", padding: "13px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", marginBottom: "10px" }}>
+              {importing ? "Wird importiert..." : "📥 Importieren"}
+            </button>
+            <button onClick={() => { setTemplate(null); setPasswordRequired(false); setPassword(""); }}
+              style={{ width: "100%", padding: "10px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>
+              ← Zurück
+            </button>
+          </>
         ) : (
           <>
             <input value={importCodeInput} onChange={e => { setImportCodeInput(e.target.value); setImportCodeError(""); }}
@@ -103,12 +139,11 @@ export default function SharePage({ token, currentUser, onImported }) {
             {importCodeError && <div style={{ fontSize: "12px", color: "#dc2626", marginBottom: "8px" }}>{importCodeError}</div>}
             <button onClick={handleImportByCode} disabled={importCodeLoading || !currentUser}
               style={{ width: "100%", padding: "13px", background: currentUser ? "#16a34a" : "#e2e8f0", color: currentUser ? "#fff" : "#94a3b8", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", marginBottom: "12px" }}>
-              {importCodeLoading ? "Wird importiert..." : "📥 Importieren"}
+              {importCodeLoading ? "Wird gesucht..." : "Weiter →"}
             </button>
             {!currentUser && <p style={{ fontSize: "12px", color: "#94a3b8" }}>Du musst als Lehrer eingeloggt sein.</p>}
           </>
         )}
-        {imported && <button onClick={onImported} style={{ width: "100%", padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, cursor: "pointer" }}>Zur Bibliothek →</button>}
       </div>
     </div>
   );
