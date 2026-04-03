@@ -45,7 +45,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const fetchData = async () => {
     setLoading(true);
     const [{ data: tmpl }, { data: grps }] = await Promise.all([
-      supabase.from("templates").select("*").order("created_at", { ascending: false }),
+      supabase.from("templates").select("*").eq("teacher_id", currentUser?.id).order("created_at", { ascending: false }),
       supabase.from("groups").select("*"),
     ]);
     setTemplates(tmpl || []);
