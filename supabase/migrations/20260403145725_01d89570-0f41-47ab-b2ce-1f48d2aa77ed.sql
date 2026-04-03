@@ -1,0 +1,1 @@
+INSERT INTO storage.buckets (id, name, public) VALUES ('test-media', 'test-media', true);
