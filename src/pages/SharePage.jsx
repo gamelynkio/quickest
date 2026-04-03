@@ -19,6 +19,7 @@ export default function SharePage({ token, currentUser, onImported }) {
       .from("templates")
       .select("id, title, description, subject, grade_level, time_limit, question_data, grading_scale, share_password")
       .eq("share_token", token)
+      .eq("share_active", true)
       .single();
     if (error || !data) {
       setError("Dieser Link ist ungültig oder abgelaufen.");
