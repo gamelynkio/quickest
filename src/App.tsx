@@ -81,10 +81,11 @@ export default function App() {
     }
   };
 
-  // Check for share route: /share/[token]
+  // Check for share route: /share/[token] or /share (code import)
   const shareMatch = window.location.pathname.match(/^\/share\/([a-zA-Z0-9]+)$/);
-  if (shareMatch) {
-    return <SharePage token={shareMatch[1]} currentUser={profile} onImported={() => {
+  const shareCodePage = window.location.pathname === "/share";
+  if (shareMatch || shareCodePage) {
+    return <SharePage token={shareMatch?.[1] || null} currentUser={profile} onImported={() => {
       window.history.pushState({}, "", "/");
       navigate("library");
     }} />;
@@ -115,6 +116,7 @@ export default function App() {
   if (currentPage === "testEditor") return <TestEditor {...teacherNav} editingTest={editingTest} />;
   if (currentPage === "library") return <TestLibrary {...teacherNav} />;
   if (currentPage === "groups") return <GroupManager {...teacherNav} />;
+  if (currentPage === "share") return <SharePage token={null} currentUser={profile} onImported={() => navigate("library")} />;
   if (currentPage === "results") return <ResultsView {...teacherNav} assignment={viewingResults} />;
   return <TeacherDashboard {...teacherNav} />;
 }
