@@ -38,7 +38,14 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const [shareModal, setShareModal] = useState(null);
   const [sharePassword, setSharePassword] = useState("");
   const [shareLink, setShareLink] = useState("");
+  const [copiedWhat, setCopiedWhat] = useState(""); // "link" | "code"
   const [assigning, setAssigning] = useState(false);
+
+  const copyWithFeedback = (text, what) => {
+    navigator.clipboard.writeText(text);
+    setCopiedWhat(what);
+    setTimeout(() => setCopiedWhat(""), 2000);
+  };
 
   useEffect(() => { fetchData(); }, []);
 
@@ -78,9 +85,6 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
     setShareModal(prev => ({ ...prev, share_active: false }));
   };
 
-  const copyShareLink = () => {
-    navigator.clipboard.writeText(shareLink);
-  };
 
   const handleAssign = async () => {
     if (!assignGroupId || !windowValid) return;
@@ -132,7 +136,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
             <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>Erstelle wiederverwendbare Tests und weise sie beliebigen Lerngruppen zu.</p>
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={() => navigate("share")} style={{ padding: "10px 16px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📥 Code importieren</button>
+            <button onClick={() => navigate("share")} style={{ padding: "10px 16px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📥 Test per Share-Code importieren</button>
             <button onClick={() => navigate("testEditor", null)} style={{ padding: "10px 20px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>✏️ Neue Vorlage</button>
           </div>
         </div>
@@ -390,15 +394,22 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
                   <input readOnly value={shareLink || `https://quickest.lovable.app/share/${shareModal.share_token}`}
                     style={{ flex: 1, padding: "8px 10px", border: "1px solid #bbf7d0", borderRadius: "6px", fontSize: "12px", background: "#fff", fontFamily: "monospace", color: "#374151" }} />
-                  <button onClick={copyShareLink}
-                    style={{ padding: "8px 12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
-                    Kopieren
+                  <button onClick={() => copyWithFeedback(shareLink || `https://quickest.lovable.app/share/${shareModal.share_token}`, "link")}
+                    style={{ padding: "8px 12px", background: copiedWhat === "link" ? "#16a34a" : "#2563a8", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer", flexShrink: 0, transition: "background 0.2s" }}>
+                    {copiedWhat === "link" ? "✓ Kopiert!" : "Kopieren"}
                   </button>
                 </div>
                 {sharePassword && <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>🔒 Passwortgeschützt</div>}
                 <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "10px 12px", marginBottom: "8px", fontSize: "12px", color: "#1e40af" }}>
-                  <strong>Freigabe-Code:</strong> <span style={{ fontFamily: "monospace", letterSpacing: "1px" }}>{shareModal.share_token}</span>
-                  <div style={{ color: "#64748b", marginTop: "2px" }}>Lehrer können diesen Code auch direkt in ihrer Bibliothek eingeben.</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <strong>Freigabe-Code:</strong>
+                    <button onClick={() => copyWithFeedback(shareModal.share_token, "code")}
+                      style={{ padding: "4px 10px", background: copiedWhat === "code" ? "#16a34a" : "#2563a8", color: "#fff", border: "none", borderRadius: "5px", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "background 0.2s" }}>
+                      {copiedWhat === "code" ? "✓ Kopiert!" : "Kopieren"}
+                    </button>
+                  </div>
+                  <span style={{ fontFamily: "monospace", letterSpacing: "1px", fontSize: "13px" }}>{shareModal.share_token}</span>
+                  <div style={{ color: "#64748b", marginTop: "4px" }}>Lehrer können diesen Code auch direkt in ihrer Bibliothek eingeben.</div>
                 </div>
                 <button onClick={deactivateShareLink}
                   style={{ width: "100%", padding: "8px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
