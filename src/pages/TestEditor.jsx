@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import TeacherLayout from "../components/TeacherLayout";
+import RichTextEditor from "../components/RichTextEditor";
 
 const QUESTION_TYPES = [
   { id: "multiple_choice", label: "Multiple Choice", icon: "☑️" },
@@ -208,6 +209,10 @@ Erkenne den Typ automatisch.`;
               {importing ? "⏳ Wird analysiert..." : "📄 Aus Datei importieren"}
               <input type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={handleImport} disabled={importing} />
             </label>
+            <button onClick={() => navigate("testPreview", { ...editingTest, title, description, subject, grade_level: gradeLevel, time_limit: timeLimit * 60, question_data: questions, grading_scale: gradingScale })}
+              style={{ padding: "10px 18px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+              👁 Vorschau
+            </button>
             <button onClick={handleSave} disabled={saving} style={{ padding: "10px 24px", background: saved ? "#16a34a" : "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: saving ? "not-allowed" : "pointer", transition: "background 0.3s" }}>
               {saving ? "Wird gespeichert..." : saved ? "✓ Gespeichert!" : "Vorlage speichern"}
             </button>
@@ -317,10 +322,11 @@ Erkenne den Typ automatisch.`;
                   </div>
                   <div style={{ marginBottom: "12px" }}>
                     <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>📝 Text / Lesetext (optional)</label>
-                    <textarea value={q.sectionText || ""} onChange={e => updateQuestion(q.id, "sectionText", e.target.value)}
+                    <RichTextEditor
+                      value={q.sectionText || ""}
+                      onChange={val => updateQuestion(q.id, "sectionText", val)}
                       placeholder="Füge hier einen Lesetext, Gedicht, Dialog o.ä. ein..."
-                      rows={4}
-                      style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} />
+                    />
                   </div>
                   <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
                     <span style={{ background: "rgba(255,255,255,0.15)", border: "1px dashed rgba(255,255,255,0.4)", borderRadius: "6px", padding: "5px 10px" }}>🎬 Bild / Audio / Video anhängen</span>
