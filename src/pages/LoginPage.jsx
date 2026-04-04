@@ -14,6 +14,9 @@ export default function LoginPage({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [sebRequired, setSebRequired] = useState(false);
   const [sebChecked, setSebChecked] = useState(false);
+  const [emailNotConfirmed, setEmailNotConfirmed] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
 
   useEffect(() => {
     if (role !== "student") { setSebChecked(true); return; }
@@ -25,6 +28,15 @@ export default function LoginPage({ onLogin }) {
         setSebChecked(true);
       });
   }, [role]);
+
+  if (role === "student" && !sebChecked) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)" }}>
+      <div style={{ textAlign: "center", color: "#fff" }}>
+        <div style={{ fontSize: "36px", marginBottom: "12px" }}>⚡</div>
+        <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.7)" }}>Wird geladen...</div>
+      </div>
+    </div>
+  );
 
   if (role === "student" && sebChecked && sebRequired) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px" }}>
@@ -71,10 +83,6 @@ export default function LoginPage({ onLogin }) {
       </div>
     </div>
   );
-
-  const [emailNotConfirmed, setEmailNotConfirmed] = useState(false);
-  const [resendLoading, setResendLoading] = useState(false);
-  const [resendSuccess, setResendSuccess] = useState(false);
 
   const handleResendConfirmation = async () => {
     setResendLoading(true);
