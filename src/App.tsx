@@ -9,6 +9,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import GroupManager from "./pages/GroupManager";
 import ResultsView from "./pages/ResultsView";
 import SharePage from "./pages/SharePage";
+import TestPreview from "./pages/TestPreview";
 
 export default function App() {
   const [session, setSession] = useState(undefined);
@@ -49,6 +50,7 @@ export default function App() {
   const navigate = (page, data = null) => {
     if (page === "testEditor") setEditingTest(data);
     if (page === "results") setViewingResults(data);
+    if (page === "testPreview") setEditingTest(data);
     setCurrentPage(page);
   };
 
@@ -116,6 +118,7 @@ export default function App() {
   if (currentPage === "testEditor") return <TestEditor {...teacherNav} editingTest={editingTest} />;
   if (currentPage === "library") return <TestLibrary {...teacherNav} />;
   if (currentPage === "groups") return <GroupManager {...teacherNav} />;
+  if (currentPage === "testPreview") return <TestPreview {...teacherNav} editingTest={editingTest} questions={editingTest?.question_data || []} />;
   if (currentPage === "share") return <SharePage token={null} currentUser={profile} onImported={() => navigate("library")} />;
   if (currentPage === "results") return <ResultsView {...teacherNav} assignment={viewingResults} />;
   return <TeacherDashboard {...teacherNav} />;
