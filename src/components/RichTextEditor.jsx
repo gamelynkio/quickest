@@ -49,14 +49,41 @@ export default function RichTextEditor({ value, onChange, placeholder = "Text ei
     triggerChange();
   };
 
-  const BtnStyle = (active = false) => ({
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const html = e.clipboardData.getData("text/html");
+    const text = e.clipboardData.getData("text/plain");
+    if (html) {
+      // Parse and clean HTML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      // Remove all style attributes and Office/Word specific elements
+      doc.querySelectorAll("*").forEach(el => {
+        el.removeAttribute("style");
+        el.removeAttribute("class");
+        el.removeAttribute("id");
+        el.removeAttribute("width");
+        el.removeAttribute("height");
+      });
+      // Remove Office XML tags
+      const clean = doc.body.innerHTML
+        .replace(/<o:[^>]*>.*?<\/o:[^>]*>/gi, "")
+        .replace(/<w:[^>]*>.*?<\/w:[^>]*>/gi, "")
+        .replace(/<m:[^>]*>.*?<\/m:[^>]*>/gi, "")
+        .replace(/<!--.*?-->/gs, "");
+      document.execCommand("insertHTML", false, clean);
+    } else {
+      document.execCommand("insertText", false, text);
+    }
+    triggerChange();
+  };
     padding: "5px 8px", border: `1px solid ${active ? "#2563a8" : "#e2e8f0"}`,
     background: active ? "#eff6ff" : "#fff", borderRadius: "5px", cursor: "pointer",
     fontSize: "13px", color: active ? "#2563a8" : "#374151", fontWeight: active ? 700 : 400,
   });
 
   return (
-    <div style={{ border: "2px solid #e5e7eb", borderRadius: "10px", overflow: "hidden" }}>
+    <div style={{ border: "2px solid #e5e7eb", borderRadius: "10px", overflow: "hidden", maxWidth: "100%" }}>
       {/* Toolbar */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", padding: "8px 10px", background: "#f8fafc", borderBottom: "1px solid #e5e7eb", alignItems: "center" }}>
         {/* Text style */}
@@ -107,19 +134,23 @@ export default function RichTextEditor({ value, onChange, placeholder = "Text ei
         contentEditable
         suppressContentEditableWarning
         onInput={triggerChange}
+        onPaste={handlePaste}
         data-placeholder={placeholder}
         style={{
           minHeight: "140px", padding: "14px 16px", fontSize: "15px", lineHeight: 1.7,
           outline: "none", color: "#1e293b", background: "#fff",
-          wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden",
+          wordBreak: "break-word", overflowWrap: "break-word",
+          maxWidth: "100%", boxSizing: "border-box",
         }}
       />
 
       <style>{`
         [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; }
-        [contenteditable] img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+        [contenteditable] img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; display: block; }
         [contenteditable] iframe { max-width: 100%; }
         [contenteditable] ul, [contenteditable] ol { padding-left: 24px; }
+        [contenteditable] p, [contenteditable] div, [contenteditable] span { max-width: 100%; }
+        [contenteditable] table { max-width: 100%; overflow-x: auto; display: block; }
       `}</style>
     </div>
   );
