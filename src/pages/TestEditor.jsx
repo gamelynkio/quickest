@@ -52,6 +52,17 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const [saved, setSaved] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [pendingNavTarget, setPendingNavTarget] = useState(null);
+
+  const safeNavigate = (target, data = null) => {
+    if (saved) { navigate(target, data); return; }
+    // Check if there's anything worth saving
+    const hasContent = title.trim() || questions.length > 0;
+    if (!hasContent) { navigate(target, data); return; }
+    setPendingNavTarget({ target, data });
+    setShowLeaveModal(true);
+  };
 
   const addQuestion = (type) => { setQuestions(prev => [...prev, newQuestion(type)]); setShowTypeMenu(false); };
   const addSection = () => setQuestions(prev => [...prev, newSection()]);
@@ -196,7 +207,7 @@ Erkenne den Typ automatisch.`;
   const SUBJECTS = ["Mathematik", "Deutsch", "Englisch", "Sachkunde", "Geschichte", "Geographie", "Biologie", "Physik", "Chemie", "Musik", "Kunst", "Sport"];
 
   return (
-    <TeacherLayout navigate={navigate} onLogout={onLogout} currentUser={currentUser} activePage="testEditor">
+    <TeacherLayout navigate={safeNavigate} onLogout={onLogout} currentUser={currentUser} activePage="testEditor">
       <div style={{ padding: "32px", maxWidth: "860px" }}>
 
         {/* Header */}
@@ -210,8 +221,7 @@ Erkenne den Typ automatisch.`;
               {importing ? "⏳ Wird analysiert..." : "📄 Aus Datei importieren"}
               <input type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={handleImport} disabled={importing} />
             </label>
-            <button onClick={() => navigate("testPreview", { ...editingTest, title, description, subject, grade_level: gradeLevel, time_limit: timeLimit * 60, question_data: questions, grading_scale: gradingScale })}
-              style={{ padding: "10px 18px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+            <button onClick={() => navigate("testPreview", { ...editingTest, title, description, subject, grade_level: gradeLevel, time_limit: timeLimit * 60, question_data: questions, grading_scale: gradingScale })}              style={{ padding: "10px 18px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
               👁 Vorschau
             </button>
             <button onClick={handleSave} disabled={saving} style={{ padding: "10px 24px", background: saved ? "#16a34a" : "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: saving ? "not-allowed" : "pointer", transition: "background 0.3s" }}>
@@ -647,6 +657,37 @@ Erkenne den Typ automatisch.`;
         </div>
 
       </div>
+
+      {showLeaveModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "400px", width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: "48px", marginBottom: "12px" }}>💾</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Entwurf speichern?</h3>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.5 }}>
+              Du hast ungespeicherte Änderungen. Möchtest du die Vorlage speichern bevor du die Seite verlässt?
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <button onClick={async () => {
+                await handleSave();
+                setShowLeaveModal(false);
+                if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data);
+              }} style={{ padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
+                💾 Speichern und verlassen
+              </button>
+              <button onClick={() => {
+                setShowLeaveModal(false);
+                if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data);
+              }} style={{ padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+                Ohne Speichern verlassen
+              </button>
+              <button onClick={() => setShowLeaveModal(false)}
+                style={{ padding: "12px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+                Abbrechen — weiter bearbeiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </TeacherLayout>
   );
 }
