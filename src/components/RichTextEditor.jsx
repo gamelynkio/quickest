@@ -77,6 +77,8 @@ export default function RichTextEditor({ value, onChange, placeholder = "Text ei
     }
     triggerChange();
   };
+
+  const BtnStyle = (active = false) => ({
     padding: "5px 8px", border: `1px solid ${active ? "#2563a8" : "#e2e8f0"}`,
     background: active ? "#eff6ff" : "#fff", borderRadius: "5px", cursor: "pointer",
     fontSize: "13px", color: active ? "#2563a8" : "#374151", fontWeight: active ? 700 : 400,
