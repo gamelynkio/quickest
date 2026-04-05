@@ -550,9 +550,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800, marginBottom: "6px" }}>{q.sectionTitle}</div>}
                 {q.sectionInstruction && <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.85)", marginBottom: q.sectionText ? "12px" : 0 }}>{q.sectionInstruction}</div>}
                 {q.sectionText && (
-                  <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "12px", padding: "16px", fontSize: "15px", lineHeight: 1.8, whiteSpace: "pre-wrap", marginTop: "8px" }}>
-                    {q.sectionText}
-                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "12px", padding: "16px", fontSize: "15px", lineHeight: 1.8, marginTop: "8px", wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden", color: "#fff" }}
+                    dangerouslySetInnerHTML={{ __html: q.sectionText }} />
                 )}
               </div>
             </div>
