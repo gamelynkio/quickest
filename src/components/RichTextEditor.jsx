@@ -111,8 +111,8 @@ export default function RichTextEditor({ value, onChange, placeholder = "Text ei
         style={{
           minHeight: "140px", padding: "14px 16px", fontSize: "15px", lineHeight: 1.7,
           outline: "none", color: "#1e293b", background: "#fff",
+          wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden",
         }}
-        css={`[contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; }`}
       />
 
       <style>{`
