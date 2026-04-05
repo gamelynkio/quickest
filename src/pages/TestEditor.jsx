@@ -24,6 +24,25 @@ const newQuestion = (type) => ({
   attachment: null,
 });
 
+const newTask = () => ({
+  id: Date.now() + Math.random(),
+  taskTitle: "",
+  taskInstruction: "",
+  questions: [],
+});
+
+const newTaskQuestion = (type) => ({
+  id: Date.now() + Math.random(),
+  type, text: "", points: 1,
+  options: type === "multiple_choice" ? ["", ""] : [],
+  correctAnswer: null,
+  correctAnswers: [],
+  cardFront: "", cardBack: "",
+  pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
+  solution: "", partialPoints: [],
+  blanks: [], fullText: "",
+});
+
 const newSection = () => ({
   id: Date.now() + Math.random(),
   type: "section",
@@ -32,6 +51,7 @@ const newSection = () => ({
   sectionText: "",
   sectionMedia: null,
   sectionMediaType: null,
+  tasks: [],
 });
 
 export default function TestEditor({ navigate, onLogout, currentUser, editingTest }) {
@@ -68,6 +88,32 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const addSection = () => setQuestions(prev => [...prev, newSection()]);
   const updateQuestion = (id, field, value) => setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
   const removeQuestion = (id) => setQuestions(prev => prev.filter(q => q.id !== id));
+
+  // Task (within section) manipulation
+  const addTask = (sectionId) => setQuestions(prev => prev.map(q =>
+    q.id === sectionId ? { ...q, tasks: [...(q.tasks || []), newTask()] } : q
+  ));
+  const updateTask = (sectionId, taskId, field, value) => setQuestions(prev => prev.map(q =>
+    q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, [field]: value } : t) } : q
+  ));
+  const removeTask = (sectionId, taskId) => setQuestions(prev => prev.map(q =>
+    q.id === sectionId ? { ...q, tasks: (q.tasks || []).filter(t => t.id !== taskId) } : q
+  ));
+  const addTaskQuestion = (sectionId, taskId, type) => setQuestions(prev => prev.map(q =>
+    q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t =>
+      t.id === taskId ? { ...t, questions: [...t.questions, newTaskQuestion(type)] } : t
+    )} : q
+  ));
+  const updateTaskQuestion = (sectionId, taskId, qId, field, value) => setQuestions(prev => prev.map(q =>
+    q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t =>
+      t.id === taskId ? { ...t, questions: t.questions.map(tq => tq.id === qId ? { ...tq, [field]: value } : tq) } : t
+    )} : q
+  ));
+  const removeTaskQuestion = (sectionId, taskId, qId) => setQuestions(prev => prev.map(q =>
+    q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t =>
+      t.id === taskId ? { ...t, questions: t.questions.filter(tq => tq.id !== qId) } : t
+    )} : q
+  ));
   const moveQuestion = (index, dir) => {
     const next = [...questions]; const swap = index + dir;
     if (swap < 0 || swap >= next.length) return;
@@ -303,7 +349,7 @@ Erkenne den Typ automatisch.`;
           if (q.type === "section") {
             const pts = getSectionPoints(index);
             return (
-              <div key={q.id} style={{ marginBottom: "8px" }}>
+              <div key={q.id} style={{ marginBottom: "16px" }}>
                 <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "14px", padding: "20px 24px", color: "#fff" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -339,7 +385,7 @@ Erkenne den Typ automatisch.`;
                       placeholder="Füge hier einen Lesetext, Gedicht, Dialog o.ä. ein..."
                     />
                   </div>
-                  <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", marginBottom: "16px" }}>
                     <span style={{ background: "rgba(255,255,255,0.15)", border: "1px dashed rgba(255,255,255,0.4)", borderRadius: "6px", padding: "5px 10px" }}>🎬 Bild / Audio / Video anhängen</span>
                     <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }}
                       onChange={e => {
@@ -351,6 +397,102 @@ Erkenne den Typ automatisch.`;
                       }} />
                     {q.sectionMedia && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)" }}>✓ {q.sectionMedia}</span>}
                   </label>
+
+                  {/* Tasks within section */}
+                  {(q.tasks || []).map((task, tIdx) => (
+                    <div key={task.id} style={{ background: "rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.15)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "0.5px" }}>📋 AUFGABE {tIdx + 1}</span>
+                        <button onClick={() => removeTask(q.id, task.id)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", borderRadius: "6px", padding: "3px 10px", cursor: "pointer", fontSize: "12px" }}>✕</button>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+                        <div>
+                          <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabentitel (optional)</label>
+                          <input value={task.taskTitle || ""} onChange={e => updateTask(q.id, task.id, "taskTitle", e.target.value)}
+                            placeholder="z.B. Right or wrong?"
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabenanweisung (optional)</label>
+                          <input value={task.taskInstruction || ""} onChange={e => updateTask(q.id, task.id, "taskInstruction", e.target.value)}
+                            placeholder="z.B. Tick the correct box."
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
+                        </div>
+                      </div>
+
+                      {/* Sub-questions within task */}
+                      {(task.questions || []).map((tq, tqIdx) => (
+                        <div key={tq.id} style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                            <span style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>{tIdx + 1}.{tqIdx + 1} — {QUESTION_TYPES.find(t => t.id === tq.type)?.icon} {QUESTION_TYPES.find(t => t.id === tq.type)?.label}</span>
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              <input type="number" min={0.5} step={0.5} value={tq.points}
+                                onChange={e => updateTaskQuestion(q.id, task.id, tq.id, "points", Number(e.target.value))}
+                                style={{ width: "50px", padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
+                              <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt.</span>
+                              <button onClick={() => removeTaskQuestion(q.id, task.id, tq.id)} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }}>×</button>
+                            </div>
+                          </div>
+                          <input value={tq.text || ""} onChange={e => updateTaskQuestion(q.id, task.id, tq.id, "text", e.target.value)}
+                            placeholder="Unteraufgabe / Frage eingeben..."
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
+
+                          {/* MC options */}
+                          {tq.type === "multiple_choice" && (
+                            <div>
+                              {(tq.options || []).map((opt, oi) => {
+                                const correctAnswers = tq.correctAnswers || (tq.correctAnswer != null ? [tq.correctAnswer] : []);
+                                const isCorrect = correctAnswers.includes(oi);
+                                return (
+                                  <div key={oi} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                                    <input type="checkbox" checked={isCorrect} onChange={() => {
+                                      const cur = tq.correctAnswers || [];
+                                      const next = isCorrect ? cur.filter(x => x !== oi) : [...cur, oi];
+                                      updateTaskQuestion(q.id, task.id, tq.id, "correctAnswers", next);
+                                    }} style={{ accentColor: "#2563a8" }} />
+                                    <input value={opt} onChange={e => { const opts = [...tq.options]; opts[oi] = e.target.value; updateTaskQuestion(q.id, task.id, tq.id, "options", opts); }}
+                                      placeholder={`Antwort ${String.fromCharCode(65 + oi)}`}
+                                      style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+                                    {tq.options.length > 2 && <button onClick={() => { updateTaskQuestion(q.id, task.id, tq.id, "options", tq.options.filter((_, j) => j !== oi)); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer" }}>×</button>}
+                                  </div>
+                                );
+                              })}
+                              <button onClick={() => updateTaskQuestion(q.id, task.id, tq.id, "options", [...tq.options, ""])}
+                                style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: "2px" }}>+ Antwort</button>
+                            </div>
+                          )}
+                          {tq.type === "true_false" && (
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              {["Wahr", "Falsch"].map((opt, oi) => (
+                                <button key={oi} onClick={() => updateTaskQuestion(q.id, task.id, tq.id, "correctAnswer", oi)}
+                                  style={{ padding: "5px 14px", border: `2px solid ${tq.correctAnswer === oi ? "#2563a8" : "#e2e8f0"}`, borderRadius: "7px", background: tq.correctAnswer === oi ? "#2563a8" : "#fff", color: tq.correctAnswer === oi ? "#fff" : "#374151", fontWeight: 600, fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>
+                              ))}
+                            </div>
+                          )}
+                          {tq.type === "open" && (
+                            <input value={tq.solution || ""} onChange={e => updateTaskQuestion(q.id, task.id, tq.id, "solution", e.target.value)}
+                              placeholder="Musterlösung (optional)"
+                              style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", background: "#f8fafc" }} />
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Add sub-question buttons */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                        {QUESTION_TYPES.map(qt => (
+                          <button key={qt.id} onClick={() => addTaskQuestion(q.id, task.id, qt.id)}
+                            style={{ padding: "5px 10px", background: "rgba(255,255,255,0.15)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", fontFamily: "inherit" }}>
+                            + {qt.icon} {qt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  <button onClick={() => addTask(q.id)}
+                    style={{ width: "100%", padding: "10px", background: "rgba(255,255,255,0.1)", border: "2px dashed rgba(255,255,255,0.3)", borderRadius: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600, fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>
+                    + Aufgabe zum Abschnitt hinzufügen
+                  </button>
                 </div>
               </div>
             );
