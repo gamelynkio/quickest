@@ -81,7 +81,7 @@ export default function TeacherLayout({ children, navigate, onLogout, currentUse
         </div>
       </aside>
 
-      <main style={{ flex: 1, overflow: "auto" }}>
+      <main style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
         {children}
       </main>
     </div>
