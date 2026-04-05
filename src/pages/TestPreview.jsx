@@ -70,7 +70,7 @@ export default function TestPreview({ navigate, onLogout, currentUser, editingTe
                 {item.sectionInstruction && <p style={{ fontSize: "14px", color: "#374151", margin: "0 0 12px", fontStyle: "italic" }}>{item.sectionInstruction}</p>}
                 {renderMedia(item)}
                 {item.sectionText && (
-                  <div style={{ fontSize: "15px", lineHeight: 1.7, color: "#1e293b" }}
+                  <div style={{ fontSize: "15px", lineHeight: 1.7, color: "#1e293b", wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden" }}
                     dangerouslySetInnerHTML={{ __html: item.sectionText }} />
                 )}
               </div>
