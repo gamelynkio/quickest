@@ -15,8 +15,9 @@ const QUESTION_TYPES = [
 const newQuestion = (type) => ({
   id: Date.now() + Math.random(),
   type, text: "", points: 1,
-  options: type === "multiple_choice" ? ["", "", "", ""] : [],
+  options: type === "multiple_choice" ? ["", ""] : [],
   correctAnswer: null,
+  correctAnswers: [],
   cardFront: "", cardBack: "",
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
   solution: "", partialPoints: [],
@@ -369,15 +370,42 @@ Erkenne den Typ automatisch.`;
                 style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} />
 
               {q.type === "multiple_choice" && (
-                <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                  {q.options.map((opt, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <input type="radio" name={`correct-${q.id}`} checked={q.correctAnswer === i} onChange={() => updateQuestion(q.id, "correctAnswer", i)} style={{ accentColor: "#2563a8" }} />
-                      <input value={opt} onChange={e => { const opts = [...q.options]; opts[i] = e.target.value; updateQuestion(q.id, "options", opts); }} placeholder={`Antwort ${String.fromCharCode(65 + i)}`}
-                        style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
-                    </div>
-                  ))}
-                  <p style={{ gridColumn: "span 2", fontSize: "11px", color: "#94a3b8", margin: "2px 0 0" }}>○ Richtige Antwort markieren</p>
+                <div style={{ marginTop: "12px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "8px" }}>
+                    {q.options.map((opt, i) => {
+                      const correctAnswers = q.correctAnswers || (q.correctAnswer != null ? [q.correctAnswer] : []);
+                      const isCorrect = correctAnswers.includes(i);
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <input type="checkbox" checked={isCorrect}
+                            onChange={() => {
+                              const cur = q.correctAnswers || (q.correctAnswer != null ? [q.correctAnswer] : []);
+                              const next = isCorrect ? cur.filter(x => x !== i) : [...cur, i];
+                              updateQuestion(q.id, "correctAnswers", next);
+                            }}
+                            style={{ accentColor: "#2563a8", width: "16px", height: "16px", flexShrink: 0 }} />
+                          <input value={opt} onChange={e => { const opts = [...q.options]; opts[i] = e.target.value; updateQuestion(q.id, "options", opts); }}
+                            placeholder={`Antwort ${String.fromCharCode(65 + i)}`}
+                            style={{ flex: 1, padding: "7px 10px", border: `1px solid ${isCorrect ? "#2563a8" : "#e5e7eb"}`, borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", background: isCorrect ? "#eff6ff" : "#fff" }} />
+                          {q.options.length > 2 && (
+                            <button onClick={() => {
+                              const opts = q.options.filter((_, j) => j !== i);
+                              const cur = (q.correctAnswers || []).filter(x => x !== i).map(x => x > i ? x - 1 : x);
+                              updateQuestion(q.id, "options", opts);
+                              updateQuestion(q.id, "correctAnswers", cur);
+                            }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px", padding: "0 4px", flexShrink: 0 }}>×</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <p style={{ fontSize: "11px", color: "#94a3b8", margin: 0 }}>☑ Richtige Antwort(en) ankreuzen — mehrere möglich</p>
+                    <button onClick={() => updateQuestion(q.id, "options", [...q.options, ""])}
+                      style={{ padding: "5px 12px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                      + Antwort hinzufügen
+                    </button>
+                  </div>
                 </div>
               )}
               {q.type === "true_false" && (
