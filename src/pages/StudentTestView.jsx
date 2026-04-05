@@ -68,6 +68,23 @@ const autoCorrect = (questions, answers) => {
 const calcGrade = (score, totalPoints, gradingScale) => {
   if (!totalPoints || !gradingScale?.length) return null;
   const percent = (score / totalPoints) * 100;
+
+// Flatten nested task questions for autoCorrect and progress tracking
+const flattenQuestions = (qs) => {
+  const result = [];
+  for (const q of qs) {
+    if (q.type === "section") {
+      for (const task of (q.tasks || [])) {
+        for (const tq of (task.questions || [])) {
+          result.push({ ...tq, _taskId: task.id, _sectionId: q.id });
+        }
+      }
+    } else {
+      result.push(q);
+    }
+  }
+  return result;
+};
   const sorted = [...gradingScale].sort((a, b) => b.minPercent - a.minPercent);
   for (const g of sorted) { if (percent >= Number(g.minPercent)) return g.grade; }
   return "6";
@@ -331,7 +348,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     if (submitting || !assignment) return;
     setSubmitting(true);
     const allQuestions = assignment.question_data || [];
-    const realQuestions = allQuestions.filter(q => q.type !== "section");
+    const realQuestions = flattenQuestions(allQuestions).filter(q => q.type !== "section");
     const totalPoints = realQuestions.reduce((sum, q) => sum + Number(q.points || 0), 0);
     const { score, corrections } = autoCorrect(realQuestions, answers);
     const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
@@ -498,11 +515,72 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     </div>
   );
 
-  const realQuestions = questions.filter(q => q.type !== "section");
+  const realQuestions = flattenQuestions(questions).filter(q => q.type !== "section");
   const answeredCount = realQuestions.filter(q => {
     if (q.type === "fill_blank" && q.blanks?.length > 0) return Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim());
     return answers[q.id] !== undefined && answers[q.id] !== "";
   }).length;
+
+  const renderQuestionInput = (q) => {
+    if (q.type === "multiple_choice") {
+      const multiCorrect = (q.correctAnswers?.length || 0) > 1;
+      const filledOptions = (q.options || []).filter(o => o.trim() !== "");
+      const currentAnswers = Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] != null ? [answers[q.id]] : []);
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {multiCorrect && <div style={{ fontSize: "11px", color: "#2563a8", fontWeight: 600, background: "#eff6ff", borderRadius: "5px", padding: "3px 8px", alignSelf: "flex-start" }}>☑ Mehrere Antworten möglich</div>}
+          {filledOptions.map((opt, i) => {
+            const selected = currentAnswers.map(Number).includes(i);
+            return (
+              <button key={i} onClick={() => {
+                if (multiCorrect) { const next = selected ? currentAnswers.filter(x => Number(x) !== i) : [...currentAnswers, i]; setAnswers(a => ({ ...a, [q.id]: next })); }
+                else { setAnswers(a => ({ ...a, [q.id]: [i] })); }
+              }} style={{ padding: "10px 14px", border: `2px solid ${selected ? "#2563a8" : "#e2e8f0"}`, borderRadius: "8px", background: selected ? "#2563a8" : "#f8fafc", color: selected ? "#fff" : "#374151", cursor: "pointer", fontWeight: selected ? 700 : 500, fontSize: "14px", textAlign: "left", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "8px", touchAction: "manipulation" }}>
+                <span style={{ width: "22px", height: "22px", borderRadius: multiCorrect ? "4px" : "50%", border: `2px solid ${selected ? "rgba(255,255,255,0.5)" : "#d1d5db"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, flexShrink: 0 }}>{selected ? "✓" : String.fromCharCode(65 + i)}</span>
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+    if (q.type === "true_false") {
+      return (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+          {["Wahr", "Falsch"].map((opt, i) => (
+            <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))}
+              style={{ padding: "12px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "#e2e8f0"}`, borderRadius: "8px", background: answers[q.id] === i ? "#2563a8" : "#f8fafc", color: answers[q.id] === i ? "#fff" : "#374151", cursor: "pointer", fontWeight: 700, fontSize: "14px", fontFamily: "inherit", touchAction: "manipulation" }}>
+              {opt}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    if (q.type === "open") {
+      return (
+        <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+          placeholder="Deine Antwort..." rows={3}
+          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+          data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
+          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+      );
+    }
+    if (q.type === "flashcard") {
+      return (
+        <div>
+          <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "16px", textAlign: "center", marginBottom: "10px", border: "2px solid #e2e8f0" }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", marginBottom: "6px" }}>A-SEITE</div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>
+          </div>
+          <input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+            placeholder="B-Seite eingeben..."
+            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+            style={{ width: "100%", padding: "12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "15px", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }} />
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div style={{ ...S.page, background: "#f1f5f9" }}>
@@ -561,6 +639,33 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                     dangerouslySetInnerHTML={{ __html: q.sectionText }} />
                 )}
               </div>
+
+              {/* Tasks within section */}
+              {(q.tasks || []).map((task, tIdx) => (
+                <div key={task.id} style={{ marginBottom: "12px" }}>
+                  {(task.taskTitle || task.taskInstruction) && (
+                    <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: "10px", padding: "12px 16px", marginBottom: "8px", border: "1px solid rgba(255,255,255,0.15)" }}>
+                      {task.taskTitle && <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff", marginBottom: task.taskInstruction ? "4px" : 0 }}>{tIdx + 1}. {task.taskTitle}</div>}
+                      {task.taskInstruction && <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.8)", fontStyle: "italic" }}>{task.taskInstruction}</div>}
+                    </div>
+                  )}
+                  {(task.questions || []).map((tq, tqIdx) => {
+                    const isAns = Array.isArray(answers[tq.id]) ? answers[tq.id].length > 0 : answers[tq.id] !== undefined && answers[tq.id] !== "";
+                    return (
+                      <div key={tq.id} style={{ background: "#fff", borderRadius: "12px", padding: "16px 18px", marginBottom: "8px", border: `2px solid ${isAns ? "#bfdbfe" : "#e2e8f0"}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ background: isAns ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{tIdx + 1}.{tqIdx + 1}</span>
+                            <span style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{tq.text}</span>
+                          </div>
+                          <span style={{ fontSize: "11px", color: "#94a3b8", background: "#f1f5f9", borderRadius: "5px", padding: "2px 7px", flexShrink: 0, marginLeft: "8px" }}>{tq.points} Pkt.</span>
+                        </div>
+                        {renderQuestionInput(tq)}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           );
 
