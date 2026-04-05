@@ -11,8 +11,15 @@ const autoCorrect = (questions, answers) => {
     const studentAnswer = answers[q.id];
     const maxPoints = Number(q.points || 0);
     if (q.type === "multiple_choice") {
-      const correct = studentAnswer !== undefined && Number(studentAnswer) === Number(q.correctAnswer);
-      corrections[q.id] = { points: correct ? maxPoints : 0, maxPoints, correct, studentAnswer: q.options?.[studentAnswer] ?? String(studentAnswer ?? ""), comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${q.options?.[q.correctAnswer] ?? "–"}`, solution: q.solution || null, partialPoints: q.partialPoints || [] };
+      // Support both old single correctAnswer and new correctAnswers array
+      const correctAnswers = q.correctAnswers?.length ? q.correctAnswers : (q.correctAnswer != null ? [q.correctAnswer] : []);
+      const studentAnswers = Array.isArray(studentAnswer) ? studentAnswer : (studentAnswer != null ? [studentAnswer] : []);
+      const correct = correctAnswers.length > 0 &&
+        correctAnswers.length === studentAnswers.length &&
+        correctAnswers.every(a => studentAnswers.map(Number).includes(Number(a)));
+      const correctLabels = correctAnswers.map(i => q.options?.[i] ?? String(i)).join(", ");
+      const studentLabels = studentAnswers.map(i => q.options?.[i] ?? String(i)).join(", ");
+      corrections[q.id] = { points: correct ? maxPoints : 0, maxPoints, correct, studentAnswer: studentLabels || "–", comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${correctLabels}`, solution: q.solution || null, partialPoints: q.partialPoints || [] };
       score += correct ? maxPoints : 0;
     } else if (q.type === "true_false") {
       const correct = studentAnswer !== undefined && Number(studentAnswer) === Number(q.correctAnswer);
@@ -561,6 +568,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           const qIndex = questions.slice(0, index).filter(x => x.type !== "section").length;
           const isAnswered = q.type === "fill_blank" && q.blanks?.length > 0
             ? Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim())
+            : q.type === "multiple_choice"
+            ? Array.isArray(answers[q.id]) ? answers[q.id].length > 0 : answers[q.id] !== undefined && answers[q.id] !== ""
             : answers[q.id] !== undefined && answers[q.id] !== "";
 
           return (
@@ -579,28 +588,44 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 <span style={{ fontSize: "13px", color: "#94a3b8", whiteSpace: "nowrap", flexShrink: 0, background: "#f1f5f9", borderRadius: "6px", padding: "3px 8px" }}>{q.points} Pkt.</span>
               </div>
 
-              {/* Multiple choice — single column on tablet for easier tapping */}
-              {q.type === "multiple_choice" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {q.options.map((opt, i) => (
-                    <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))}
-                      style={{
-                        padding: "16px 18px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "rgba(0,0,0,0.1)"}`,
-                        borderRadius: "12px", background: answers[q.id] === i ? "#2563a8" : "rgba(255,255,255,0.8)",
-                        color: answers[q.id] === i ? "#fff" : "#374151",
-                        cursor: "pointer", fontWeight: answers[q.id] === i ? 700 : 500,
-                        fontSize: "15px", textAlign: "left", fontFamily: "inherit",
-                        display: "flex", alignItems: "center", gap: "12px",
-                        touchAction: "manipulation", transition: "all 0.15s"
-                      }}>
-                      <span style={{ width: "28px", height: "28px", borderRadius: "50%", border: `2px solid ${answers[q.id] === i ? "rgba(255,255,255,0.5)" : "#d1d5db"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, flexShrink: 0, background: answers[q.id] === i ? "rgba(255,255,255,0.2)" : "transparent" }}>
-                        {String.fromCharCode(65 + i)}
-                      </span>
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* Multiple choice */}
+              {q.type === "multiple_choice" && (() => {
+                const multiCorrect = (q.correctAnswers?.length || 0) > 1;
+                const filledOptions = q.options.filter(o => o.trim() !== "");
+                const currentAnswers = Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] != null ? [answers[q.id]] : []);
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {multiCorrect && <div style={{ fontSize: "12px", color: "#2563a8", fontWeight: 600, background: "#eff6ff", borderRadius: "6px", padding: "4px 10px", alignSelf: "flex-start" }}>☑ Mehrere Antworten möglich</div>}
+                    {filledOptions.map((opt, i) => {
+                      const selected = currentAnswers.map(Number).includes(i);
+                      return (
+                        <button key={i} onClick={() => {
+                          if (multiCorrect) {
+                            const next = selected ? currentAnswers.filter(x => Number(x) !== i) : [...currentAnswers, i];
+                            setAnswers(a => ({ ...a, [q.id]: next }));
+                          } else {
+                            setAnswers(a => ({ ...a, [q.id]: [i] }));
+                          }
+                        }}
+                          style={{
+                            padding: "16px 18px", border: `2px solid ${selected ? "#2563a8" : "rgba(0,0,0,0.1)"}`,
+                            borderRadius: "12px", background: selected ? "#2563a8" : "rgba(255,255,255,0.8)",
+                            color: selected ? "#fff" : "#374151",
+                            cursor: "pointer", fontWeight: selected ? 700 : 500,
+                            fontSize: "15px", textAlign: "left", fontFamily: "inherit",
+                            display: "flex", alignItems: "center", gap: "12px",
+                            touchAction: "manipulation", transition: "all 0.15s"
+                          }}>
+                          <span style={{ width: "28px", height: "28px", borderRadius: multiCorrect ? "4px" : "50%", border: `2px solid ${selected ? "rgba(255,255,255,0.5)" : "#d1d5db"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, flexShrink: 0, background: selected ? "rgba(255,255,255,0.2)" : "transparent" }}>
+                            {selected ? "✓" : String.fromCharCode(65 + i)}
+                          </span>
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* True/False — full width buttons */}
               {q.type === "true_false" && (
