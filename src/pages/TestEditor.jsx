@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect, useRef } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import TeacherLayout from "../components/TeacherLayout";
 import RichTextEditor from "../components/RichTextEditor";
 
@@ -115,10 +116,14 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [localFullText, setLocalFullText] = useState(tq.fullText || "");
   const [localBlanks, setLocalBlanks] = useState(tq.blanks || []);
   const [localPoints, setLocalPoints] = useState(tq.points || 1);
+  const [localCardFront, setLocalCardFront] = useState(tq.cardFront || "");
+  const [localCardBack, setLocalCardBack] = useState(tq.cardBack || "");
+  const [localCardAlts, setLocalCardAlts] = useState(tq.cardBackAlternatives || []);
+  const [localPairs, setLocalPairs] = useState(tq.pairs?.length ? tq.pairs : [{ left: "", right: "" }]);
+  const [localPartialPoints, setLocalPartialPoints] = useState(tq.partialPoints || []);
 
-  // Save all local state to global on unmount (catches "Speichern" without blur)
   const localRef = useRef({});
-  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints };
+  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localCardFront, localCardBack, localCardAlts, localPairs, localPartialPoints };
   useEffect(() => {
     return () => {
       const s = localRef.current;
@@ -128,8 +133,225 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
       onUpdate("fullText", s.localFullText);
       onUpdate("blanks", s.localBlanks);
       onUpdate("points", s.localPoints);
+      onUpdate("cardFront", s.localCardFront);
+      onUpdate("cardBack", s.localCardBack);
+      onUpdate("cardBackAlternatives", s.localCardAlts);
+      onUpdate("pairs", s.localPairs);
+      onUpdate("partialPoints", s.localPartialPoints);
     };
   }, []);
+
+  return (
+    <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px", color: "#1e293b" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+        <span style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>{tIdx + 1}.{tqIdx + 1} — {QUESTION_TYPES.find(t => t.id === tq.type)?.icon} {QUESTION_TYPES.find(t => t.id === tq.type)?.label}</span>
+        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <input type="number" min={0.5} step={0.5} value={localPoints}
+            onChange={e => { setLocalPoints(Number(e.target.value)); onUpdate("points", Number(e.target.value)); }}
+            style={{ width: "50px", padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
+          <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt.</span>
+          <button onClick={onRemove} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }}>×</button>
+        </div>
+      </div>
+
+      <input value={localText} onChange={e => setLocalText(e.target.value)} onBlur={() => onUpdate("text", localText)}
+        placeholder="Unteraufgabe / Frage eingeben..."
+        style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
+
+      {/* Multiple Choice */}
+      {tq.type === "multiple_choice" && (
+        <div>
+          {localOptions.map((opt, oi) => {
+            const isCorrect = correctAnswers.includes(oi);
+            return (
+              <div key={oi} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                <input type="checkbox" checked={isCorrect} onChange={() => {
+                  const next = isCorrect ? correctAnswers.filter(x => x !== oi) : [...correctAnswers, oi];
+                  setCorrectAnswers(next); onUpdate("correctAnswers", next);
+                }} style={{ accentColor: "#2563a8" }} />
+                <input value={opt} onChange={e => { const opts = [...localOptions]; opts[oi] = e.target.value; setLocalOptions(opts); }}
+                  onBlur={() => onUpdate("options", localOptions)}
+                  placeholder={`Antwort ${String.fromCharCode(65 + oi)}`}
+                  style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+                {localOptions.length > 2 && (
+                  <button onClick={() => { const opts = localOptions.filter((_, j) => j !== oi); setLocalOptions(opts); onUpdate("options", opts); }}
+                    style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer" }}>×</button>
+                )}
+              </div>
+            );
+          })}
+          <button onClick={() => { const opts = [...localOptions, ""]; setLocalOptions(opts); onUpdate("options", opts); }}
+            style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: "2px" }}>+ Antwort</button>
+        </div>
+      )}
+
+      {/* True/False */}
+      {tq.type === "true_false" && (
+        <div style={{ display: "flex", gap: "8px" }}>
+          {["Wahr", "Falsch"].map((opt, oi) => (
+            <button key={oi} onClick={() => { setCorrectAnswer(oi); onUpdate("correctAnswer", oi); }}
+              style={{ padding: "5px 14px", border: `2px solid ${correctAnswer === oi ? "#2563a8" : "#e2e8f0"}`, borderRadius: "7px", background: correctAnswer === oi ? "#2563a8" : "#fff", color: correctAnswer === oi ? "#fff" : "#374151", fontWeight: 600, fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Open */}
+      {tq.type === "open" && (
+        <input value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
+          placeholder="Musterlösung (optional)"
+          style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", background: "#f8fafc" }} />
+      )}
+
+      {/* Flashcard */}
+      {tq.type === "flashcard" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+            <div>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>🃏 A-Seite (Vorgabe)</label>
+              <input value={localCardFront} onChange={e => setLocalCardFront(e.target.value)} onBlur={() => onUpdate("cardFront", localCardFront)}
+                placeholder="z.B. der Hund"
+                style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>✅ B-Seite (Antwort)</label>
+              <input value={localCardBack} onChange={e => setLocalCardBack(e.target.value)} onBlur={() => onUpdate("cardBack", localCardBack)}
+                placeholder="z.B. the dog"
+                style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Auch akzeptiert:</span>
+            {localCardAlts.map((alt, ai) => (
+              <span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}>
+                {alt}
+                <button onClick={() => { const a = localCardAlts.filter((_, i) => i !== ai); setLocalCardAlts(a); onUpdate("cardBackAlternatives", a); }}
+                  style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "11px", padding: 0 }}>✕</button>
+              </span>
+            ))}
+            <button onClick={() => { const alt = prompt("Alternative Lösung:"); if (!alt?.trim()) return; const a = [...localCardAlts, alt.trim()]; setLocalCardAlts(a); onUpdate("cardBackAlternatives", a); }}
+              style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
+          </div>
+        </div>
+      )}
+
+      {/* Assignment */}
+      {tq.type === "assignment" && (
+        <div>
+          {localPairs.map((pair, i) => (
+            <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "5px" }}>
+              <input value={pair.left} placeholder={`Begriff ${i + 1}`}
+                onChange={e => { const p = [...localPairs]; p[i] = { ...p[i], left: e.target.value }; setLocalPairs(p); }}
+                onBlur={() => onUpdate("pairs", localPairs)}
+                style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+              <span style={{ color: "#94a3b8", fontSize: "12px" }}>→</span>
+              <input value={pair.right} placeholder={`Definition ${i + 1}`}
+                onChange={e => { const p = [...localPairs]; p[i] = { ...p[i], right: e.target.value }; setLocalPairs(p); }}
+                onBlur={() => onUpdate("pairs", localPairs)}
+                style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+              {localPairs.length > 1 && (
+                <button onClick={() => { const p = localPairs.filter((_, pi) => pi !== i); setLocalPairs(p); onUpdate("pairs", p); }}
+                  style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
+              )}
+            </div>
+          ))}
+          <button onClick={() => { const p = [...localPairs, { left: "", right: "" }]; setLocalPairs(p); onUpdate("pairs", p); }}
+            style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0 }}>+ Paar hinzufügen</button>
+        </div>
+      )}
+
+      {/* Fill blank */}
+      {tq.type === "fill_blank" && (
+        <div>
+          <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+            Vollständiger Text — Wort markieren → wird zur Lücke
+          </label>
+          <textarea value={localFullText} onChange={e => setLocalFullText(e.target.value)}
+            onBlur={() => onUpdate("fullText", localFullText)}
+            onMouseUp={() => {
+              const sel = window.getSelection();
+              const selected = sel?.toString().trim();
+              if (!selected || !localFullText) return;
+              const start = localFullText.indexOf(selected);
+              if (start === -1) return;
+              const newText = localFullText.slice(0, start) + "[Lücke]" + localFullText.slice(start + selected.length);
+              const newBlanks = [...localBlanks, { solution: selected, alternatives: [] }];
+              setLocalFullText(newText); setLocalBlanks(newBlanks);
+              onUpdate("fullText", newText); onUpdate("blanks", newBlanks); onUpdate("text", newText);
+              sel.removeAllRanges();
+            }}
+            placeholder="Text eingeben, dann Wort markieren..."
+            rows={3}
+            style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "13px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", marginBottom: "4px" }} />
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "8px" }}>💡 Text markieren → wird automatisch zur Lücke</div>
+          {localFullText.includes("[Lücke]") && (
+            <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "6px", padding: "8px 12px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", lineHeight: 1.8 }}>
+              {localFullText.split("[Lücke]").map((part, i, arr) => (
+                <span key={i}>{part}{i < arr.length - 1 && <span style={{ display: "inline-block", minWidth: "60px", borderBottom: "2px solid #2563a8", margin: "0 3px" }}>&nbsp;</span>}</span>
+              ))}
+            </div>
+          )}
+          {localBlanks.map((blank, bi) => (
+            <div key={bi} style={{ background: "#f8fafc", borderRadius: "6px", padding: "8px 10px", marginBottom: "5px", border: "1px solid #e2e8f0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                <span style={{ background: "#2563a8", color: "#fff", borderRadius: "4px", padding: "1px 6px", fontSize: "11px", fontWeight: 700 }}>Lücke {bi + 1}</span>
+                <input value={blank.solution} onChange={e => { const nb = [...localBlanks]; nb[bi] = { ...nb[bi], solution: e.target.value }; setLocalBlanks(nb); onUpdate("blanks", nb); }}
+                  placeholder="Lösung"
+                  style={{ flex: 1, padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
+                <button onClick={() => {
+                  const nb = localBlanks.filter((_, i) => i !== bi);
+                  let count = 0;
+                  const newText = localFullText.replace(/\[Lücke\]/g, m => { count++; return count - 1 === bi ? blank.solution : m; });
+                  setLocalBlanks(nb); setLocalFullText(newText);
+                  onUpdate("blanks", nb); onUpdate("fullText", newText); onUpdate("text", newText);
+                }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
+              </div>
+              <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: "10px", color: "#94a3b8" }}>Auch akzeptiert:</span>
+                {(blank.alternatives || []).map((alt, ai) => (
+                  <span key={ai} style={{ background: "#e0f2fe", borderRadius: "4px", padding: "1px 6px", fontSize: "11px", display: "flex", alignItems: "center", gap: "3px" }}>
+                    {alt}
+                    <button onClick={() => { const nb = [...localBlanks]; nb[bi] = { ...nb[bi], alternatives: nb[bi].alternatives.filter((_, i) => i !== ai) }; setLocalBlanks(nb); onUpdate("blanks", nb); }}
+                      style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "10px", padding: 0 }}>✕</button>
+                  </span>
+                ))}
+                <button onClick={() => { const alt = prompt("Alternative Lösung:"); if (!alt?.trim()) return; const nb = [...localBlanks]; nb[bi] = { ...nb[bi], alternatives: [...(nb[bi].alternatives || []), alt.trim()] }; setLocalBlanks(nb); onUpdate("blanks", nb); }}
+                  style={{ fontSize: "10px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "4px", padding: "1px 6px", cursor: "pointer" }}>+ Alt.</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Solution / partial points */}
+      <details style={{ marginTop: "10px" }}>
+        <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "4px 0" }}>
+          📝 Musterlösung & Teilbepunktung
+        </summary>
+        <div style={{ marginTop: "8px", background: "#f8fafc", borderRadius: "8px", padding: "10px", border: "1px solid #e2e8f0" }}>
+          <textarea value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
+            placeholder="Musterlösung / Erwartungshorizont..." rows={2}
+            style={{ width: "100%", padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
+          {localPartialPoints.map((p, i) => (
+            <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "5px" }}>
+              <input type="number" value={p.points} min={0} step={0.5}
+                onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }}
+                style={{ width: "50px", padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
+              <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt. für:</span>
+              <input value={p.description} placeholder="z.B. Nennung des Begriffs"
+                onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], description: e.target.value }; setLocalPartialPoints(pp); }}
+                onBlur={() => onUpdate("partialPoints", localPartialPoints)}
+                style={{ flex: 1, padding: "4px 8px", border: "1px solid #e5e7eb", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
+              <button onClick={() => { const pp = localPartialPoints.filter((_, pi) => pi !== i); setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }}
+                style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
+            </div>
+          ))}
+          <button onClick={() => { const pp = [...localPartialPoints, { points: 0.5, description: "" }]; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }}
+            style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>+ Teilpunkt</button>
+        </div>
+      </details>
+    </div>
+  );
+}
 
   return (
     <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px", color: "#1e293b" }}>
@@ -244,7 +466,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
       )}
     </div>
   );
-}
 
 export default function TestEditor({ navigate, onLogout, currentUser, editingTest }) {
   const [title, setTitle] = useState(editingTest?.title || "");
