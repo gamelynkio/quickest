@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import LoginPage from "./pages/LoginPage";
 import TeacherDashboard from "./pages/TeacherDashboard";
@@ -41,19 +41,26 @@ export default function App() {
     } catch {}
   };
 
+  const initialLoadDone = useRef(false);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session ?? null);
       if (session?.user) fetchProfile(session.user.id);
+      initialLoadDone.current = true;
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
-        if (_event === "SIGNED_IN") {
-          sessionStorage.removeItem("qt_page");
-          sessionStorage.removeItem("qt_editing_test");
-          setCurrentPage("dashboard");
+        // Only reset to dashboard on a real new login, not on token refresh or tab return
+        if (_event === "SIGNED_IN" && initialLoadDone.current) {
+          const currentStored = sessionStorage.getItem("qt_page");
+          if (!currentStored || currentStored === "login") {
+            sessionStorage.removeItem("qt_page");
+            sessionStorage.removeItem("qt_editing_test");
+            setCurrentPage("dashboard");
+          }
         }
       }
       else setProfile(null);
