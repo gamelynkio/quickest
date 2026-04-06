@@ -105,7 +105,7 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [correctAnswer, setCorrectAnswer] = useState(tq.correctAnswer ?? null);
 
   return (
-    <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px" }}>
+    <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px", color: "#1e293b" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
         <span style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>{tIdx + 1}.{tqIdx + 1} — {QUESTION_TYPES.find(t => t.id === tq.type)?.icon} {QUESTION_TYPES.find(t => t.id === tq.type)?.label}</span>
         <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
