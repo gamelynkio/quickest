@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";import { supabase } from "@/integrations/supabase/client";
 import TeacherLayout from "../components/TeacherLayout";
 import RichTextEditor from "../components/RichTextEditor";
 
@@ -53,6 +52,115 @@ const newSection = () => ({
   sectionMediaType: null,
   tasks: [],
 });
+
+// Separate component to avoid re-render focus loss in task inputs
+function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, onUpdateQuestion, onRemoveQuestion }) {
+  const [localTitle, setLocalTitle] = useState(task.taskTitle || "");
+  const [localInstruction, setLocalInstruction] = useState(task.taskInstruction || "");
+
+  return (
+    <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.15)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+        <span style={{ fontSize: "12px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "0.5px" }}>📋 AUFGABE {tIdx + 1}</span>
+        <button onClick={onRemove} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", borderRadius: "6px", padding: "3px 10px", cursor: "pointer", fontSize: "12px" }}>✕</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+        <div>
+          <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabentitel (optional)</label>
+          <input value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={() => onUpdate("taskTitle", localTitle)}
+            placeholder="z.B. Right or wrong?"
+            style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
+        </div>
+        <div>
+          <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabenanweisung (optional)</label>
+          <input value={localInstruction} onChange={e => setLocalInstruction(e.target.value)} onBlur={() => onUpdate("taskInstruction", localInstruction)}
+            placeholder="z.B. Tick the correct box."
+            style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
+        </div>
+      </div>
+
+      {(task.questions || []).map((tq, tqIdx) => (
+        <TaskQuestionEditor key={tq.id} tq={tq} tIdx={tIdx} tqIdx={tqIdx}
+          onUpdate={(field, val) => onUpdateQuestion(tq.id, field, val)}
+          onRemove={() => onRemoveQuestion(tq.id)} />
+      ))}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+        {QUESTION_TYPES.map(qt => (
+          <button key={qt.id} onClick={() => onAddQuestion(qt.id)}
+            style={{ padding: "5px 10px", background: "rgba(255,255,255,0.15)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", fontFamily: "inherit" }}>
+            + {qt.icon} {qt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
+  const [localText, setLocalText] = useState(tq.text || "");
+  const [localSolution, setLocalSolution] = useState(tq.solution || "");
+  const [localOptions, setLocalOptions] = useState(tq.options || []);
+  const [correctAnswers, setCorrectAnswers] = useState(tq.correctAnswers || (tq.correctAnswer != null ? [tq.correctAnswer] : []));
+  const [correctAnswer, setCorrectAnswer] = useState(tq.correctAnswer ?? null);
+
+  return (
+    <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+        <span style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>{tIdx + 1}.{tqIdx + 1} — {QUESTION_TYPES.find(t => t.id === tq.type)?.icon} {QUESTION_TYPES.find(t => t.id === tq.type)?.label}</span>
+        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <input type="number" min={0.5} step={0.5} defaultValue={tq.points}
+            onBlur={e => onUpdate("points", Number(e.target.value))}
+            style={{ width: "50px", padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
+          <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt.</span>
+          <button onClick={onRemove} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }}>×</button>
+        </div>
+      </div>
+      <input value={localText} onChange={e => setLocalText(e.target.value)} onBlur={() => onUpdate("text", localText)}
+        placeholder="Unteraufgabe / Frage eingeben..."
+        style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
+
+      {tq.type === "multiple_choice" && (
+        <div>
+          {localOptions.map((opt, oi) => {
+            const isCorrect = correctAnswers.includes(oi);
+            return (
+              <div key={oi} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                <input type="checkbox" checked={isCorrect} onChange={() => {
+                  const next = isCorrect ? correctAnswers.filter(x => x !== oi) : [...correctAnswers, oi];
+                  setCorrectAnswers(next); onUpdate("correctAnswers", next);
+                }} style={{ accentColor: "#2563a8" }} />
+                <input value={opt} onChange={e => { const opts = [...localOptions]; opts[oi] = e.target.value; setLocalOptions(opts); }}
+                  onBlur={() => onUpdate("options", localOptions)}
+                  placeholder={`Antwort ${String.fromCharCode(65 + oi)}`}
+                  style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+                {localOptions.length > 2 && (
+                  <button onClick={() => { const opts = localOptions.filter((_, j) => j !== oi); setLocalOptions(opts); onUpdate("options", opts); }}
+                    style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer" }}>×</button>
+                )}
+              </div>
+            );
+          })}
+          <button onClick={() => { const opts = [...localOptions, ""]; setLocalOptions(opts); onUpdate("options", opts); }}
+            style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: "2px" }}>+ Antwort</button>
+        </div>
+      )}
+      {tq.type === "true_false" && (
+        <div style={{ display: "flex", gap: "8px" }}>
+          {["Wahr", "Falsch"].map((opt, oi) => (
+            <button key={oi} onClick={() => { setCorrectAnswer(oi); onUpdate("correctAnswer", oi); }}
+              style={{ padding: "5px 14px", border: `2px solid ${correctAnswer === oi ? "#2563a8" : "#e2e8f0"}`, borderRadius: "7px", background: correctAnswer === oi ? "#2563a8" : "#fff", color: correctAnswer === oi ? "#fff" : "#374151", fontWeight: 600, fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>
+          ))}
+        </div>
+      )}
+      {tq.type === "open" && (
+        <input value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
+          placeholder="Musterlösung (optional)"
+          style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", background: "#f8fafc" }} />
+      )}
+    </div>
+  );
+}
 
 export default function TestEditor({ navigate, onLogout, currentUser, editingTest }) {
   const [title, setTitle] = useState(editingTest?.title || "");
@@ -400,93 +508,13 @@ Erkenne den Typ automatisch.`;
 
                   {/* Tasks within section */}
                   {(q.tasks || []).map((task, tIdx) => (
-                    <div key={task.id} style={{ background: "rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.15)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                        <span style={{ fontSize: "12px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "0.5px" }}>📋 AUFGABE {tIdx + 1}</span>
-                        <button onClick={() => removeTask(q.id, task.id)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", borderRadius: "6px", padding: "3px 10px", cursor: "pointer", fontSize: "12px" }}>✕</button>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
-                        <div>
-                          <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabentitel (optional)</label>
-                          <input value={task.taskTitle || ""} onChange={e => updateTask(q.id, task.id, "taskTitle", e.target.value)}
-                            placeholder="z.B. Right or wrong?"
-                            style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabenanweisung (optional)</label>
-                          <input value={task.taskInstruction || ""} onChange={e => updateTask(q.id, task.id, "taskInstruction", e.target.value)}
-                            placeholder="z.B. Tick the correct box."
-                            style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
-                        </div>
-                      </div>
-
-                      {/* Sub-questions within task */}
-                      {(task.questions || []).map((tq, tqIdx) => (
-                        <div key={tq.id} style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                            <span style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>{tIdx + 1}.{tqIdx + 1} — {QUESTION_TYPES.find(t => t.id === tq.type)?.icon} {QUESTION_TYPES.find(t => t.id === tq.type)?.label}</span>
-                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                              <input type="number" min={0.5} step={0.5} value={tq.points}
-                                onChange={e => updateTaskQuestion(q.id, task.id, tq.id, "points", Number(e.target.value))}
-                                style={{ width: "50px", padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
-                              <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt.</span>
-                              <button onClick={() => removeTaskQuestion(q.id, task.id, tq.id)} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }}>×</button>
-                            </div>
-                          </div>
-                          <input value={tq.text || ""} onChange={e => updateTaskQuestion(q.id, task.id, tq.id, "text", e.target.value)}
-                            placeholder="Unteraufgabe / Frage eingeben..."
-                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
-
-                          {/* MC options */}
-                          {tq.type === "multiple_choice" && (
-                            <div>
-                              {(tq.options || []).map((opt, oi) => {
-                                const correctAnswers = tq.correctAnswers || (tq.correctAnswer != null ? [tq.correctAnswer] : []);
-                                const isCorrect = correctAnswers.includes(oi);
-                                return (
-                                  <div key={oi} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
-                                    <input type="checkbox" checked={isCorrect} onChange={() => {
-                                      const cur = tq.correctAnswers || [];
-                                      const next = isCorrect ? cur.filter(x => x !== oi) : [...cur, oi];
-                                      updateTaskQuestion(q.id, task.id, tq.id, "correctAnswers", next);
-                                    }} style={{ accentColor: "#2563a8" }} />
-                                    <input value={opt} onChange={e => { const opts = [...tq.options]; opts[oi] = e.target.value; updateTaskQuestion(q.id, task.id, tq.id, "options", opts); }}
-                                      placeholder={`Antwort ${String.fromCharCode(65 + oi)}`}
-                                      style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
-                                    {tq.options.length > 2 && <button onClick={() => { updateTaskQuestion(q.id, task.id, tq.id, "options", tq.options.filter((_, j) => j !== oi)); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer" }}>×</button>}
-                                  </div>
-                                );
-                              })}
-                              <button onClick={() => updateTaskQuestion(q.id, task.id, tq.id, "options", [...tq.options, ""])}
-                                style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: "2px" }}>+ Antwort</button>
-                            </div>
-                          )}
-                          {tq.type === "true_false" && (
-                            <div style={{ display: "flex", gap: "8px" }}>
-                              {["Wahr", "Falsch"].map((opt, oi) => (
-                                <button key={oi} onClick={() => updateTaskQuestion(q.id, task.id, tq.id, "correctAnswer", oi)}
-                                  style={{ padding: "5px 14px", border: `2px solid ${tq.correctAnswer === oi ? "#2563a8" : "#e2e8f0"}`, borderRadius: "7px", background: tq.correctAnswer === oi ? "#2563a8" : "#fff", color: tq.correctAnswer === oi ? "#fff" : "#374151", fontWeight: 600, fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>
-                              ))}
-                            </div>
-                          )}
-                          {tq.type === "open" && (
-                            <input value={tq.solution || ""} onChange={e => updateTaskQuestion(q.id, task.id, tq.id, "solution", e.target.value)}
-                              placeholder="Musterlösung (optional)"
-                              style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", background: "#f8fafc" }} />
-                          )}
-                        </div>
-                      ))}
-
-                      {/* Add sub-question buttons */}
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
-                        {QUESTION_TYPES.map(qt => (
-                          <button key={qt.id} onClick={() => addTaskQuestion(q.id, task.id, qt.id)}
-                            style={{ padding: "5px 10px", background: "rgba(255,255,255,0.15)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", fontFamily: "inherit" }}>
-                            + {qt.icon} {qt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <TaskEditor key={task.id} task={task} tIdx={tIdx} sectionId={q.id}
+                      onUpdate={(field, val) => updateTask(q.id, task.id, field, val)}
+                      onRemove={() => removeTask(q.id, task.id)}
+                      onAddQuestion={(type) => addTaskQuestion(q.id, task.id, type)}
+                      onUpdateQuestion={(qId, field, val) => updateTaskQuestion(q.id, task.id, qId, field, val)}
+                      onRemoveQuestion={(qId) => removeTaskQuestion(q.id, task.id, qId)}
+                    />
                   ))}
 
                   <button onClick={() => addTask(q.id)}
