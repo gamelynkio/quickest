@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect, useRef } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import TeacherLayout from "../components/TeacherLayout";
 import RichTextEditor from "../components/RichTextEditor";
 
