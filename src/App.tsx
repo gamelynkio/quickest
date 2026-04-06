@@ -35,7 +35,7 @@ export default function App() {
       setSession(session ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
-        setCurrentPage("dashboard"); // Reset from any previous "login" state
+        if (_event === "SIGNED_IN") setCurrentPage("dashboard");
       }
       else setProfile(null);
     });
