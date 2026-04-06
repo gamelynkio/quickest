@@ -22,9 +22,24 @@ export default function App() {
     } catch { return null; }
   });
   const [studentPage, setStudentPage] = useState("dashboard"); // "dashboard" | "test"
-  const [currentPage, setCurrentPage] = useState("dashboard");
-  const [editingTest, setEditingTest] = useState(null);
+  const [currentPage, setCurrentPage] = useState(() => {
+    try { return sessionStorage.getItem("qt_page") || "dashboard"; } catch { return "dashboard"; }
+  });
+  const [editingTest, setEditingTest] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem("qt_editing_test");
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
   const [viewingResults, setViewingResults] = useState(null);
+
+  const persistPage = (page, test = editingTest) => {
+    try {
+      sessionStorage.setItem("qt_page", page);
+      if (test) sessionStorage.setItem("qt_editing_test", JSON.stringify(test));
+      else sessionStorage.removeItem("qt_editing_test");
+    } catch {}
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -35,7 +50,11 @@ export default function App() {
       setSession(session ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
-        if (_event === "SIGNED_IN") setCurrentPage("dashboard");
+        if (_event === "SIGNED_IN") {
+          sessionStorage.removeItem("qt_page");
+          sessionStorage.removeItem("qt_editing_test");
+          setCurrentPage("dashboard");
+        }
       }
       else setProfile(null);
     });
@@ -48,9 +67,10 @@ export default function App() {
   };
 
   const navigate = (page, data = null) => {
-    if (page === "testEditor") setEditingTest(data);
-    if (page === "results") setViewingResults(data);
-    if (page === "testPreview") setEditingTest(data);
+    if (page === "testEditor") { setEditingTest(data); persistPage(page, data); }
+    else if (page === "testPreview") { setEditingTest(data); persistPage(page, data); }
+    else if (page === "results") { setViewingResults(data); persistPage(page, null); }
+    else { persistPage(page, null); }
     setCurrentPage(page);
   };
 
@@ -72,6 +92,10 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    try {
+      sessionStorage.removeItem("qt_page");
+      sessionStorage.removeItem("qt_editing_test");
+    } catch {}
     if (studentUser) {
       sessionStorage.removeItem("qt_student");
       setStudentUser(null);
@@ -80,6 +104,7 @@ export default function App() {
     } else {
       await supabase.auth.signOut();
       setProfile(null);
+      setCurrentPage("dashboard");
     }
   };
 
