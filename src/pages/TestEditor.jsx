@@ -466,7 +466,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
       )}
     </div>
   );
-}
 
 export default function TestEditor({ navigate, onLogout, currentUser, editingTest }) {
   const [title, setTitle] = useState(editingTest?.title || "");
