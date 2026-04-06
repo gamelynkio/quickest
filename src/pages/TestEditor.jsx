@@ -1,4 +1,4 @@
-import { useState } from "react";import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect, useRef } from "react";import { supabase } from "@/integrations/supabase/client";
 import TeacherLayout from "../components/TeacherLayout";
 import RichTextEditor from "../components/RichTextEditor";
 
@@ -58,6 +58,15 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
   const [localTitle, setLocalTitle] = useState(task.taskTitle || "");
   const [localInstruction, setLocalInstruction] = useState(task.taskInstruction || "");
 
+  const localRef = useRef({});
+  localRef.current = { localTitle, localInstruction };
+  useEffect(() => {
+    return () => {
+      onUpdate("taskTitle", localRef.current.localTitle);
+      onUpdate("taskInstruction", localRef.current.localInstruction);
+    };
+  }, []);
+
   return (
     <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.15)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
@@ -105,14 +114,30 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [correctAnswer, setCorrectAnswer] = useState(tq.correctAnswer ?? null);
   const [localFullText, setLocalFullText] = useState(tq.fullText || "");
   const [localBlanks, setLocalBlanks] = useState(tq.blanks || []);
+  const [localPoints, setLocalPoints] = useState(tq.points || 1);
+
+  // Save all local state to global on unmount (catches "Speichern" without blur)
+  const localRef = useRef({});
+  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints };
+  useEffect(() => {
+    return () => {
+      const s = localRef.current;
+      onUpdate("text", s.localText);
+      onUpdate("solution", s.localSolution);
+      onUpdate("options", s.localOptions);
+      onUpdate("fullText", s.localFullText);
+      onUpdate("blanks", s.localBlanks);
+      onUpdate("points", s.localPoints);
+    };
+  }, []);
 
   return (
     <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px", color: "#1e293b" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
         <span style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>{tIdx + 1}.{tqIdx + 1} — {QUESTION_TYPES.find(t => t.id === tq.type)?.icon} {QUESTION_TYPES.find(t => t.id === tq.type)?.label}</span>
         <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-          <input type="number" min={0.5} step={0.5} defaultValue={tq.points}
-            onBlur={e => onUpdate("points", Number(e.target.value))}
+          <input type="number" min={0.5} step={0.5} value={localPoints}
+            onChange={e => { setLocalPoints(Number(e.target.value)); onUpdate("points", Number(e.target.value)); }}
             style={{ width: "50px", padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
           <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt.</span>
           <button onClick={onRemove} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }}>×</button>
