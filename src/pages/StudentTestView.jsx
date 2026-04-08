@@ -3,6 +3,23 @@ import { supabase } from "@/integrations/supabase/client";
 
 const COLORS = ["#fff8e7", "#f0fdf4", "#f0f9ff", "#fdf2f8", "#f5f3ff", "#fff1f2"];
 
+// Flatten nested task questions for autoCorrect and progress tracking
+const flattenQuestions = (qs) => {
+  const result = [];
+  for (const q of qs) {
+    if (q.type === "section") {
+      for (const task of (q.tasks || [])) {
+        for (const tq of (task.questions || [])) {
+          result.push({ ...tq, _taskId: task.id, _sectionId: q.id });
+        }
+      }
+    } else {
+      result.push(q);
+    }
+  }
+  return result;
+};
+
 const autoCorrect = (questions, answers) => {
   let score = 0;
   const corrections = {};
@@ -11,7 +28,6 @@ const autoCorrect = (questions, answers) => {
     const studentAnswer = answers[q.id];
     const maxPoints = Number(q.points || 0);
     if (q.type === "multiple_choice") {
-      // Support both old single correctAnswer and new correctAnswers array
       const correctAnswers = q.correctAnswers?.length ? q.correctAnswers : (q.correctAnswer != null ? [q.correctAnswer] : []);
       const studentAnswers = Array.isArray(studentAnswer) ? studentAnswer : (studentAnswer != null ? [studentAnswer] : []);
       const correct = correctAnswers.length > 0 &&
@@ -68,26 +84,28 @@ const autoCorrect = (questions, answers) => {
 const calcGrade = (score, totalPoints, gradingScale) => {
   if (!totalPoints || !gradingScale?.length) return null;
   const percent = (score / totalPoints) * 100;
-
-// Flatten nested task questions for autoCorrect and progress tracking
-const flattenQuestions = (qs) => {
-  const result = [];
-  for (const q of qs) {
-    if (q.type === "section") {
-      for (const task of (q.tasks || [])) {
-        for (const tq of (task.questions || [])) {
-          result.push({ ...tq, _taskId: task.id, _sectionId: q.id });
-        }
-      }
-    } else {
-      result.push(q);
-    }
-  }
-  return result;
-};
   const sorted = [...gradingScale].sort((a, b) => b.minPercent - a.minPercent);
   for (const g of sorted) { if (percent >= Number(g.minPercent)) return g.grade; }
   return "6";
+};
+
+// Safe storage helper — SEB blocks localStorage, so we use sessionStorage with localStorage fallback
+const safeStorage = {
+  getItem: (key) => {
+    try { return sessionStorage.getItem(key); } catch (_) {
+      try { return localStorage.getItem(key); } catch (__) { return null; }
+    }
+  },
+  setItem: (key, value) => {
+    try { sessionStorage.setItem(key, value); } catch (_) {
+      try { localStorage.setItem(key, value); } catch (__) { /* ignore */ }
+    }
+  },
+  removeItem: (key) => {
+    try { sessionStorage.removeItem(key); } catch (_) {
+      try { localStorage.removeItem(key); } catch (__) { /* ignore */ }
+    }
+  },
 };
 
 export default function StudentTestView({ currentUser, assignment: assignmentProp, onFinish }) {
@@ -118,11 +136,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       return data;
     })();
     if (data) {
-      // Check if SEB is required but not active
-      // SEB identifies itself via the User-Agent string
       const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
       if (data.require_seb && !isSEB) {
-        setAssignment(data); // store so we can show the SEB install page
+        setAssignment(data);
         setSebRequired(true);
         setLoading(false);
         return;
@@ -135,10 +151,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         .maybeSingle();
       if (existingSubmission) {
         setLoading(false);
-        return; // Already submitted — show "no active test"
+        return;
       }
 
-      // Block access if this is a makeup test and student is not in the list
       if (data.parent_assignment_id && data.makeup_usernames?.length) {
         if (!data.makeup_usernames.includes(currentUser.username)) {
           setLoading(false);
@@ -150,36 +165,30 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         if (new Date() > windowEnd) {
           await supabase.from("assignments").update({ status: "beendet" }).eq("id", data.id);
           setLoading(false);
-          return; // No active assignment
+          return;
         }
-        // Set timer to remaining window time
         const remaining = Math.max(0, Math.floor((windowEnd - new Date()) / 1000));
         data.time_limit = remaining;
       }
       setAssignment(data);
 
-      // Calculate remaining time based on when test was started
       const storageKey = `qt_start_${data.id}_${currentUser.id}`;
       const timeLimit = data.time_limit || 1200;
 
       if (data.timing_mode === "lobby" && data.lobby_started_at) {
-        // Lobby: time runs from lobby_started_at
         const elapsed = Math.floor((Date.now() - new Date(data.lobby_started_at).getTime()) / 1000);
         const remaining = Math.max(0, timeLimit - elapsed);
         setTimeLeft(remaining);
       } else if (data.timing_mode === "window" && data.window_date && data.window_end) {
-        // Window: already handled above
         setTimeLeft(timeLimit);
       } else {
-        // Countdown: use localStorage to track start time
-        const storedStart = localStorage.getItem(storageKey);
+        const storedStart = safeStorage.getItem(storageKey);
         if (storedStart) {
           const elapsed = Math.floor((Date.now() - Number(storedStart)) / 1000);
           const remaining = Math.max(0, timeLimit - elapsed);
           setTimeLeft(remaining);
         } else {
-          // First time loading — store start time
-          localStorage.setItem(storageKey, String(Date.now()));
+          safeStorage.setItem(storageKey, String(Date.now()));
           setTimeLeft(timeLimit);
         }
       }
@@ -192,22 +201,17 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       } else {
         setQuestions(qs);
       }
-      // If lobby mode and not yet started → join lobby
       if (data.timing_mode === "lobby" && !data.lobby_started_at) {
         setLobbyWaiting(true);
         const now = new Date().toISOString();
-        // Try update first (for returning students)
         const { data: updated, error: updateError } = await supabase.from("lobby_presence")
           .update({ last_seen: now })
           .eq("assignment_id", data.id)
           .eq("username", currentUser.username)
           .select();
-        // If no row was updated, insert fresh
-        let insertError = null;
         if (!updated || updated.length === 0) {
-          const { error: ie } = await supabase.from("lobby_presence")
+          await supabase.from("lobby_presence")
             .insert({ assignment_id: data.id, username: currentUser.username, last_seen: now });
-          insertError = ie;
         }
         const { data: presenceData } = await supabase
           .from("lobby_presence").select("username").eq("assignment_id", data.id)
@@ -218,7 +222,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     setLoading(false);
   };
 
-  // Heartbeat: update last_seen every 5 seconds while in lobby OR during test
+  // Heartbeat
   useEffect(() => {
     if (!assignment || submitted) return;
     const heartbeat = setInterval(async () => {
@@ -227,7 +231,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         .eq("assignment_id", assignment.id)
         .eq("username", currentUser.username);
     }, 3000);
-    // Remove from lobby on unmount/leave
     const cleanup = async () => {
       await supabase.from("lobby_presence")
         .delete()
@@ -253,12 +256,10 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (data?.lobby_started_at) {
         setLobbyWaiting(false);
         setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
-        // Calculate remaining time from lobby_started_at
         const elapsed = Math.floor((Date.now() - new Date(data.lobby_started_at).getTime()) / 1000);
         const remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
         setTimeLeft(remaining);
       }
-      // Also update player count
       const { data: presenceData } = await supabase
         .from("lobby_presence").select("username").eq("assignment_id", assignment.id);
       setLobbyPlayerCount(presenceData?.length || 0);
@@ -271,12 +272,11 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const timer = setInterval(() => {
       let remaining;
       if (assignment.timing_mode === "lobby" && assignment.lobby_started_at) {
-        // Lobby: always calculate from server timestamp — immune to screen sleep
         const elapsed = Math.floor((Date.now() - new Date(assignment.lobby_started_at).getTime()) / 1000);
         remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
       } else if (assignment.timing_mode === "countdown") {
         const storageKey = `qt_start_${assignment.id}_${currentUser.id}`;
-        const storedStart = localStorage.getItem(storageKey);
+        const storedStart = safeStorage.getItem(storageKey);
         if (storedStart) {
           const elapsed = Math.floor((Date.now() - Number(storedStart)) / 1000);
           remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
@@ -295,7 +295,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => clearInterval(timer);
   }, [submitted, loading, lobbyWaiting, assignment]);
 
-  // Anti-cheat: tab/app switch detection + block shortcuts + disable right-click
+  // Anti-cheat
   useEffect(() => {
     if (submitted || loading || lobbyWaiting || !assignment) return;
 
@@ -305,7 +305,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       const count = cheatLogRef.current.length;
       setTabSwitchCount(count);
       setShowCheatWarning(true);
-      // Update cheat_log in DB if submission exists
       if (submissionIdRef.current) {
         await supabase.from("submissions")
           .update({ cheat_log: cheatLogRef.current })
@@ -318,12 +317,10 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     };
 
     const handleKeyDown = (e) => {
-      // Block Ctrl/Cmd + C, V, A, T, N, W, R, F, P
       if ((e.ctrlKey || e.metaKey) && ["c","v","a","t","n","w","r","f","p","u"].includes(e.key.toLowerCase())) {
         e.preventDefault();
         e.stopPropagation();
       }
-      // Block F5, F12
       if (["F5","F12"].includes(e.key)) e.preventDefault();
     };
 
@@ -364,7 +361,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     }).select("id").single();
     if (newSubmission) submissionIdRef.current = newSubmission.id;
 
-    // Auto-close: check if all students have submitted (lobby + countdown mode)
     if (assignment.timing_mode === "lobby" || assignment.timing_mode === "countdown") {
       const { count: submissionCount } = await supabase
         .from("submissions").select("*", { count: "exact", head: true })
@@ -377,8 +373,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       }
     }
 
-    // Clear stored start time and lobby presence
-    localStorage.removeItem(`qt_start_${assignment.id}_${currentUser.id}`);
+    safeStorage.removeItem(`qt_start_${assignment.id}_${currentUser.id}`);
     await supabase.from("lobby_presence")
       .delete()
       .eq("assignment_id", assignment.id)
@@ -404,7 +399,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     </div>
   );
 
-  // LOBBY WAITING ROOM
   if (lobbyWaiting) return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f, #4c1d95)", fontFamily: "'Segoe UI', system-ui, sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px" }}>
       <div style={{ textAlign: "center", maxWidth: "420px", width: "100%" }}>
@@ -587,12 +581,10 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       {/* Sticky header */}
       <div style={{ position: "sticky", top: 0, background: "#fff", borderBottom: "2px solid #e2e8f0", zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
         <div style={{ maxWidth: "800px", margin: "0 auto", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-          {/* Title + user */}
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 800, fontSize: "17px", color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>⚡ {assignment.title}</div>
             <div style={{ fontSize: "13px", color: "#64748b" }}>{currentUser.username} · {answeredCount}/{realQuestions.length} beantwortet</div>
           </div>
-          {/* Timer */}
           {timeLeft !== null && (
             <div style={{ textAlign: "center", flexShrink: 0 }}>
               <div style={{ fontSize: "32px", fontWeight: 900, color: timeColor, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{formatTime(timeLeft)}</div>
@@ -601,7 +593,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
               </div>
             </div>
           )}
-          {/* Submit button */}
           <button onClick={() => setShowConfirm(true)}
             style={{ padding: "12px 20px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", flexShrink: 0, touchAction: "manipulation" }}>
             Abgeben
@@ -628,7 +619,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         </div>
 
         {questions.map((q, index) => {
-          // SECTION
           if (q.type === "section") return (
             <div key={q.id} style={{ marginBottom: "12px", marginTop: index > 0 ? "24px" : 0 }}>
               <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "16px", padding: "20px 24px", color: "#fff" }}>
@@ -640,7 +630,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 )}
               </div>
 
-              {/* Tasks within section */}
               {(q.tasks || []).map((task, tIdx) => (
                 <div key={task.id} style={{ marginBottom: "12px" }}>
                   {(task.taskTitle || task.taskInstruction) && (
@@ -684,7 +673,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
               border: isAnswered ? "2px solid #bfdbfe" : "2px solid #e2e8f0",
               transition: "border-color 0.2s"
             }}>
-              {/* Question header */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px", gap: "12px" }}>
                 <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", flex: 1 }}>
                   <span style={{ background: isAnswered ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "8px", padding: "4px 12px", fontSize: "14px", fontWeight: 700, flexShrink: 0 }}>{qIndex + 1}</span>
@@ -693,7 +681,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 <span style={{ fontSize: "13px", color: "#94a3b8", whiteSpace: "nowrap", flexShrink: 0, background: "#f1f5f9", borderRadius: "6px", padding: "3px 8px" }}>{q.points} Pkt.</span>
               </div>
 
-              {/* Multiple choice */}
               {q.type === "multiple_choice" && (() => {
                 const multiCorrect = (q.correctAnswers?.length || 0) > 1;
                 const filledOptions = q.options.filter(o => o.trim() !== "");
@@ -732,7 +719,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 );
               })()}
 
-              {/* True/False — full width buttons */}
               {q.type === "true_false" && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                   {["Wahr", "Falsch"].map((opt, i) => (
@@ -748,7 +734,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 </div>
               )}
 
-              {/* Flashcard */}
               {q.type === "flashcard" && (
                 <div>
                   <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: "14px", padding: "24px", marginBottom: "14px", border: "2px solid rgba(0,0,0,0.08)", textAlign: "center" }}>
@@ -761,7 +746,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 </div>
               )}
 
-              {/* Open */}
               {q.type === "open" && (
                 <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
                   placeholder="Deine Antwort..."
@@ -771,7 +755,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                   style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", lineHeight: 1.6 }} />
               )}
 
-              {/* Fill blank */}
               {q.type === "fill_blank" && (
                 <div>
                   {(q.blanks || []).length > 0 ? (
@@ -805,7 +788,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 </div>
               )}
 
-              {/* Assignment */}
               {q.type === "assignment" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {(q.pairs || []).map((pair, i) => (
@@ -825,14 +807,12 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           );
         })}
 
-        {/* Submit button at bottom */}
         <button onClick={() => setShowConfirm(true)}
           style={{ width: "100%", padding: "18px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "14px", fontWeight: 800, fontSize: "17px", cursor: "pointer", marginTop: "8px", touchAction: "manipulation" }}>
           Test abgeben
         </button>
       </div>
 
-      {/* Cheat warning */}
       {showCheatWarning && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: "20px" }}>
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center" }}>
@@ -852,7 +832,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         </div>
       )}
 
-      {/* Confirm modal */}
       {showConfirm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
           <div style={{ background: "#fff", borderRadius: "24px", padding: "36px 32px", maxWidth: "420px", width: "100%", textAlign: "center" }}>
