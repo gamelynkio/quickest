@@ -81,6 +81,10 @@ Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
           messages: [{ role: "user", content: prompt }],
         }),
       });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Edge Function ${response.status}: ${errText.slice(0, 200)}`);
+      }
       const data = await response.json();
       const text = data.content?.map(b => b.text || "").join("") || "";
       const clean = text.replace(/```json|```/g, "").trim();
@@ -95,7 +99,15 @@ Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
         maxPoints: Number(q.points),
       };
     } catch (e) {
-      aiResults[q.id] = null;
+      console.error("KI-Korrektur Fehler für Frage", q.id, e.message);
+      aiResults[q.id] = {
+        points: null,
+        correct: null,
+        comment: `⚠️ KI-Fehler: ${e.message?.slice(0, 100) || "Unbekannt"}`,
+        aiReviewed: false,
+        needsReview: true,
+        maxPoints: Number(q.points),
+      };
     }
   }
   return aiResults;
