@@ -764,24 +764,49 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           </div>
         </div>
 
-        {questions.map((q, index) => {
-          if (q.type === "section") return (
+        {(() => {
+          let sectionCounter = 0;
+          let globalTaskCounter = 0;
+          return questions.map((q, index) => {
+          if (q.type === "section") {
+            sectionCounter++;
+            const currentSectionNum = sectionCounter;
+            const taskStartNum = globalTaskCounter + 1;
+            globalTaskCounter += (q.tasks || []).length;
+            return (
             <div key={q.id} style={{ marginBottom: "12px", marginTop: index > 0 ? "24px" : 0 }}>
               <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "16px", padding: "20px 24px", color: "#fff" }}>
-                {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800, marginBottom: "6px" }}>{q.sectionTitle}</div>}
-                {q.sectionInstruction && <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.85)", marginBottom: q.sectionText ? "12px" : 0 }}>{q.sectionInstruction}</div>}
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+                  <span style={{ background: "rgba(255,255,255,0.2)", borderRadius: "8px", padding: "2px 10px", fontSize: "13px", fontWeight: 800 }}>Abschnitt {currentSectionNum}</span>
+                  {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800 }}>{q.sectionTitle}</div>}
+                </div>
+                {q.sectionInstruction && (
+                  <div style={{ fontSize: "14px", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: "8px", padding: "8px 12px", marginBottom: q.sectionText ? "12px" : 0, fontWeight: 500 }}>
+                    {q.sectionInstruction}
+                  </div>
+                )}
                 {q.sectionText && (
                   <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "12px", padding: "16px", fontSize: "15px", lineHeight: 1.8, marginTop: "8px", wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden", color: "#fff" }}
                     dangerouslySetInnerHTML={{ __html: q.sectionText }} />
                 )}
               </div>
 
-              {(q.tasks || []).map((task, tIdx) => (
+              {(q.tasks || []).map((task, tIdx) => {
+                const globalTaskNum = taskStartNum + tIdx;
+                return (
                 <div key={task.id} style={{ marginBottom: "12px" }}>
                   {(task.taskTitle || task.taskInstruction) && (
-                    <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: "10px", padding: "12px 16px", marginBottom: "8px", border: "1px solid rgba(255,255,255,0.15)" }}>
-                      {task.taskTitle && <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff", marginBottom: task.taskInstruction ? "4px" : 0 }}>{tIdx + 1}. {task.taskTitle}</div>}
-                      {task.taskInstruction && <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.8)", fontStyle: "italic" }}>{task.taskInstruction}</div>}
+                    <div style={{ background: "#1e3a5f", borderRadius: "10px", padding: "12px 16px", marginBottom: "8px" }}>
+                      {task.taskTitle && (
+                        <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff", marginBottom: task.taskInstruction ? "6px" : 0 }}>
+                          Aufgabe {globalTaskNum}: {task.taskTitle}
+                        </div>
+                      )}
+                      {task.taskInstruction && (
+                        <div style={{ fontSize: "13px", color: "#e2e8f0", fontStyle: "italic", lineHeight: 1.5 }}>
+                          {task.taskInstruction}
+                        </div>
+                      )}
                     </div>
                   )}
                   {(task.questions || []).map((tq, tqIdx) => {
@@ -790,7 +815,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                       <div key={tq.id} style={{ background: "#fff", borderRadius: "12px", padding: "16px 18px", marginBottom: "8px", border: `2px solid ${isAns ? "#bfdbfe" : "#e2e8f0"}` }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span style={{ background: isAns ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{tIdx + 1}.{tqIdx + 1}</span>
+                            <span style={{ background: isAns ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{globalTaskNum}.{tqIdx + 1}</span>
                             <span style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{tq.text}</span>
                           </div>
                           <span style={{ fontSize: "11px", color: "#94a3b8", background: "#f1f5f9", borderRadius: "5px", padding: "2px 7px", flexShrink: 0, marginLeft: "8px" }}>{tq.points} Pkt.</span>
@@ -800,9 +825,10 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                     );
                   })}
                 </div>
-              ))}
+                );
+              })}
             </div>
-          );
+          );}
 
           // QUESTION
           const qIndex = questions.slice(0, index).filter(x => x.type !== "section").length;
@@ -955,7 +981,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
               )}
             </div>
           );
-        })}
+        });
+        })()}
 
         <button onClick={() => setShowConfirm(true)}
           style={{ width: "100%", padding: "18px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "14px", fontWeight: 800, fontSize: "17px", cursor: "pointer", marginTop: "8px", touchAction: "manipulation" }}>
