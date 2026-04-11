@@ -54,10 +54,14 @@ WICHTIGE HINWEISE zur Musterlösung:
 - Wenn keine Musterlösung hinterlegt ist, bewerte ob die Antwort inhaltlich sinnvoll und vollständig zur Frage passt.
 
 TEILBEPUNKTUNG:
-- Vergib IMMER anteilige Punkte wenn die Antwort teilweise korrekt ist.
+${(q.partialPoints || []).length > 0
+  ? `Der Lehrer hat folgende verbindliche Bewertungskriterien festgelegt — halte dich EXAKT daran:
+${(q.partialPoints).map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}
+Vergib nur die Punkte, die der Schüler laut diesen Kriterien verdient hat. Summe darf maximal ${q.points} sein.`
+  : `- Vergib IMMER anteilige Punkte wenn die Antwort teilweise korrekt ist.
 - Nur bei komplett falscher oder komplett richtiger Antwort darfst du 0 oder volle Punktzahl vergeben.
 - Bei ${q.points} Punkt${Number(q.points) !== 1 ? "en" : ""} sind Schritte von 0.5 möglich.
-- Erkläre kurz was richtig war und was gefehlt hat (oder warum volle/keine Punkte).
+- Erkläre kurz was richtig war und was gefehlt hat (oder warum volle/keine Punkte).`}
 
 Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
 {"points": <Zahl, max ${q.points}, Vielfaches von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
