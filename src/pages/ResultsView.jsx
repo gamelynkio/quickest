@@ -476,7 +476,32 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                       </div>
                     )}
 
-                    {Object.entries(selectedSubmission.ai_corrections || {}).map(([qId, correction], i) => {
+                    {(() => {
+                      // Originalreihenfolge der Fragen beibehalten — Object.entries sortiert numerische Keys falsch
+                      const allQs = (() => {
+                        const flat = [];
+                        const qs = assignmentData?.question_data || assignment?.question_data || [];
+                        for (const q of qs) {
+                          if (q.type === "section") {
+                            for (const task of (q.tasks || [])) {
+                              for (const tq of (task.questions || [])) flat.push(tq);
+                            }
+                          } else {
+                            flat.push(q);
+                          }
+                        }
+                        return flat;
+                      })();
+                      const corrections = selectedSubmission.ai_corrections || {};
+                      const orderedKeys = allQs.length > 0
+                        ? allQs.map(q => String(q.id)).filter(id => corrections[id] !== undefined)
+                        : Object.keys(corrections);
+                      const missingKeys = Object.keys(corrections).filter(k => !orderedKeys.includes(k));
+                      const finalKeys = [...orderedKeys, ...missingKeys];
+
+                      return finalKeys.map((qId, i) => {
+                        const correction = corrections[qId];
+                        if (!correction) return null;
                       const override = overrides[qId];
                       const currentPoints = override !== undefined ? Number(override) : (selectedSubmission.manual_overrides?.[qId] !== undefined ? selectedSubmission.manual_overrides[qId] : correction.points);
                       const isAiReviewed = correction.aiReviewed;
@@ -557,7 +582,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                           </div>
                         </div>
                       );
-                    })}
+                    });
+                    })()}
 
                     <button onClick={saveOverrides} disabled={saving} style={{ width: "100%", marginTop: "8px", padding: "10px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: saving ? "not-allowed" : "pointer" }}>
                       {saving ? "Wird gespeichert..." : "✓ Korrekturen speichern"}
