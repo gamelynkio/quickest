@@ -20,6 +20,78 @@ const flattenQuestions = (qs) => {
   return result;
 };
 
+// KI-Korrektur für offene Antworten direkt beim Abgeben
+const aiCorrectOpenAnswers = async (questions, answers, assignment) => {
+  const gradingMode = assignment?.grading_mode || "standard";
+  const gradingModeText = {
+    content: "Bewerte NUR den inhaltlichen Kern. Rechtschreibung, Grammatik und Zeichensetzung sind vollkommen egal.",
+    standard: "Bewerte primär den Inhalt. Grobe Rechtschreib- oder Grammatikfehler können leicht abgezogen werden, spielen aber keine große Rolle.",
+    strict: "Bewerte Inhalt UND Sprachform. Rechtschreibfehler, Grammatikfehler und falsche Zeichensetzung führen zu Punktabzügen.",
+  }[gradingMode] || "Bewerte primär den Inhalt.";
+
+  const openQuestions = questions.filter(q => q.type === "open");
+  const aiResults = {};
+
+  for (const q of openQuestions) {
+    const studentAnswer = answers[q.id] || "";
+    if (!studentAnswer.trim()) {
+      aiResults[q.id] = { points: 0, correct: false, comment: "🤖 Keine Antwort gegeben.", aiReviewed: true, needsReview: false };
+      continue;
+    }
+    const prompt = `Du bist ein Schullehrer und bewertest die folgende Schülerantwort auf Deutsch.
+
+Frage: ${q.text}
+Musterlösung: ${q.solution || "(keine Musterlösung hinterlegt — bewerte inhaltlich nach bestem Ermessen)"}
+Maximale Punktzahl: ${q.points}
+Schülerantwort: ${studentAnswer}
+
+Bewertungsregeln: ${gradingModeText}
+
+WICHTIGE HINWEISE zur Musterlösung:
+- Wörter in runden Klammern () sind OPTIONAL und müssen NICHT genannt werden. Beispiel: "(she's) five" bedeutet, "five" allein ist vollständig richtig. "chocolate (with nuts)" bedeutet, "chocolate" allein reicht für volle Punktzahl.
+- Wenn die Schülerantwort den Kerninhalt der Musterlösung enthält, gilt sie als korrekt — auch wenn sie kürzer formuliert ist.
+- Wenn keine Musterlösung hinterlegt ist, bewerte ob die Antwort inhaltlich sinnvoll und vollständig zur Frage passt.
+
+TEILBEPUNKTUNG:
+- Vergib IMMER anteilige Punkte wenn die Antwort teilweise korrekt ist.
+- Nur bei komplett falscher oder komplett richtiger Antwort darfst du 0 oder volle Punktzahl vergeben.
+- Bei ${q.points} Punkt${Number(q.points) !== 1 ? "en" : ""} sind Schritte von 0.5 möglich.
+- Erkläre kurz was richtig war und was gefehlt hat (oder warum volle/keine Punkte).
+
+Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
+{"points": <Zahl, max ${q.points}, Vielfaches von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      const points = Math.min(Math.max(0, Number(parsed.points) || 0), Number(q.points));
+      aiResults[q.id] = {
+        points,
+        correct: points >= Number(q.points),
+        comment: `🤖 ${parsed.comment}`,
+        aiReviewed: true,
+        needsReview: false,
+        maxPoints: Number(q.points),
+      };
+    } catch (e) {
+      // KI fehlgeschlagen — zur manuellen Prüfung markieren
+      aiResults[q.id] = null;
+    }
+  }
+  return aiResults;
+};
+
 const autoCorrect = (questions, answers) => {
   let score = 0;
   const corrections = {};
@@ -347,19 +419,48 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const allQuestions = assignment.question_data || [];
     const realQuestions = flattenQuestions(allQuestions).filter(q => q.type !== "section");
     const totalPoints = realQuestions.reduce((sum, q) => sum + Number(q.points || 0), 0);
-    const { score, corrections } = autoCorrect(realQuestions, answers);
-    const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
-    const grade = hasOpenQuestions ? null : calcGrade(score, totalPoints, assignment.grading_scale);
+    const { score: initialScore, corrections } = autoCorrect(realQuestions, answers);
+
+    // Submission erst speichern
     const { data: newSubmission } = await supabase.from("submissions").insert({
       assignment_id: assignment.id,
       student_id: currentUser.id,
       username: currentUser.username,
-      answers, score, total_points: totalPoints, grade,
+      answers, score: initialScore, total_points: totalPoints, grade: null,
       ai_corrections: corrections,
-      reviewed: !hasOpenQuestions,
+      reviewed: false,
       cheat_log: cheatLogRef.current,
     }).select("id").single();
     if (newSubmission) submissionIdRef.current = newSubmission.id;
+
+    // KI korrigiert offene Antworten sofort
+    const openQuestions = realQuestions.filter(q => q.type === "open");
+    if (openQuestions.length > 0 && newSubmission) {
+      try {
+        const aiResults = await aiCorrectOpenAnswers(realQuestions, answers, assignment);
+        let newScore = 0;
+        for (const [qId, correction] of Object.entries(corrections)) {
+          const aiResult = aiResults[qId];
+          if (aiResult) corrections[qId] = { ...correction, ...aiResult };
+          const pts = corrections[qId].points;
+          if (pts !== null && pts !== undefined) newScore += Number(pts);
+        }
+        const hasStillOpen = Object.values(corrections).some(c => c.needsReview && !c.aiReviewed);
+        const grade = hasStillOpen ? null : calcGrade(newScore, totalPoints, assignment.grading_scale);
+        await supabase.from("submissions").update({
+          ai_corrections: corrections,
+          score: newScore,
+          grade,
+          reviewed: !hasStillOpen,
+        }).eq("id", newSubmission.id);
+      } catch (e) {
+        console.error("KI-Korrektur fehlgeschlagen:", e);
+      }
+    } else if (newSubmission) {
+      const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
+      const grade = hasOpenQuestions ? null : calcGrade(initialScore, totalPoints, assignment.grading_scale);
+      await supabase.from("submissions").update({ grade, reviewed: !hasOpenQuestions }).eq("id", newSubmission.id);
+    }
 
     if (assignment.timing_mode === "lobby" || assignment.timing_mode === "countdown") {
       const { count: submissionCount } = await supabase
@@ -844,7 +945,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               <button onClick={handleSubmit} disabled={submitting}
                 style={{ padding: "16px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 800, fontSize: "16px", cursor: submitting ? "not-allowed" : "pointer", touchAction: "manipulation" }}>
-                {submitting ? "Wird gespeichert..." : "Ja, jetzt abgeben"}
+                {submitting ? "🤖 KI korrigiert..." : "Ja, jetzt abgeben"}
               </button>
               <button onClick={() => setShowConfirm(false)}
                 style={{ padding: "16px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "16px", cursor: "pointer", touchAction: "manipulation" }}>
