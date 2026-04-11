@@ -222,7 +222,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
   });
 
   const handleOpenSubmission = async (s) => {
-    // question_data separat laden da es nicht immer im Join enthalten ist
     const { data: assignmentData } = await supabase
       .from("assignments")
       .select("question_data")
@@ -233,6 +232,8 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
       question_data: assignmentData?.question_data || [],
     });
   };
+
+  const handleStartTest = (assignment) => {
     const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
     if (assignment.require_seb && !isSEB) {
       setSebBlockedAssignment(assignment);
