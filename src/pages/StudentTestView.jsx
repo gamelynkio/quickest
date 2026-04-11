@@ -648,6 +648,59 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
       );
     }
+    if (q.type === "fill_blank") {
+      const text = q.fullText || q.text || "";
+      const hasBlanks = (q.blanks || []).length > 0 && text.includes("[Lücke]");
+      if (hasBlanks) {
+        return (
+          <div style={{ fontSize: "15px", lineHeight: 2.5, background: "rgba(255,255,255,0.8)", borderRadius: "10px", padding: "14px" }}>
+            {text.split("[Lücke]").map((part, i, arr) => (
+              <span key={i}>
+                {part}
+                {i < arr.length - 1 && (
+                  <input
+                    value={(answers[q.id] || [])[i] || ""}
+                    onChange={e => {
+                      const cur = Array.isArray(answers[q.id]) ? [...answers[q.id]] : [];
+                      cur[i] = e.target.value;
+                      setAnswers(a => ({ ...a, [q.id]: cur }));
+                    }}
+                    placeholder="___"
+                    autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                    data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
+                    style={{ display: "inline-block", width: "110px", padding: "4px 8px", border: "none", borderBottom: "3px solid #2563a8", background: "transparent", fontSize: "15px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }}
+                  />
+                )}
+              </span>
+            ))}
+          </div>
+        );
+      }
+      return (
+        <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+          placeholder="Deine Antwort..." rows={3}
+          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+          data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
+          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+      );
+    }
+    if (q.type === "assignment") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {(q.pairs || []).map((pair, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.8)", borderRadius: "8px", padding: "8px 12px" }}>
+              <span style={{ fontWeight: 700, fontSize: "14px", minWidth: "80px" }}>{pair.left}</span>
+              <span style={{ color: "#94a3b8", fontSize: "16px" }}>→</span>
+              <select value={(answers[q.id] || {})[i] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [i]: e.target.value } }))}
+                style={{ flex: 1, padding: "8px 10px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", background: "#fff", fontFamily: "inherit" }}>
+                <option value="">– auswählen –</option>
+                {(q.pairs || []).map((p, j) => <option key={j} value={p.right}>{p.right}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+      );
+    }
     if (q.type === "flashcard") {
       return (
         <div>
