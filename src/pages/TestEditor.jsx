@@ -210,8 +210,49 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
       {tq.type === "flashcard" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
-            <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>🃏 A-Seite</label><input value={localCardFront} onChange={e => setLocalCardFront(e.target.value)} onBlur={() => onUpdate("cardFront", localCardFront)} placeholder="z.B. der Hund" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box" }} /></div>
-            <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>✅ B-Seite</label><input value={localCardBack} onChange={e => setLocalCardBack(e.target.value)} onBlur={() => onUpdate("cardBack", localCardBack)} placeholder="z.B. the dog" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box" }} /></div>
+            <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>🃏 A-Seite</label>
+              <input value={localCardFront} onChange={e => setLocalCardFront(e.target.value)} onBlur={() => onUpdate("cardFront", localCardFront)} placeholder="z.B. der Hund" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "4px" }} />
+              {tq.cardFrontMedia ? (
+                <div style={{ position: "relative", display: "inline-block" }}>
+                  <img src={tq.cardFrontMedia} alt="" style={{ maxHeight: "60px", borderRadius: "5px", border: "1px solid #e2e8f0" }} />
+                  <button onClick={() => onUpdate("cardFrontMedia", null)} style={{ position: "absolute", top: "-5px", right: "-5px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "16px", height: "16px", fontSize: "10px", cursor: "pointer" }}>✕</button>
+                </div>
+              ) : (
+                <label style={{ fontSize: "10px", color: "#2563a8", cursor: "pointer" }}>
+                  <span style={{ background: "#f0f7ff", border: "1px dashed #bfdbfe", borderRadius: "4px", padding: "2px 6px" }}>🖼 Bild</span>
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                    const file = e.target.files[0]; if (!file) return;
+                    const ext = file.name.split(".").pop();
+                    const path = `flashcard/${Date.now()}.${ext}`;
+                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                    await supabase.storage.from("test-media").upload(path, file, { upsert: true });
+                    const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
+                    onUpdate("cardFrontMedia", urlData.publicUrl);
+                  }} />
+                </label>
+              )}
+            </div>
+            <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>✅ B-Seite</label>
+              <input value={localCardBack} onChange={e => setLocalCardBack(e.target.value)} onBlur={() => onUpdate("cardBack", localCardBack)} placeholder="z.B. the dog" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "4px" }} />
+              {tq.cardBackMedia ? (
+                <div style={{ position: "relative", display: "inline-block" }}>
+                  <img src={tq.cardBackMedia} alt="" style={{ maxHeight: "60px", borderRadius: "5px", border: "1px solid #e2e8f0" }} />
+                  <button onClick={() => onUpdate("cardBackMedia", null)} style={{ position: "absolute", top: "-5px", right: "-5px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "16px", height: "16px", fontSize: "10px", cursor: "pointer" }}>✕</button>
+                </div>
+              ) : (
+                <label style={{ fontSize: "10px", color: "#2563a8", cursor: "pointer" }}>
+                  <span style={{ background: "#f0f7ff", border: "1px dashed #bfdbfe", borderRadius: "4px", padding: "2px 6px" }}>🖼 Bild</span>
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                    const file = e.target.files[0]; if (!file) return;
+                    const ext = file.name.split(".").pop();
+                    const path = `flashcard/${Date.now()}.${ext}`;
+                    await supabase.storage.from("test-media").upload(path, file, { upsert: true });
+                    const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
+                    onUpdate("cardBackMedia", urlData.publicUrl);
+                  }} />
+                </label>
+              )}
+            </div>
           </div>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: "11px", color: "#94a3b8" }}>Auch akzeptiert:</span>
@@ -585,8 +626,48 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
               {q.type === "flashcard" && (
                 <div style={{ marginTop: "12px" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
-                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe)</label><input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)} placeholder="z.B. der Hund" style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
-                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (Hauptantwort)</label><input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)} placeholder="z.B. the dog" style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
+                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe)</label>
+                      <input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)} placeholder="z.B. der Hund" style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", marginBottom: "6px" }} />
+                      {q.cardFrontMedia ? (
+                        <div style={{ position: "relative", display: "inline-block" }}>
+                          <img src={q.cardFrontMedia} alt="" style={{ maxHeight: "80px", borderRadius: "6px", border: "1px solid #e2e8f0" }} />
+                          <button onClick={() => updateQuestion(q.id, "cardFrontMedia", null)} style={{ position: "absolute", top: "-6px", right: "-6px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "18px", height: "18px", fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                        </div>
+                      ) : (
+                        <label style={{ fontSize: "11px", color: "#2563a8", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                          <span style={{ background: "#f0f7ff", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "3px 8px" }}>🖼 Bild hochladen</span>
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                            const file = e.target.files[0]; if (!file) return;
+                            const ext = file.name.split(".").pop();
+                            const path = `flashcard/${Date.now()}.${ext}`;
+                            await supabase.storage.from("test-media").upload(path, file, { upsert: true });
+                            const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
+                            updateQuestion(q.id, "cardFrontMedia", urlData.publicUrl);
+                          }} />
+                        </label>
+                      )}
+                    </div>
+                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (Hauptantwort)</label>
+                      <input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)} placeholder="z.B. the dog" style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", marginBottom: "6px" }} />
+                      {q.cardBackMedia ? (
+                        <div style={{ position: "relative", display: "inline-block" }}>
+                          <img src={q.cardBackMedia} alt="" style={{ maxHeight: "80px", borderRadius: "6px", border: "1px solid #e2e8f0" }} />
+                          <button onClick={() => updateQuestion(q.id, "cardBackMedia", null)} style={{ position: "absolute", top: "-6px", right: "-6px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "18px", height: "18px", fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                        </div>
+                      ) : (
+                        <label style={{ fontSize: "11px", color: "#2563a8", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                          <span style={{ background: "#f0f7ff", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "3px 8px" }}>🖼 Bild hochladen</span>
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                            const file = e.target.files[0]; if (!file) return;
+                            const ext = file.name.split(".").pop();
+                            const path = `flashcard/${Date.now()}.${ext}`;
+                            await supabase.storage.from("test-media").upload(path, file, { upsert: true });
+                            const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
+                            updateQuestion(q.id, "cardBackMedia", urlData.publicUrl);
+                          }} />
+                        </label>
+                      )}
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
                     <span style={{ fontSize: "12px", color: "#94a3b8" }}>Auch akzeptiert:</span>
