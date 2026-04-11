@@ -67,9 +67,14 @@ Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
 {"points": <Zahl, max ${q.points}, Vielfaches von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
 
     try {
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabaseAnonKey}`,
+          "apikey": supabaseAnonKey,
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1000,
