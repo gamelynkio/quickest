@@ -161,9 +161,12 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
     if (pending.length === 0) return;
-    // Still im Hintergrund korrigieren
+    setAiRunning(true);
+    setAiProgress(`🤖 KI korrigiert ${pending.length} Abgabe${pending.length !== 1 ? "n" : ""} automatisch...`);
     (async () => {
-      for (const s of pending) {
+      for (let i = 0; i < pending.length; i++) {
+        const s = pending[i];
+        if (pending.length > 1) setAiProgress(`🤖 KI korrigiert ${i + 1}/${pending.length}: ${s.username}...`);
         const { corrections, changed } = await aiCorrectOpenQuestions(s, assignmentData);
         if (!changed) continue;
         let newScore = 0;
@@ -189,6 +192,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           setSelectedSubmission(prev => ({ ...prev, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen }));
         }
       }
+      setAiProgress("✅ KI-Korrektur abgeschlossen!");
+      setTimeout(() => { setAiProgress(""); setAiRunning(false); }, 3000);
     })();
   }, [assignmentData, submissions.length]);
 
@@ -387,12 +392,16 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           </p>
         </div>
 
-        {/* Fortschrittsanzeige */}
+        {/* KI-Fortschritt */}
         {aiProgress && (
-          <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "14px", color: "#1e3a5f", fontWeight: 600 }}>
+          <div style={{ background: aiProgress.startsWith("✅") ? "#f0fdf4" : "#f0f7ff", border: `1px solid ${aiProgress.startsWith("✅") ? "#bbf7d0" : "#bfdbfe"}`, borderRadius: "10px", padding: "10px 16px", marginBottom: "16px", fontSize: "13px", color: aiProgress.startsWith("✅") ? "#16a34a" : "#1e3a5f", fontWeight: 600, display: "flex", alignItems: "center", gap: "10px" }}>
+            {!aiProgress.startsWith("✅") && (
+              <div style={{ width: "14px", height: "14px", border: "2px solid #bfdbfe", borderTop: "2px solid #2563a8", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+            )}
             {aiProgress}
           </div>
         )}
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
         {loading ? (
           <div style={{ padding: "48px", textAlign: "center", color: "#94a3b8" }}>Wird geladen...</div>
