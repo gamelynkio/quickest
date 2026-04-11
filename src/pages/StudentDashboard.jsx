@@ -12,8 +12,15 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
   useEffect(() => { fetchData(); }, []);
 
+  // Automatisch aktualisieren solange Abgaben ohne Note vorhanden
+  useEffect(() => {
+    const hasUngraded = submissions.some(s => !s.grade);
+    if (!hasUngraded) return;
+    const poll = setInterval(fetchData, 5000);
+    return () => clearInterval(poll);
+  }, [submissions]);
+
   const fetchData = async () => {
-    setLoading(true);
     const [{ data: asgn }, { data: subs }, { data: allMakeups }] = await Promise.all([
       supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv"),
       supabase.from("submissions")
@@ -135,6 +142,8 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     </div>
   );
 
+  const hasUngraded = submissions.some(s => !s.grade);
+
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 50%, #1e3a5f 100%)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px 16px 40px" }}>
       <div style={{ maxWidth: "500px", margin: "0 auto" }}>
@@ -151,6 +160,17 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
             Abmelden
           </button>
         </div>
+
+        {/* Hinweis wenn Note noch aussteht */}
+        {hasUngraded && !loading && (
+          <div style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "12px", padding: "12px 16px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid #fff", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>
+              Deine Note wird gerade berechnet — diese Seite aktualisiert sich automatisch.
+            </span>
+          </div>
+        )}
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
         {loading ? (
           <div style={{ textAlign: "center", color: "rgba(255,255,255,0.6)", padding: "48px" }}>Wird geladen...</div>
