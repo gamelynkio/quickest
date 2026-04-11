@@ -31,6 +31,7 @@ const aiCorrectOpenAnswers = async (questions, answers, assignment) => {
 
   const openQuestions = questions.filter(q => q.type === "open");
   const aiResults = {};
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
   for (const q of openQuestions) {
     const studentAnswer = answers[q.id] || "";
@@ -62,7 +63,7 @@ Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
 {"points": <Zahl, max ${q.points}, Vielfaches von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
 
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -85,7 +86,6 @@ Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
         maxPoints: Number(q.points),
       };
     } catch (e) {
-      // KI fehlgeschlagen — zur manuellen Prüfung markieren
       aiResults[q.id] = null;
     }
   }
