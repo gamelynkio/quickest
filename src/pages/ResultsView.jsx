@@ -60,21 +60,25 @@ const aiCorrectOpenQuestions = async (submission, assignmentData) => {
     const prompt = `Du bist ein Schullehrer und bewertest die folgende Schülerantwort auf Deutsch.
 
 Frage: ${q.text}
-Musterlösung (als Orientierung, nicht als einzig richtige Antwort): ${q.solution || "Keine Musterlösung hinterlegt"}
+Musterlösung: ${q.solution || "(keine Musterlösung hinterlegt — bewerte inhaltlich nach bestem Ermessen)"}
 Maximale Punktzahl: ${q.points}
 Schülerantwort: ${studentAnswer}
 
 Bewertungsregeln: ${gradingModeText}
 
-WICHTIG — Teilbepunktung:
-- Vergib IMMER anteilige Punkte wenn die Antwort teilweise korrekt ist. Niemals nur 0 oder volle Punktzahl, außer die Antwort ist komplett falsch oder komplett richtig.
-- Beispiel: Musterlösung "am 30. April um 3 Uhr", Schüler schreibt "30. April" → er hat das Datum richtig, die Uhrzeit fehlt → vergib die Hälfte der Punkte.
-- Orientiere dich daran, welcher Anteil der geforderten Information korrekt genannt wurde.
-- Bei ${q.points} Punkten sind auch Zwischenwerte wie ${q.points === 1 ? "0.5" : q.points === 2 ? "0.5, 1 oder 1.5" : "0.5-Schritte"} möglich.
-- Erkläre im Kommentar kurz was richtig war und was gefehlt hat.
+WICHTIGE HINWEISE zur Musterlösung:
+- Wörter in runden Klammern () sind OPTIONAL und müssen NICHT genannt werden. Beispiel: "(she's) five" bedeutet, "five" allein ist vollständig richtig. "chocolate (with nuts)" bedeutet, "chocolate" allein reicht für volle Punktzahl.
+- Wenn die Schülerantwort den Kerninhalt der Musterlösung enthält, gilt sie als korrekt — auch wenn sie kürzer formuliert ist.
+- Wenn keine Musterlösung hinterlegt ist, bewerte ob die Antwort inhaltlich sinnvoll und vollständig zur Frage passt.
+
+TEILBEPUNKTUNG:
+- Vergib IMMER anteilige Punkte wenn die Antwort teilweise korrekt ist.
+- Nur bei komplett falscher oder komplett richtiger Antwort darfst du 0 oder volle Punktzahl vergeben.
+- Bei ${q.points} Punkt${Number(q.points) !== 1 ? "en" : ""} sind Schritte von 0.5 möglich.
+- Erkläre kurz was richtig war und was gefehlt hat (oder warum volle/keine Punkte).
 
 Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
-{"points": <Zahl, max ${q.points}, Schritte von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
+{"points": <Zahl, max ${q.points}, Vielfaches von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
 
     try {
       const response = await fetch("https://api.anthropic.com/v1/messages", {
