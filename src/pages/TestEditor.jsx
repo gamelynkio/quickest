@@ -15,56 +15,72 @@ const newQuestion = (type) => ({
   id: Date.now() + Math.random(),
   type, text: "", points: 1,
   options: type === "multiple_choice" ? ["", ""] : [],
-  correctAnswer: null,
-  correctAnswers: [],
+  correctAnswer: null, correctAnswers: [],
   cardFront: "", cardBack: "",
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
-  solution: "", partialPoints: [],
-  attachment: null,
+  solution: "", partialPoints: [], attachment: null,
 });
 
-const newTask = () => ({
-  id: Date.now() + Math.random(),
-  taskTitle: "",
-  taskInstruction: "",
-  questions: [],
-});
+const newTask = () => ({ id: Date.now() + Math.random(), taskTitle: "", taskInstruction: "", questions: [] });
 
 const newTaskQuestion = (type) => ({
   id: Date.now() + Math.random(),
   type, text: "", points: 1,
   options: type === "multiple_choice" ? ["", ""] : [],
-  correctAnswer: null,
-  correctAnswers: [],
+  correctAnswer: null, correctAnswers: [],
   cardFront: "", cardBack: "",
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
-  solution: "", partialPoints: [],
-  blanks: [], fullText: "",
+  solution: "", partialPoints: [], blanks: [], fullText: "",
 });
 
 const newSection = () => ({
-  id: Date.now() + Math.random(),
-  type: "section",
-  sectionTitle: "",
-  sectionInstruction: "",
-  sectionText: "",
-  sectionMedia: null,
-  sectionMediaType: null,
-  tasks: [],
+  id: Date.now() + Math.random(), type: "section",
+  sectionTitle: "", sectionInstruction: "", sectionText: "",
+  sectionMedia: null, sectionMediaType: null, tasks: [],
 });
+
+// KI-Maßstab für eine offene Frage vorschlagen
+const suggestRubric = async (questionText, points, solution, supabaseUrl) => {
+  const prompt = `Du bist ein erfahrener Schullehrer und erstellst einen Bewertungsmaßstab für die folgende offene Aufgabe.
+
+Aufgabe: ${questionText}
+${solution ? `Musterlösung/Hinweis: ${solution}` : ""}
+Maximale Punktzahl: ${points}
+
+Erstelle einen sinnvollen Bewertungsmaßstab mit Teilpunkten (in 0.5-Schritten, Summe = ${points} Punkte).
+Typische Kriterien sind z.B.: korrekte Zeilenangabe, inhaltliche Richtigkeit, vollständigkeit, Fachbegriffe, Begründung.
+
+Gib das Ergebnis NUR als JSON zurück, ohne Markdown oder Text drumherum:
+{
+  "solution": "<kurze Musterlösung oder Erwartungshorizont, 1-2 Sätze>",
+  "partialPoints": [
+    {"points": <Zahl>, "description": "<Kriterium>"},
+    ...
+  ]
+}
+Die Summe der partialPoints muss exakt ${points} ergeben.`;
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const data = await response.json();
+  const text = data.content?.map(b => b.text || "").join("") || "";
+  const clean = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+};
 
 function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, onUpdateQuestion, onRemoveQuestion }) {
   const [localTitle, setLocalTitle] = useState(task.taskTitle || "");
   const [localInstruction, setLocalInstruction] = useState(task.taskInstruction || "");
-
   const localRef = useRef({});
   localRef.current = { localTitle, localInstruction };
-  useEffect(() => {
-    return () => {
-      onUpdate("taskTitle", localRef.current.localTitle);
-      onUpdate("taskInstruction", localRef.current.localInstruction);
-    };
-  }, []);
+  useEffect(() => { return () => { onUpdate("taskTitle", localRef.current.localTitle); onUpdate("taskInstruction", localRef.current.localInstruction); }; }, []);
 
   return (
     <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.15)" }}>
@@ -75,24 +91,20 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
         <div>
           <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabentitel (optional)</label>
-          <input value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={() => onUpdate("taskTitle", localTitle)}
-            placeholder="z.B. Right or wrong?"
+          <input value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={() => onUpdate("taskTitle", localTitle)} placeholder="z.B. Right or wrong?"
             style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
         </div>
         <div>
           <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabenanweisung (optional)</label>
-          <input value={localInstruction} onChange={e => setLocalInstruction(e.target.value)} onBlur={() => onUpdate("taskInstruction", localInstruction)}
-            placeholder="z.B. Tick the correct box."
+          <input value={localInstruction} onChange={e => setLocalInstruction(e.target.value)} onBlur={() => onUpdate("taskInstruction", localInstruction)} placeholder="z.B. Tick the correct box."
             style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
         </div>
       </div>
-
       {(task.questions || []).map((tq, tqIdx) => (
         <TaskQuestionEditor key={tq.id} tq={tq} tIdx={tIdx} tqIdx={tqIdx}
           onUpdate={(field, val) => onUpdateQuestion(tq.id, field, val)}
           onRemove={() => onRemoveQuestion(tq.id)} />
       ))}
-
       <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
         {QUESTION_TYPES.map(qt => (
           <button key={qt.id} onClick={() => onAddQuestion(qt.id)}
@@ -119,25 +131,31 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [localCardAlts, setLocalCardAlts] = useState(tq.cardBackAlternatives || []);
   const [localPairs, setLocalPairs] = useState(tq.pairs?.length ? tq.pairs : [{ left: "", right: "" }]);
   const [localPartialPoints, setLocalPartialPoints] = useState(tq.partialPoints || []);
+  const [suggestingRubric, setSuggestingRubric] = useState(false);
 
   const localRef = useRef({});
   localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localCardFront, localCardBack, localCardAlts, localPairs, localPartialPoints };
   useEffect(() => {
     return () => {
       const s = localRef.current;
-      onUpdate("text", s.localText);
-      onUpdate("solution", s.localSolution);
-      onUpdate("options", s.localOptions);
-      onUpdate("fullText", s.localFullText);
-      onUpdate("blanks", s.localBlanks);
-      onUpdate("points", s.localPoints);
-      onUpdate("cardFront", s.localCardFront);
-      onUpdate("cardBack", s.localCardBack);
-      onUpdate("cardBackAlternatives", s.localCardAlts);
-      onUpdate("pairs", s.localPairs);
+      onUpdate("text", s.localText); onUpdate("solution", s.localSolution); onUpdate("options", s.localOptions);
+      onUpdate("fullText", s.localFullText); onUpdate("blanks", s.localBlanks); onUpdate("points", s.localPoints);
+      onUpdate("cardFront", s.localCardFront); onUpdate("cardBack", s.localCardBack);
+      onUpdate("cardBackAlternatives", s.localCardAlts); onUpdate("pairs", s.localPairs);
       onUpdate("partialPoints", s.localPartialPoints);
     };
   }, []);
+
+  const handleSuggestRubric = async () => {
+    setSuggestingRubric(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
+      if (result.solution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
+      if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); }
+    } catch (e) { alert("KI-Maßstab konnte nicht erstellt werden. Bitte versuche es erneut."); }
+    setSuggestingRubric(false);
+  };
 
   return (
     <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px", color: "#1e293b" }}>
@@ -151,37 +169,22 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
           <button onClick={onRemove} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }}>×</button>
         </div>
       </div>
-
       <input value={localText} onChange={e => setLocalText(e.target.value)} onBlur={() => onUpdate("text", localText)}
         placeholder="Unteraufgabe / Frage eingeben..."
         style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
 
       {tq.type === "multiple_choice" && (
         <div>
-          {localOptions.map((opt, oi) => {
-            const isCorrect = correctAnswers.includes(oi);
-            return (
-              <div key={oi} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
-                <input type="checkbox" checked={isCorrect} onChange={() => {
-                  const next = isCorrect ? correctAnswers.filter(x => x !== oi) : [...correctAnswers, oi];
-                  setCorrectAnswers(next); onUpdate("correctAnswers", next);
-                }} style={{ accentColor: "#2563a8" }} />
-                <input value={opt} onChange={e => { const opts = [...localOptions]; opts[oi] = e.target.value; setLocalOptions(opts); }}
-                  onBlur={() => onUpdate("options", localOptions)}
-                  placeholder={`Antwort ${String.fromCharCode(65 + oi)}`}
-                  style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
-                {localOptions.length > 2 && (
-                  <button onClick={() => { const opts = localOptions.filter((_, j) => j !== oi); setLocalOptions(opts); onUpdate("options", opts); }}
-                    style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer" }}>×</button>
-                )}
-              </div>
-            );
-          })}
-          <button onClick={() => { const opts = [...localOptions, ""]; setLocalOptions(opts); onUpdate("options", opts); }}
-            style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: "2px" }}>+ Antwort</button>
+          {localOptions.map((opt, oi) => { const isCorrect = correctAnswers.includes(oi); return (
+            <div key={oi} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+              <input type="checkbox" checked={isCorrect} onChange={() => { const next = isCorrect ? correctAnswers.filter(x => x !== oi) : [...correctAnswers, oi]; setCorrectAnswers(next); onUpdate("correctAnswers", next); }} style={{ accentColor: "#2563a8" }} />
+              <input value={opt} onChange={e => { const opts = [...localOptions]; opts[oi] = e.target.value; setLocalOptions(opts); }} onBlur={() => onUpdate("options", localOptions)} placeholder={`Antwort ${String.fromCharCode(65 + oi)}`} style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+              {localOptions.length > 2 && <button onClick={() => { const opts = localOptions.filter((_, j) => j !== oi); setLocalOptions(opts); onUpdate("options", opts); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer" }}>×</button>}
+            </div>
+          ); })}
+          <button onClick={() => { const opts = [...localOptions, ""]; setLocalOptions(opts); onUpdate("options", opts); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: "2px" }}>+ Antwort</button>
         </div>
       )}
-
       {tq.type === "true_false" && (
         <div style={{ display: "flex", gap: "8px" }}>
           {["Wahr", "Falsch"].map((opt, oi) => (
@@ -190,154 +193,86 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
           ))}
         </div>
       )}
-
       {tq.type === "open" && (
         <input value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
           placeholder="Musterlösung (optional)"
           style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", background: "#f8fafc" }} />
       )}
-
       {tq.type === "flashcard" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
-            <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>🃏 A-Seite (Vorgabe)</label>
-              <input value={localCardFront} onChange={e => setLocalCardFront(e.target.value)} onBlur={() => onUpdate("cardFront", localCardFront)}
-                placeholder="z.B. der Hund"
-                style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>✅ B-Seite (Antwort)</label>
-              <input value={localCardBack} onChange={e => setLocalCardBack(e.target.value)} onBlur={() => onUpdate("cardBack", localCardBack)}
-                placeholder="z.B. the dog"
-                style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box" }} />
-            </div>
+            <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>🃏 A-Seite</label><input value={localCardFront} onChange={e => setLocalCardFront(e.target.value)} onBlur={() => onUpdate("cardFront", localCardFront)} placeholder="z.B. der Hund" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box" }} /></div>
+            <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>✅ B-Seite</label><input value={localCardBack} onChange={e => setLocalCardBack(e.target.value)} onBlur={() => onUpdate("cardBack", localCardBack)} placeholder="z.B. the dog" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box" }} /></div>
           </div>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: "11px", color: "#94a3b8" }}>Auch akzeptiert:</span>
-            {localCardAlts.map((alt, ai) => (
-              <span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}>
-                {alt}
-                <button onClick={() => { const a = localCardAlts.filter((_, i) => i !== ai); setLocalCardAlts(a); onUpdate("cardBackAlternatives", a); }}
-                  style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "11px", padding: 0 }}>✕</button>
-              </span>
-            ))}
-            <button onClick={() => { const alt = prompt("Alternative Lösung:"); if (!alt?.trim()) return; const a = [...localCardAlts, alt.trim()]; setLocalCardAlts(a); onUpdate("cardBackAlternatives", a); }}
-              style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
+            {localCardAlts.map((alt, ai) => (<span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}>{alt}<button onClick={() => { const a = localCardAlts.filter((_, i) => i !== ai); setLocalCardAlts(a); onUpdate("cardBackAlternatives", a); }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "11px", padding: 0 }}>✕</button></span>))}
+            <button onClick={() => { const alt = prompt("Alternative Lösung:"); if (!alt?.trim()) return; const a = [...localCardAlts, alt.trim()]; setLocalCardAlts(a); onUpdate("cardBackAlternatives", a); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
           </div>
         </div>
       )}
-
       {tq.type === "assignment" && (
         <div>
           {localPairs.map((pair, i) => (
             <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "5px" }}>
-              <input value={pair.left} placeholder={`Begriff ${i + 1}`}
-                onChange={e => { const p = [...localPairs]; p[i] = { ...p[i], left: e.target.value }; setLocalPairs(p); }}
-                onBlur={() => onUpdate("pairs", localPairs)}
-                style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+              <input value={pair.left} placeholder={`Begriff ${i + 1}`} onChange={e => { const p = [...localPairs]; p[i] = { ...p[i], left: e.target.value }; setLocalPairs(p); }} onBlur={() => onUpdate("pairs", localPairs)} style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
               <span style={{ color: "#94a3b8", fontSize: "12px" }}>→</span>
-              <input value={pair.right} placeholder={`Definition ${i + 1}`}
-                onChange={e => { const p = [...localPairs]; p[i] = { ...p[i], right: e.target.value }; setLocalPairs(p); }}
-                onBlur={() => onUpdate("pairs", localPairs)}
-                style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
-              {localPairs.length > 1 && (
-                <button onClick={() => { const p = localPairs.filter((_, pi) => pi !== i); setLocalPairs(p); onUpdate("pairs", p); }}
-                  style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
-              )}
+              <input value={pair.right} placeholder={`Definition ${i + 1}`} onChange={e => { const p = [...localPairs]; p[i] = { ...p[i], right: e.target.value }; setLocalPairs(p); }} onBlur={() => onUpdate("pairs", localPairs)} style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+              {localPairs.length > 1 && <button onClick={() => { const p = localPairs.filter((_, pi) => pi !== i); setLocalPairs(p); onUpdate("pairs", p); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>}
             </div>
           ))}
-          <button onClick={() => { const p = [...localPairs, { left: "", right: "" }]; setLocalPairs(p); onUpdate("pairs", p); }}
-            style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0 }}>+ Paar hinzufügen</button>
+          <button onClick={() => { const p = [...localPairs, { left: "", right: "" }]; setLocalPairs(p); onUpdate("pairs", p); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0 }}>+ Paar hinzufügen</button>
         </div>
       )}
-
       {tq.type === "fill_blank" && (
         <div>
-          <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
-            Vollständiger Text — Wort markieren → wird zur Lücke
-          </label>
-          <textarea value={localFullText} onChange={e => setLocalFullText(e.target.value)}
-            onBlur={() => onUpdate("fullText", localFullText)}
-            onMouseUp={() => {
-              const sel = window.getSelection();
-              const selected = sel?.toString().trim();
-              if (!selected || !localFullText) return;
-              const start = localFullText.indexOf(selected);
-              if (start === -1) return;
-              const newText = localFullText.slice(0, start) + "[Lücke]" + localFullText.slice(start + selected.length);
-              const newBlanks = [...localBlanks, { solution: selected, alternatives: [] }];
-              setLocalFullText(newText); setLocalBlanks(newBlanks);
-              onUpdate("fullText", newText); onUpdate("blanks", newBlanks); onUpdate("text", newText);
-              sel.removeAllRanges();
-            }}
-            placeholder="Text eingeben, dann Wort markieren..."
-            rows={3}
+          <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>Vollständiger Text — Wort markieren → wird zur Lücke</label>
+          <textarea value={localFullText} onChange={e => setLocalFullText(e.target.value)} onBlur={() => onUpdate("fullText", localFullText)}
+            onMouseUp={() => { const sel = window.getSelection(); const selected = sel?.toString().trim(); if (!selected || !localFullText) return; const start = localFullText.indexOf(selected); if (start === -1) return; const newText = localFullText.slice(0, start) + "[Lücke]" + localFullText.slice(start + selected.length); const newBlanks = [...localBlanks, { solution: selected, alternatives: [] }]; setLocalFullText(newText); setLocalBlanks(newBlanks); onUpdate("fullText", newText); onUpdate("blanks", newBlanks); onUpdate("text", newText); sel.removeAllRanges(); }}
+            placeholder="Text eingeben, dann Wort markieren..." rows={3}
             style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "13px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", marginBottom: "4px" }} />
           <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "8px" }}>💡 Text markieren → wird automatisch zur Lücke</div>
-          {localFullText.includes("[Lücke]") && (
-            <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "6px", padding: "8px 12px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", lineHeight: 1.8 }}>
-              {localFullText.split("[Lücke]").map((part, i, arr) => (
-                <span key={i}>{part}{i < arr.length - 1 && <span style={{ display: "inline-block", minWidth: "60px", borderBottom: "2px solid #2563a8", margin: "0 3px" }}>&nbsp;</span>}</span>
-              ))}
-            </div>
-          )}
           {localBlanks.map((blank, bi) => (
             <div key={bi} style={{ background: "#f8fafc", borderRadius: "6px", padding: "8px 10px", marginBottom: "5px", border: "1px solid #e2e8f0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
                 <span style={{ background: "#2563a8", color: "#fff", borderRadius: "4px", padding: "1px 6px", fontSize: "11px", fontWeight: 700 }}>Lücke {bi + 1}</span>
-                <input value={blank.solution} onChange={e => { const nb = [...localBlanks]; nb[bi] = { ...nb[bi], solution: e.target.value }; setLocalBlanks(nb); onUpdate("blanks", nb); }}
-                  placeholder="Lösung"
-                  style={{ flex: 1, padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
-                <button onClick={() => {
-                  const nb = localBlanks.filter((_, i) => i !== bi);
-                  let count = 0;
-                  const newText = localFullText.replace(/\[Lücke\]/g, m => { count++; return count - 1 === bi ? blank.solution : m; });
-                  setLocalBlanks(nb); setLocalFullText(newText);
-                  onUpdate("blanks", nb); onUpdate("fullText", newText); onUpdate("text", newText);
-                }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
-              </div>
-              <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: "10px", color: "#94a3b8" }}>Auch akzeptiert:</span>
-                {(blank.alternatives || []).map((alt, ai) => (
-                  <span key={ai} style={{ background: "#e0f2fe", borderRadius: "4px", padding: "1px 6px", fontSize: "11px", display: "flex", alignItems: "center", gap: "3px" }}>
-                    {alt}
-                    <button onClick={() => { const nb = [...localBlanks]; nb[bi] = { ...nb[bi], alternatives: nb[bi].alternatives.filter((_, i) => i !== ai) }; setLocalBlanks(nb); onUpdate("blanks", nb); }}
-                      style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "10px", padding: 0 }}>✕</button>
-                  </span>
-                ))}
-                <button onClick={() => { const alt = prompt("Alternative Lösung:"); if (!alt?.trim()) return; const nb = [...localBlanks]; nb[bi] = { ...nb[bi], alternatives: [...(nb[bi].alternatives || []), alt.trim()] }; setLocalBlanks(nb); onUpdate("blanks", nb); }}
-                  style={{ fontSize: "10px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "4px", padding: "1px 6px", cursor: "pointer" }}>+ Alt.</button>
+                <input value={blank.solution} onChange={e => { const nb = [...localBlanks]; nb[bi] = { ...nb[bi], solution: e.target.value }; setLocalBlanks(nb); onUpdate("blanks", nb); }} placeholder="Lösung" style={{ flex: 1, padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
+                <button onClick={() => { const nb = localBlanks.filter((_, i) => i !== bi); let count = 0; const newText = localFullText.replace(/\[Lücke\]/g, m => { count++; return count - 1 === bi ? blank.solution : m; }); setLocalBlanks(nb); setLocalFullText(newText); onUpdate("blanks", nb); onUpdate("fullText", newText); onUpdate("text", newText); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <details style={{ marginTop: "10px" }}>
-        <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "4px 0" }}>
-          📝 Musterlösung & Teilbepunktung
+      {/* Musterlösung & Teilbepunktung — mit KI-Maßstab Button für offene Fragen */}
+      <details style={{ marginTop: "10px" }} open={tq.type === "open"}>
+        <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: tq.type === "open" ? "#2563a8" : "#64748b", userSelect: "none", padding: "4px 0" }}>
+          📝 Musterlösung & Teilbepunktung {tq.type === "open" ? "(KI-Bewertungsmaßstab)" : ""}
         </summary>
-        <div style={{ marginTop: "8px", background: "#f8fafc", borderRadius: "8px", padding: "10px", border: "1px solid #e2e8f0" }}>
+        <div style={{ marginTop: "8px", background: tq.type === "open" ? "#f0f7ff" : "#f8fafc", borderRadius: "8px", padding: "10px", border: `1px solid ${tq.type === "open" ? "#bfdbfe" : "#e2e8f0"}` }}>
+          {tq.type === "open" && (
+            <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "11px", color: "#2563a8", fontWeight: 600 }}>
+                {localPartialPoints.length > 0 ? "✓ Bewertungsmaßstab hinterlegt" : "Noch kein Maßstab — KI bewertet nach eigenem Ermessen"}
+              </span>
+              <button onClick={handleSuggestRubric} disabled={suggestingRubric}
+                style={{ padding: "5px 12px", background: suggestingRubric ? "#e2e8f0" : "#2563a8", color: suggestingRubric ? "#94a3b8" : "#fff", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: suggestingRubric ? "not-allowed" : "pointer" }}>
+                {suggestingRubric ? "⏳ KI denkt..." : "🤖 KI-Maßstab vorschlagen"}
+              </button>
+            </div>
+          )}
           <textarea value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
-            placeholder="Musterlösung / Erwartungshorizont..." rows={2}
+            placeholder={tq.type === "open" ? "Musterlösung / Erwartungshorizont (wird von KI für Bewertung genutzt)..." : "Musterlösung / Erwartungshorizont..."} rows={2}
             style={{ width: "100%", padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
           {localPartialPoints.map((p, i) => (
             <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "5px" }}>
-              <input type="number" value={p.points} min={0} step={0.5}
-                onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }}
-                style={{ width: "50px", padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
+              <input type="number" value={p.points} min={0} step={0.5} onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ width: "50px", padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
               <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt. für:</span>
-              <input value={p.description} placeholder="z.B. Nennung des Begriffs"
-                onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], description: e.target.value }; setLocalPartialPoints(pp); }}
-                onBlur={() => onUpdate("partialPoints", localPartialPoints)}
-                style={{ flex: 1, padding: "4px 8px", border: "1px solid #e5e7eb", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
-              <button onClick={() => { const pp = localPartialPoints.filter((_, pi) => pi !== i); setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }}
-                style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
+              <input value={p.description} placeholder="z.B. Nennung des Begriffs" onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], description: e.target.value }; setLocalPartialPoints(pp); }} onBlur={() => onUpdate("partialPoints", localPartialPoints)} style={{ flex: 1, padding: "4px 8px", border: "1px solid #e5e7eb", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
+              <button onClick={() => { const pp = localPartialPoints.filter((_, pi) => pi !== i); setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
             </div>
           ))}
-          <button onClick={() => { const pp = [...localPartialPoints, { points: 0.5, description: "" }]; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }}
-            style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>+ Teilpunkt</button>
+          <button onClick={() => { const pp = [...localPartialPoints, { points: 0.5, description: "" }]; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>+ Teilpunkt</button>
         </div>
       </details>
     </div>
@@ -365,6 +300,9 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const [importError, setImportError] = useState("");
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [pendingNavTarget, setPendingNavTarget] = useState(null);
+  const [suggestingRubricId, setSuggestingRubricId] = useState(null);
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
   const safeNavigate = (target, data = null) => {
     if (saved) { navigate(target, data); return; }
@@ -378,184 +316,79 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const addSection = () => setQuestions(prev => [...prev, newSection()]);
   const updateQuestion = (id, field, value) => setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
   const removeQuestion = (id) => setQuestions(prev => prev.filter(q => q.id !== id));
+  const addTask = (sectionId) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: [...(q.tasks || []), newTask()] } : q));
+  const updateTask = (sectionId, taskId, field, value) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, [field]: value } : t) } : q));
+  const removeTask = (sectionId, taskId) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: (q.tasks || []).filter(t => t.id !== taskId) } : q));
+  const addTaskQuestion = (sectionId, taskId, type) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, questions: [...t.questions, newTaskQuestion(type)] } : t) } : q));
+  const updateTaskQuestion = (sectionId, taskId, qId, field, value) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, questions: t.questions.map(tq => tq.id === qId ? { ...tq, [field]: value } : tq) } : t) } : q));
+  const removeTaskQuestion = (sectionId, taskId, qId) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, questions: t.questions.filter(tq => tq.id !== qId) } : t) } : q));
+  const moveQuestion = (index, dir) => { const next = [...questions]; const swap = index + dir; if (swap < 0 || swap >= next.length) return; [next[index], next[swap]] = [next[swap], next[index]]; setQuestions(next); };
 
-  const addTask = (sectionId) => setQuestions(prev => prev.map(q =>
-    q.id === sectionId ? { ...q, tasks: [...(q.tasks || []), newTask()] } : q
-  ));
-  const updateTask = (sectionId, taskId, field, value) => setQuestions(prev => prev.map(q =>
-    q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, [field]: value } : t) } : q
-  ));
-  const removeTask = (sectionId, taskId) => setQuestions(prev => prev.map(q =>
-    q.id === sectionId ? { ...q, tasks: (q.tasks || []).filter(t => t.id !== taskId) } : q
-  ));
-  const addTaskQuestion = (sectionId, taskId, type) => setQuestions(prev => prev.map(q =>
-    q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t =>
-      t.id === taskId ? { ...t, questions: [...t.questions, newTaskQuestion(type)] } : t
-    )} : q
-  ));
-  const updateTaskQuestion = (sectionId, taskId, qId, field, value) => setQuestions(prev => prev.map(q =>
-    q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t =>
-      t.id === taskId ? { ...t, questions: t.questions.map(tq => tq.id === qId ? { ...tq, [field]: value } : tq) } : t
-    )} : q
-  ));
-  const removeTaskQuestion = (sectionId, taskId, qId) => setQuestions(prev => prev.map(q =>
-    q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t =>
-      t.id === taskId ? { ...t, questions: t.questions.filter(tq => tq.id !== qId) } : t
-    )} : q
-  ));
-  const moveQuestion = (index, dir) => {
-    const next = [...questions]; const swap = index + dir;
-    if (swap < 0 || swap >= next.length) return;
-    [next[index], next[swap]] = [next[swap], next[index]]; setQuestions(next);
+  const handleSuggestRubricForQuestion = async (q) => {
+    setSuggestingRubricId(q.id);
+    try {
+      const result = await suggestRubric(q.text, q.points, q.solution, supabaseUrl);
+      if (result.solution) updateQuestion(q.id, "solution", result.solution);
+      if (result.partialPoints?.length) updateQuestion(q.id, "partialPoints", result.partialPoints);
+    } catch (e) { alert("KI-Maßstab konnte nicht erstellt werden. Bitte versuche es erneut."); }
+    setSuggestingRubricId(null);
   };
 
   const totalPoints = questions.filter(q => q.type !== "section").reduce((sum, q) => sum + Number(q.points || 0), 0);
-
-  const getSectionPoints = (sectionIndex) => {
-    let sum = 0;
-    for (let i = sectionIndex + 1; i < questions.length; i++) {
-      if (questions[i].type === "section") break;
-      sum += Number(questions[i].points || 0);
-    }
-    return sum;
-  };
-
-  const getQuestionNumber = (index) => {
-    return questions.slice(0, index).filter(q => q.type !== "section").length + 1;
-  };
+  const getSectionPoints = (sectionIndex) => { let sum = 0; for (let i = sectionIndex + 1; i < questions.length; i++) { if (questions[i].type === "section") break; sum += Number(questions[i].points || 0); } return sum; };
+  const getQuestionNumber = (index) => questions.slice(0, index).filter(q => q.type !== "section").length + 1;
+  const hasOpenQuestions = questions.some(q => { if (q.type === "open") return true; if (q.type === "section") return (q.tasks || []).some(t => (t.questions || []).some(tq => tq.type === "open")); return false; });
 
   const handleImport = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setImporting(true);
-    setImportError("");
+    const file = e.target.files[0]; if (!file) return;
+    setImporting(true); setImportError("");
     try {
       const ext = file.name.split(".").pop().toLowerCase();
       let contentBlocks = [];
-      const PROMPT = `Analysiere diesen Test/diese Prüfungsarbeit und extrahiere alle Aufgaben. Gib das Ergebnis als reines JSON-Array zurück (keine Markdown-Backticks, kein Text drumherum). Jede Aufgabe hat folgende Felder:
-- type: "multiple_choice" | "true_false" | "open" | "fill_blank" | "assignment" | "flashcard"
-- text: Aufgabenstellung
-- points: Punktzahl (Zahl, default 1)
-- options: Array mit Antwortoptionen (nur bei multiple_choice, sonst [])
-- correctAnswer: Index der richtigen Antwort (nur bei multiple_choice/true_false, sonst null)
-- pairs: Array von {left, right} (nur bei assignment, sonst [])
-- cardFront: Vorderseite (nur bei flashcard, sonst "")
-- cardBack: Rückseite (nur bei flashcard, sonst "")
-- solution: Musterlösung (optional)
-- partialPoints: []
-Erkenne den Typ automatisch.`;
-
+      const PROMPT = `Analysiere diesen Test/diese Prüfungsarbeit und extrahiere alle Aufgaben. Gib das Ergebnis als reines JSON-Array zurück (keine Markdown-Backticks, kein Text drumherum). Jede Aufgabe hat folgende Felder: type, text, points, options, correctAnswer, pairs, cardFront, cardBack, solution, partialPoints:[]. Erkenne den Typ automatisch.`;
       if (ext === "docx") {
         const arrayBuffer = await file.arrayBuffer();
         const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
         const zip = await JSZip.loadAsync(arrayBuffer);
-        const xmlFile = zip.file("word/document.xml");
-        if (!xmlFile) throw new Error("Ungültige DOCX-Datei");
+        const xmlFile = zip.file("word/document.xml"); if (!xmlFile) throw new Error("Ungültige DOCX-Datei");
         const xml = await xmlFile.async("string");
-        const text = xml
-          .replace(/<w:p[ >]/g, "\n<w:p ")
-          .replace(/<[^>]+>/g, "")
-          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-          .replace(/\n{3,}/g, "\n\n").trim();
+        const text = xml.replace(/<w:p[ >]/g, "\n<w:p ").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\n{3,}/g, "\n\n").trim();
         if (!text.trim()) throw new Error("Kein Text extrahiert");
         contentBlocks = [{ type: "text", text: `${PROMPT}\n\nInhalt:\n\n${text}` }];
       } else if (ext === "pdf" || ["jpg","jpeg","png","webp"].includes(ext)) {
-        const base64 = await new Promise((res, rej) => {
-          const reader = new FileReader();
-          reader.onload = () => res(reader.result.split(",")[1]);
-          reader.onerror = rej;
-          reader.readAsDataURL(file);
-        });
+        const base64 = await new Promise((res, rej) => { const reader = new FileReader(); reader.onload = () => res(reader.result.split(",")[1]); reader.onerror = rej; reader.readAsDataURL(file); });
         const mediaType = ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`;
-        contentBlocks = [
-          ext === "pdf"
-            ? { type: "document", source: { type: "base64", media_type: mediaType, data: base64 } }
-            : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          { type: "text", text: PROMPT }
-        ];
-      } else {
-        throw new Error("Nicht unterstütztes Format");
-      }
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 4000, messages: [{ role: "user", content: contentBlocks }] }),
-      });
-
-      const rawText = await response.text();
-      if (!response.ok) throw new Error(`Edge Function Fehler ${response.status}: ${rawText.slice(0, 200)}`);
-      const data = JSON.parse(rawText);
-      const text = data.content?.find(b => b.type === "text")?.text || "";
-      const clean = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-      if (!Array.isArray(parsed)) throw new Error("Kein Array erhalten");
-
-      const importedQuestions = parsed.map(q => ({
-        id: Date.now() + Math.random(),
-        type: q.type || "open",
-        text: q.text || "",
-        points: Number(q.points) || 1,
-        options: q.options || [],
-        correctAnswer: q.correctAnswer ?? null,
-        pairs: q.pairs || [],
-        cardFront: q.cardFront || "",
-        cardBack: q.cardBack || "",
-        solution: q.solution || "",
-        partialPoints: [],
-        attachment: null,
-      }));
-
-      setQuestions(prev => [...prev, ...importedQuestions]);
+        contentBlocks = [ext === "pdf" ? { type: "document", source: { type: "base64", media_type: mediaType, data: base64 } } : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: PROMPT }];
+      } else { throw new Error("Nicht unterstütztes Format"); }
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 4000, messages: [{ role: "user", content: contentBlocks }] }) });
+      const rawText = await response.text(); if (!response.ok) throw new Error(`Edge Function Fehler ${response.status}`);
+      const data = JSON.parse(rawText); const text = data.content?.find(b => b.type === "text")?.text || "";
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); if (!Array.isArray(parsed)) throw new Error("Kein Array erhalten");
+      setQuestions(prev => [...prev, ...parsed.map(q => ({ id: Date.now() + Math.random(), type: q.type || "open", text: q.text || "", points: Number(q.points) || 1, options: q.options || [], correctAnswer: q.correctAnswer ?? null, pairs: q.pairs || [], cardFront: q.cardFront || "", cardBack: q.cardBack || "", solution: q.solution || "", partialPoints: [], attachment: null }))]);
       if (!title) setTitle(file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
-    } catch (err) {
-      setImportError(`Fehler beim Importieren: ${err.message}`);
-    } finally {
-      setImporting(false);
-      e.target.value = "";
-    }
+    } catch (err) { setImportError(`Fehler beim Importieren: ${err.message}`); }
+    finally { setImporting(false); e.target.value = ""; }
   };
 
   const handleSave = async () => {
     setSaving(true);
-    const payload = {
-      teacher_id: currentUser?.id,
-      title: title || "Unbenannte Vorlage",
-      description, subject, grade_level: gradeLevel,
-      time_limit: timeLimit * 60,
-      anti_cheat: antiCheat,
-      grading_mode: gradingMode,
-      question_data: questions,
-      grading_scale: gradingScale,
-    };
-    if (editingTest?.id) {
-      await supabase.from("templates").update(payload).eq("id", editingTest.id);
-    } else {
-      await supabase.from("templates").insert(payload);
-    }
+    const payload = { teacher_id: currentUser?.id, title: title || "Unbenannte Vorlage", description, subject, grade_level: gradeLevel, time_limit: timeLimit * 60, anti_cheat: antiCheat, grading_mode: gradingMode, question_data: questions, grading_scale: gradingScale };
+    if (editingTest?.id) { await supabase.from("templates").update(payload).eq("id", editingTest.id); }
+    else { await supabase.from("templates").insert(payload); }
     setSaving(false); setSaved(true);
     setTimeout(() => { setSaved(false); navigate("library"); }, 1000);
   };
 
   const SUBJECTS = ["Mathematik", "Deutsch", "Englisch", "Sachkunde", "Geschichte", "Geographie", "Biologie", "Physik", "Chemie", "Musik", "Kunst", "Sport"];
-
   const GRADING_MODES = [
     { id: "content", label: "🎯 Nur Inhalt", description: "Rechtschreibung & Grammatik werden ignoriert" },
     { id: "standard", label: "⚖️ Standard", description: "Inhalt zählt hauptsächlich, grobe Fehler leicht abgezogen" },
     { id: "strict", label: "🔍 Streng", description: "Inhalt + Rechtschreibung + Grammatik + Zeichensetzung" },
   ];
 
-  const hasOpenQuestions = questions.some(q => {
-    if (q.type === "open") return true;
-    if (q.type === "section") return (q.tasks || []).some(t => (t.questions || []).some(tq => tq.type === "open"));
-    return false;
-  });
-
   return (
     <TeacherLayout navigate={safeNavigate} onLogout={onLogout} currentUser={currentUser} activePage="testEditor">
       <div style={{ padding: "32px", maxWidth: "860px" }}>
-
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
           <div>
             <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: 0 }}>{editingTest ? "Vorlage bearbeiten" : "Neue Vorlage erstellen"}</h1>
@@ -567,83 +400,39 @@ Erkenne den Typ automatisch.`;
               <input type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={handleImport} disabled={importing} />
             </label>
             <button onClick={() => navigate("testPreview", { ...editingTest, title, description, subject, grade_level: gradeLevel, time_limit: timeLimit * 60, question_data: questions, grading_scale: gradingScale })}
-              style={{ padding: "10px 18px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
-              👁 Vorschau
-            </button>
+              style={{ padding: "10px 18px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>👁 Vorschau</button>
             <button onClick={handleSave} disabled={saving} style={{ padding: "10px 24px", background: saved ? "#16a34a" : "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: saving ? "not-allowed" : "pointer", transition: "background 0.3s" }}>
-              {saving ? "Wird gespeichert..." : saved ? "✓ Gespeichert!" : "Vorlage speichern"}
-            </button>
+              {saving ? "Wird gespeichert..." : saved ? "✓ Gespeichert!" : "Vorlage speichern"}</button>
           </div>
         </div>
 
-        {importError && (
-          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#dc2626" }}>⚠️ {importError}</div>
-        )}
-        {importing && (
-          <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "16px", marginBottom: "16px", fontSize: "13px", color: "#2563a8", textAlign: "center" }}>
-            <div style={{ fontSize: "24px", marginBottom: "8px" }}>🤖</div>
-            <strong>Claude analysiert die Datei...</strong>
-            <div style={{ color: "#64748b", marginTop: "4px" }}>Aufgaben werden automatisch erkannt und hinzugefügt.</div>
-          </div>
-        )}
+        {importError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#dc2626" }}>⚠️ {importError}</div>}
+        {importing && <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "16px", marginBottom: "16px", fontSize: "13px", color: "#2563a8", textAlign: "center" }}><div style={{ fontSize: "24px", marginBottom: "8px" }}>🤖</div><strong>Claude analysiert die Datei...</strong></div>}
 
         {/* Meta Card */}
         <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-            <div style={{ gridColumn: "span 1" }}>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Titel *</label>
-              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="z.B. Bruchrechnung – Grundlagen"
-                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Fach</label>
-              <select value={subject} onChange={e => setSubject(e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
-                <option value="">– Fach –</option>
-                {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Klasse</label>
-              <select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
-                <option value="">– Klasse –</option>
-                {[5,6,7,8,9,10,11,12,13].map(g => <option key={g} value={String(g)}>{g}. Klasse</option>)}
-              </select>
-            </div>
+            <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Titel *</label><input value={title} onChange={e => setTitle(e.target.value)} placeholder="z.B. Bruchrechnung – Grundlagen" style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
+            <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Fach</label><select value={subject} onChange={e => setSubject(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}><option value="">– Fach –</option>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+            <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Klasse</label><select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}><option value="">– Klasse –</option>{[5,6,7,8,9,10,11,12,13].map(g => <option key={g} value={String(g)}>{g}. Klasse</option>)}</select></div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-            <div style={{ gridColumn: "span 2" }}>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Kurzbeschreibung</label>
-              <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional"
-                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Standard-Zeit (Min.)</label>
-              <input type="number" min={1} max={180} value={timeLimit} onChange={e => setTimeLimit(Number(e.target.value))}
-                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-            </div>
+            <div style={{ gridColumn: "span 2" }}><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Kurzbeschreibung</label><input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
+            <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Standard-Zeit (Min.)</label><input type="number" min={1} max={180} value={timeLimit} onChange={e => setTimeLimit(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
           </div>
-
           <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", marginBottom: "16px" }}>
             <input type="checkbox" checked={antiCheat} onChange={e => setAntiCheat(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
             🛡️ Anti-Cheat als Standard aktivieren
           </label>
 
-          {/* ── NEU: Bewertungsmodus für KI-Korrektur ── */}
+          {/* KI-Bewertungsmodus */}
           {hasOpenQuestions && (
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #e2e8f0" }}>
-              <label style={{ fontSize: "13px", fontWeight: 700, color: "#374151", display: "block", marginBottom: "10px" }}>
-                🤖 KI-Bewertungsmodus für offene Antworten
-              </label>
+              <label style={{ fontSize: "13px", fontWeight: 700, color: "#374151", display: "block", marginBottom: "10px" }}>🤖 KI-Bewertungsmodus für offene Antworten</label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
                 {GRADING_MODES.map(mode => (
                   <button key={mode.id} onClick={() => setGradingMode(mode.id)}
-                    style={{
-                      padding: "12px", border: `2px solid ${gradingMode === mode.id ? "#2563a8" : "#e2e8f0"}`,
-                      borderRadius: "10px", background: gradingMode === mode.id ? "#eff6ff" : "#fff",
-                      cursor: "pointer", textAlign: "left", fontFamily: "inherit",
-                    }}>
+                    style={{ padding: "12px", border: `2px solid ${gradingMode === mode.id ? "#2563a8" : "#e2e8f0"}`, borderRadius: "10px", background: gradingMode === mode.id ? "#eff6ff" : "#fff", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
                     <div style={{ fontSize: "13px", fontWeight: 700, color: gradingMode === mode.id ? "#1e40af" : "#374151", marginBottom: "4px" }}>{mode.label}</div>
                     <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.4 }}>{mode.description}</div>
                   </button>
@@ -657,18 +446,15 @@ Erkenne den Typ automatisch.`;
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
               {gradingScale.map((g, i) => (
                 <div key={i} style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 12px", border: "1px solid #e2e8f0", fontSize: "13px" }}>
-                  <strong>Note {g.grade}</strong> ab <input type="number" value={g.minPercent}
-                    onChange={e => { const u = [...gradingScale]; u[i].minPercent = Number(e.target.value); setGradingScale(u); }}
-                    style={{ width: "48px", border: "none", background: "none", fontWeight: 700, fontSize: "13px", color: "#2563a8" }} />%
+                  <strong>Note {g.grade}</strong> ab <input type="number" value={g.minPercent} onChange={e => { const u = [...gradingScale]; u[i].minPercent = Number(e.target.value); setGradingScale(u); }} style={{ width: "48px", border: "none", background: "none", fontWeight: 700, fontSize: "13px", color: "#2563a8" }} />%
                 </div>
               ))}
             </div>
           </details>
         </div>
 
-        {/* Questions & Sections */}
+        {/* Questions */}
         {questions.map((q, index) => {
-
           if (q.type === "section") {
             const pts = getSectionPoints(index);
             return (
@@ -687,54 +473,27 @@ Erkenne den Typ automatisch.`;
                     <button onClick={() => removeQuestion(q.id)} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "7px", padding: "5px 12px", cursor: "pointer", fontSize: "13px" }}>✕ Entfernen</button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Abschnittstitel</label>
-                      <input value={q.sectionTitle || ""} onChange={e => updateQuestion(q.id, "sectionTitle", e.target.value)}
-                        placeholder="z.B. Teil A – Leseverstehen"
-                        style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Anweisung (optional)</label>
-                      <input value={q.sectionInstruction || ""} onChange={e => updateQuestion(q.id, "sectionInstruction", e.target.value)}
-                        placeholder="z.B. Lies den Text und beantworte die Fragen."
-                        style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} />
-                    </div>
+                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Abschnittstitel</label><input value={q.sectionTitle || ""} onChange={e => updateQuestion(q.id, "sectionTitle", e.target.value)} placeholder="z.B. Teil A – Leseverstehen" style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} /></div>
+                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Anweisung (optional)</label><input value={q.sectionInstruction || ""} onChange={e => updateQuestion(q.id, "sectionInstruction", e.target.value)} placeholder="z.B. Lies den Text und beantworte die Fragen." style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} /></div>
                   </div>
                   <div style={{ marginBottom: "12px" }}>
                     <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>📝 Text / Lesetext (optional)</label>
-                    <RichTextEditor
-                      value={q.sectionText || ""}
-                      onChange={val => updateQuestion(q.id, "sectionText", val)}
-                      placeholder="Füge hier einen Lesetext, Gedicht, Dialog o.ä. ein..."
-                    />
+                    <RichTextEditor value={q.sectionText || ""} onChange={val => updateQuestion(q.id, "sectionText", val)} placeholder="Füge hier einen Lesetext, Gedicht, Dialog o.ä. ein..." />
                   </div>
                   <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", marginBottom: "16px" }}>
                     <span style={{ background: "rgba(255,255,255,0.15)", border: "1px dashed rgba(255,255,255,0.4)", borderRadius: "6px", padding: "5px 10px" }}>🎬 Bild / Audio / Video anhängen</span>
-                    <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }}
-                      onChange={e => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-                        const t = file.type.startsWith("image") ? "image" : file.type.startsWith("audio") ? "audio" : "video";
-                        updateQuestion(q.id, "sectionMedia", file.name);
-                        updateQuestion(q.id, "sectionMediaType", t);
-                      }} />
+                    <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }} onChange={e => { const file = e.target.files[0]; if (!file) return; const t = file.type.startsWith("image") ? "image" : file.type.startsWith("audio") ? "audio" : "video"; updateQuestion(q.id, "sectionMedia", file.name); updateQuestion(q.id, "sectionMediaType", t); }} />
                     {q.sectionMedia && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)" }}>✓ {q.sectionMedia}</span>}
                   </label>
-
                   {(q.tasks || []).map((task, tIdx) => (
                     <TaskEditor key={task.id} task={task} tIdx={tIdx} sectionId={q.id}
                       onUpdate={(field, val) => updateTask(q.id, task.id, field, val)}
                       onRemove={() => removeTask(q.id, task.id)}
                       onAddQuestion={(type) => addTaskQuestion(q.id, task.id, type)}
                       onUpdateQuestion={(qId, field, val) => updateTaskQuestion(q.id, task.id, qId, field, val)}
-                      onRemoveQuestion={(qId) => removeTaskQuestion(q.id, task.id, qId)}
-                    />
+                      onRemoveQuestion={(qId) => removeTaskQuestion(q.id, task.id, qId)} />
                   ))}
-
-                  <button onClick={() => addTask(q.id)}
-                    style={{ width: "100%", padding: "10px", background: "rgba(255,255,255,0.1)", border: "2px dashed rgba(255,255,255,0.3)", borderRadius: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600, fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>
-                    + Aufgabe zum Abschnitt hinzufügen
-                  </button>
+                  <button onClick={() => addTask(q.id)} style={{ width: "100%", padding: "10px", background: "rgba(255,255,255,0.1)", border: "2px dashed rgba(255,255,255,0.3)", borderRadius: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600, fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>+ Aufgabe zum Abschnitt hinzufügen</button>
                 </div>
               </div>
             );
@@ -753,8 +512,7 @@ Erkenne den Typ automatisch.`;
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <label style={{ fontSize: "13px", color: "#64748b" }}>Punkte:</label>
-                  <input type="number" value={q.points} min={0.5} step={0.5} onChange={e => updateQuestion(q.id, "points", e.target.value)}
-                    style={{ width: "56px", padding: "5px 8px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", fontWeight: 700, textAlign: "center" }} />
+                  <input type="number" value={q.points} min={0.5} step={0.5} onChange={e => updateQuestion(q.id, "points", e.target.value)} style={{ width: "56px", padding: "5px 8px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", fontWeight: 700, textAlign: "center" }} />
                   <button onClick={() => removeQuestion(q.id)} style={{ background: "#fef2f2", border: "none", color: "#dc2626", borderRadius: "7px", padding: "5px 10px", cursor: "pointer" }}>✕</button>
                 </div>
               </div>
@@ -765,164 +523,35 @@ Erkenne den Typ automatisch.`;
               {q.type === "multiple_choice" && (
                 <div style={{ marginTop: "12px" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "8px" }}>
-                    {q.options.map((opt, i) => {
-                      const correctAnswers = q.correctAnswers || (q.correctAnswer != null ? [q.correctAnswer] : []);
-                      const isCorrect = correctAnswers.includes(i);
-                      return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <input type="checkbox" checked={isCorrect}
-                            onChange={() => {
-                              const cur = q.correctAnswers || (q.correctAnswer != null ? [q.correctAnswer] : []);
-                              const next = isCorrect ? cur.filter(x => x !== i) : [...cur, i];
-                              updateQuestion(q.id, "correctAnswers", next);
-                            }}
-                            style={{ accentColor: "#2563a8", width: "16px", height: "16px", flexShrink: 0 }} />
-                          <input value={opt} onChange={e => { const opts = [...q.options]; opts[i] = e.target.value; updateQuestion(q.id, "options", opts); }}
-                            placeholder={`Antwort ${String.fromCharCode(65 + i)}`}
-                            style={{ flex: 1, padding: "7px 10px", border: `1px solid ${isCorrect ? "#2563a8" : "#e5e7eb"}`, borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", background: isCorrect ? "#eff6ff" : "#fff" }} />
-                          {q.options.length > 2 && (
-                            <button onClick={() => {
-                              const opts = q.options.filter((_, j) => j !== i);
-                              const cur = (q.correctAnswers || []).filter(x => x !== i).map(x => x > i ? x - 1 : x);
-                              updateQuestion(q.id, "options", opts);
-                              updateQuestion(q.id, "correctAnswers", cur);
-                            }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px", padding: "0 4px", flexShrink: 0 }}>×</button>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {q.options.map((opt, i) => { const correctAnswers = q.correctAnswers || (q.correctAnswer != null ? [q.correctAnswer] : []); const isCorrect = correctAnswers.includes(i); return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <input type="checkbox" checked={isCorrect} onChange={() => { const cur = q.correctAnswers || (q.correctAnswer != null ? [q.correctAnswer] : []); const next = isCorrect ? cur.filter(x => x !== i) : [...cur, i]; updateQuestion(q.id, "correctAnswers", next); }} style={{ accentColor: "#2563a8", width: "16px", height: "16px", flexShrink: 0 }} />
+                        <input value={opt} onChange={e => { const opts = [...q.options]; opts[i] = e.target.value; updateQuestion(q.id, "options", opts); }} placeholder={`Antwort ${String.fromCharCode(65 + i)}`} style={{ flex: 1, padding: "7px 10px", border: `1px solid ${isCorrect ? "#2563a8" : "#e5e7eb"}`, borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", background: isCorrect ? "#eff6ff" : "#fff" }} />
+                        {q.options.length > 2 && <button onClick={() => { const opts = q.options.filter((_, j) => j !== i); const cur = (q.correctAnswers || []).filter(x => x !== i).map(x => x > i ? x - 1 : x); updateQuestion(q.id, "options", opts); updateQuestion(q.id, "correctAnswers", cur); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px", padding: "0 4px", flexShrink: 0 }}>×</button>}
+                      </div>
+                    ); })}
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <p style={{ fontSize: "11px", color: "#94a3b8", margin: 0 }}>☑ Richtige Antwort(en) ankreuzen — mehrere möglich</p>
-                    <button onClick={() => updateQuestion(q.id, "options", [...q.options, ""])}
-                      style={{ padding: "5px 12px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
-                      + Antwort hinzufügen
-                    </button>
+                    <button onClick={() => updateQuestion(q.id, "options", [...q.options, ""])} style={{ padding: "5px 12px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>+ Antwort hinzufügen</button>
                   </div>
                 </div>
               )}
               {q.type === "true_false" && (
                 <div style={{ marginTop: "12px", display: "flex", gap: "10px" }}>
-                  {["Wahr", "Falsch"].map((opt, i) => (
-                    <button key={i} onClick={() => updateQuestion(q.id, "correctAnswer", i)}
-                      style={{ padding: "9px 24px", border: `2px solid ${q.correctAnswer === i ? "#2563a8" : "#e5e7eb"}`, borderRadius: "9px", background: q.correctAnswer === i ? "#2563a8" : "#fff", color: q.correctAnswer === i ? "#fff" : "#374151", fontWeight: 600, fontSize: "14px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>
-                  ))}
-                </div>
-              )}
-              {q.type === "open" && (
-                <div style={{ marginTop: "10px" }}>
-                  <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#2563a8", border: "1px solid #bfdbfe", marginBottom: "8px" }}>
-                    🤖 Diese Aufgabe wird von der KI bewertet — Modus: <strong>{GRADING_MODES.find(m => m.id === gradingMode)?.label || "Standard"}</strong>
-                  </div>
-                </div>
-              )}
-              {q.type === "fill_blank" && (
-                <div style={{ marginTop: "12px" }}>
-                  <div style={{ marginBottom: "10px" }}>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>
-                      Vollständiger Text — markiere Wörter um Lücken zu erstellen
-                    </label>
-                    <textarea
-                      value={q.fullText || ""}
-                      onChange={e => updateQuestion(q.id, "fullText", e.target.value)}
-                      onMouseUp={e => {
-                        const sel = window.getSelection();
-                        const selected = sel?.toString().trim();
-                        if (!selected || !q.fullText) return;
-                        const text = q.fullText;
-                        const start = text.indexOf(selected);
-                        if (start === -1) return;
-                        const newText = text.slice(0, start) + "[Lücke]" + text.slice(start + selected.length);
-                        const newBlanks = [...(q.blanks || []), { solution: selected, alternatives: [] }];
-                        updateQuestion(q.id, "fullText", newText);
-                        updateQuestion(q.id, "blanks", newBlanks);
-                        updateQuestion(q.id, "text", newText);
-                        sel.removeAllRanges();
-                      }}
-                      placeholder="z.B. Tom _____ to school every day."
-                      rows={4}
-                      style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }}
-                    />
-                    <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
-                      💡 Text eingeben → Wort mit Maus markieren → Lücke wird automatisch erstellt
-                    </div>
-                  </div>
-                  {(q.fullText || "").includes("[Lücke]") && (
-                    <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px 14px", marginBottom: "10px", fontSize: "13px", color: "#1e3a5f", lineHeight: 1.8 }}>
-                      <strong style={{ fontSize: "11px", color: "#64748b", display: "block", marginBottom: "4px" }}>VORSCHAU FÜR SCHÜLER:</strong>
-                      {(q.fullText || "").split("[Lücke]").map((part, i, arr) => (
-                        <span key={i}>
-                          {part}
-                          {i < arr.length - 1 && (
-                            <span style={{ display: "inline-block", minWidth: "80px", borderBottom: "2px solid #2563a8", margin: "0 4px" }}>&nbsp;</span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {(q.blanks || []).length > 0 && (
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "8px" }}>Lücken & Lösungen</label>
-                      {(q.blanks || []).map((blank, bi) => (
-                        <div key={bi} style={{ background: "#f8fafc", borderRadius: "8px", padding: "10px 14px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                            <span style={{ background: "#2563a8", color: "#fff", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", fontWeight: 700 }}>Lücke {bi + 1}</span>
-                            <input
-                              value={blank.solution}
-                              onChange={e => { const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], solution: e.target.value }; updateQuestion(q.id, "blanks", nb); }}
-                              placeholder="Hauptlösung"
-                              style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }}
-                            />
-                            <button onClick={() => {
-                              const nb = (q.blanks || []).filter((_, i) => i !== bi);
-                              let count = 0;
-                              const newText = (q.fullText || "").replace(/\[Lücke\]/g, match => { count++; return count - 1 === bi ? blank.solution : match; });
-                              updateQuestion(q.id, "blanks", nb); updateQuestion(q.id, "fullText", newText); updateQuestion(q.id, "text", newText);
-                            }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
-                          </div>
-                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-                            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Auch akzeptiert:</span>
-                            {(blank.alternatives || []).map((alt, ai) => (
-                              <span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
-                                {alt}
-                                <button onClick={() => { const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], alternatives: nb[bi].alternatives.filter((_, i) => i !== ai) }; updateQuestion(q.id, "blanks", nb); }}
-                                  style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "12px", padding: 0 }}>✕</button>
-                              </span>
-                            ))}
-                            <button onClick={() => { const alt = prompt("Alternative Lösung eingeben:"); if (!alt?.trim()) return; const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], alternatives: [...(nb[bi].alternatives || []), alt.trim()] }; updateQuestion(q.id, "blanks", nb); }}
-                              style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {["Wahr", "Falsch"].map((opt, i) => (<button key={i} onClick={() => updateQuestion(q.id, "correctAnswer", i)} style={{ padding: "9px 24px", border: `2px solid ${q.correctAnswer === i ? "#2563a8" : "#e5e7eb"}`, borderRadius: "9px", background: q.correctAnswer === i ? "#2563a8" : "#fff", color: q.correctAnswer === i ? "#fff" : "#374151", fontWeight: 600, fontSize: "14px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>))}
                 </div>
               )}
               {q.type === "flashcard" && (
                 <div style={{ marginTop: "12px" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe)</label>
-                      <input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)} placeholder="z.B. der Hund"
-                        style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (Hauptantwort)</label>
-                      <input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)} placeholder="z.B. the dog"
-                        style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-                    </div>
+                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe)</label><input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)} placeholder="z.B. der Hund" style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
+                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (Hauptantwort)</label><input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)} placeholder="z.B. the dog" style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
                     <span style={{ fontSize: "12px", color: "#94a3b8" }}>Auch akzeptiert:</span>
-                    {(q.cardBackAlternatives || []).map((alt, ai) => (
-                      <span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
-                        {alt}
-                        <button onClick={() => updateQuestion(q.id, "cardBackAlternatives", (q.cardBackAlternatives || []).filter((_, i) => i !== ai))}
-                          style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "12px", padding: 0 }}>✕</button>
-                      </span>
-                    ))}
-                    <button onClick={() => { const alt = prompt("Alternative Lösung eingeben:"); if (!alt?.trim()) return; updateQuestion(q.id, "cardBackAlternatives", [...(q.cardBackAlternatives || []), alt.trim()]); }}
-                      style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
+                    {(q.cardBackAlternatives || []).map((alt, ai) => (<span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>{alt}<button onClick={() => updateQuestion(q.id, "cardBackAlternatives", (q.cardBackAlternatives || []).filter((_, i) => i !== ai))} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "12px", padding: 0 }}>✕</button></span>))}
+                    <button onClick={() => { const alt = prompt("Alternative Lösung eingeben:"); if (!alt?.trim()) return; updateQuestion(q.id, "cardBackAlternatives", [...(q.cardBackAlternatives || []), alt.trim()]); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
                   </div>
                 </div>
               )}
@@ -930,46 +559,75 @@ Erkenne den Typ automatisch.`;
                 <div style={{ marginTop: "12px" }}>
                   {q.pairs.map((pair, i) => (
                     <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
-                      <input value={pair.left} placeholder={`Begriff ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], left: e.target.value }; updateQuestion(q.id, "pairs", p); }}
-                        style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
+                      <input value={pair.left} placeholder={`Begriff ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], left: e.target.value }; updateQuestion(q.id, "pairs", p); }} style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
                       <span style={{ color: "#94a3b8" }}>→</span>
-                      <input value={pair.right} placeholder={`Definition ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], right: e.target.value }; updateQuestion(q.id, "pairs", p); }}
-                        style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
+                      <input value={pair.right} placeholder={`Definition ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], right: e.target.value }; updateQuestion(q.id, "pairs", p); }} style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
                       {q.pairs.length > 1 && <button onClick={() => updateQuestion(q.id, "pairs", q.pairs.filter((_, pi) => pi !== i))} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>}
                     </div>
                   ))}
                   <button onClick={() => updateQuestion(q.id, "pairs", [...q.pairs, { left: "", right: "" }])} style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer" }}>+ Paar hinzufügen</button>
                 </div>
               )}
+              {q.type === "fill_blank" && (
+                <div style={{ marginTop: "12px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Vollständiger Text — markiere Wörter um Lücken zu erstellen</label>
+                  <textarea value={q.fullText || ""} onChange={e => updateQuestion(q.id, "fullText", e.target.value)}
+                    onMouseUp={e => { const sel = window.getSelection(); const selected = sel?.toString().trim(); if (!selected || !q.fullText) return; const text = q.fullText; const start = text.indexOf(selected); if (start === -1) return; const newText = text.slice(0, start) + "[Lücke]" + text.slice(start + selected.length); const newBlanks = [...(q.blanks || []), { solution: selected, alternatives: [] }]; updateQuestion(q.id, "fullText", newText); updateQuestion(q.id, "blanks", newBlanks); updateQuestion(q.id, "text", newText); sel.removeAllRanges(); }}
+                    placeholder="z.B. Tom _____ to school every day." rows={4}
+                    style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} />
+                  <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>💡 Text eingeben → Wort mit Maus markieren → Lücke wird automatisch erstellt</div>
+                  {(q.fullText || "").includes("[Lücke]") && (
+                    <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px 14px", marginTop: "8px", marginBottom: "10px", fontSize: "13px", color: "#1e3a5f", lineHeight: 1.8 }}>
+                      <strong style={{ fontSize: "11px", color: "#64748b", display: "block", marginBottom: "4px" }}>VORSCHAU:</strong>
+                      {(q.fullText || "").split("[Lücke]").map((part, i, arr) => (<span key={i}>{part}{i < arr.length - 1 && <span style={{ display: "inline-block", minWidth: "80px", borderBottom: "2px solid #2563a8", margin: "0 4px" }}>&nbsp;</span>}</span>))}
+                    </div>
+                  )}
+                  {(q.blanks || []).map((blank, bi) => (
+                    <div key={bi} style={{ background: "#f8fafc", borderRadius: "8px", padding: "10px 14px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ background: "#2563a8", color: "#fff", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", fontWeight: 700 }}>Lücke {bi + 1}</span>
+                        <input value={blank.solution} onChange={e => { const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], solution: e.target.value }; updateQuestion(q.id, "blanks", nb); }} placeholder="Hauptlösung" style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }} />
+                        <button onClick={() => { const nb = (q.blanks || []).filter((_, i) => i !== bi); let count = 0; const newText = (q.fullText || "").replace(/\[Lücke\]/g, match => { count++; return count - 1 === bi ? blank.solution : match; }); updateQuestion(q.id, "blanks", nb); updateQuestion(q.id, "fullText", newText); updateQuestion(q.id, "text", newText); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              <details style={{ marginTop: "12px" }}>
-                <summary style={{ cursor: "pointer", fontSize: "12px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "6px 0" }}>
-                  📝 Lösung / Erwartungshorizont & Teilbepunktung
+              {/* Musterlösung & Teilbepunktung — mit KI-Maßstab Button für offene Fragen */}
+              <details style={{ marginTop: "12px" }} open={q.type === "open"}>
+                <summary style={{ cursor: "pointer", fontSize: "12px", fontWeight: 600, color: q.type === "open" ? "#2563a8" : "#64748b", userSelect: "none", padding: "6px 0" }}>
+                  📝 {q.type === "open" ? "Musterlösung & Teilbepunktung (KI-Bewertungsmaßstab)" : "Lösung / Erwartungshorizont & Teilbepunktung"}
                 </summary>
-                <div style={{ marginTop: "10px", background: "#f8fafc", borderRadius: "10px", padding: "14px", border: "1px solid #e2e8f0" }}>
+                <div style={{ marginTop: "10px", background: q.type === "open" ? "#f0f7ff" : "#f8fafc", borderRadius: "10px", padding: "14px", border: `1px solid ${q.type === "open" ? "#bfdbfe" : "#e2e8f0"}` }}>
+                  {q.type === "open" && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                      <span style={{ fontSize: "12px", color: "#2563a8", fontWeight: 600 }}>
+                        {(q.partialPoints || []).length > 0 ? "✓ Bewertungsmaßstab hinterlegt — KI folgt diesen Kriterien" : "Noch kein Maßstab — KI bewertet nach eigenem Ermessen"}
+                      </span>
+                      <button onClick={() => handleSuggestRubricForQuestion(q)} disabled={suggestingRubricId === q.id}
+                        style={{ padding: "6px 14px", background: suggestingRubricId === q.id ? "#e2e8f0" : "#2563a8", color: suggestingRubricId === q.id ? "#94a3b8" : "#fff", border: "none", borderRadius: "7px", fontSize: "12px", fontWeight: 700, cursor: suggestingRubricId === q.id ? "not-allowed" : "pointer" }}>
+                        {suggestingRubricId === q.id ? "⏳ KI denkt..." : "🤖 KI-Maßstab vorschlagen"}
+                      </button>
+                    </div>
+                  )}
                   <div style={{ marginBottom: "10px" }}>
                     <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Musterlösung</label>
                     <textarea value={q.solution || ""} onChange={e => updateQuestion(q.id, "solution", e.target.value)}
-                      placeholder="z.B. Der Schüler soll erklären, dass..." rows={3}
+                      placeholder={q.type === "open" ? "Musterlösung / Erwartungshorizont (wird von KI für Bewertung genutzt)..." : "z.B. Der Schüler soll erklären, dass..."} rows={3}
                       style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                   </div>
                   <div>
                     <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Teilbepunktung</label>
                     {(q.partialPoints || []).map((p, i) => (
                       <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
-                        <input type="number" value={p.points} min={0} max={q.points} step={0.5}
-                          onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], points: Number(e.target.value) }; updateQuestion(q.id, "partialPoints", pp); }}
-                          style={{ width: "60px", padding: "6px 8px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", textAlign: "center" }} />
+                        <input type="number" value={p.points} min={0} max={q.points} step={0.5} onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], points: Number(e.target.value) }; updateQuestion(q.id, "partialPoints", pp); }} style={{ width: "60px", padding: "6px 8px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", textAlign: "center" }} />
                         <span style={{ fontSize: "12px", color: "#94a3b8" }}>Pkt. für:</span>
-                        <input value={p.description} placeholder="z.B. Nennung des Begriffs"
-                          onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], description: e.target.value }; updateQuestion(q.id, "partialPoints", pp); }}
-                          style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }} />
-                        <button onClick={() => updateQuestion(q.id, "partialPoints", (q.partialPoints || []).filter((_, pi) => pi !== i))}
-                          style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
+                        <input value={p.description} placeholder="z.B. Nennung des Begriffs" onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], description: e.target.value }; updateQuestion(q.id, "partialPoints", pp); }} style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }} />
+                        <button onClick={() => updateQuestion(q.id, "partialPoints", (q.partialPoints || []).filter((_, pi) => pi !== i))} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
                       </div>
                     ))}
-                    <button onClick={() => updateQuestion(q.id, "partialPoints", [...(q.partialPoints || []), { points: 0.5, description: "" }])}
-                      style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>+ Teilpunkt hinzufügen</button>
+                    <button onClick={() => updateQuestion(q.id, "partialPoints", [...(q.partialPoints || []), { points: 0.5, description: "" }])} style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>+ Teilpunkt hinzufügen</button>
                   </div>
                 </div>
               </details>
@@ -985,34 +643,17 @@ Erkenne den Typ automatisch.`;
           );
         })}
 
-        {/* Bottom buttons */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-          <button onClick={addSection} style={{ padding: "14px", border: "2px dashed #c7d2fe", borderRadius: "14px", background: "#fff", color: "#4f46e5", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
-            onMouseOver={e => e.currentTarget.style.borderColor = "#4f46e5"}
-            onMouseOut={e => e.currentTarget.style.borderColor = "#c7d2fe"}>
-            + Abschnitt hinzufügen
-          </button>
+          <button onClick={addSection} style={{ padding: "14px", border: "2px dashed #c7d2fe", borderRadius: "14px", background: "#fff", color: "#4f46e5", fontSize: "14px", fontWeight: 600, cursor: "pointer" }} onMouseOver={e => e.currentTarget.style.borderColor = "#4f46e5"} onMouseOut={e => e.currentTarget.style.borderColor = "#c7d2fe"}>+ Abschnitt hinzufügen</button>
           <div style={{ position: "relative" }}>
-            <button onClick={() => setShowTypeMenu(m => !m)} style={{ width: "100%", padding: "14px", border: "2px dashed #cbd5e1", borderRadius: "14px", background: "#fff", color: "#2563a8", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
-              onMouseOver={e => e.currentTarget.style.borderColor = "#2563a8"}
-              onMouseOut={e => e.currentTarget.style.borderColor = "#cbd5e1"}>
-              + Aufgabe hinzufügen
-            </button>
+            <button onClick={() => setShowTypeMenu(m => !m)} style={{ width: "100%", padding: "14px", border: "2px dashed #cbd5e1", borderRadius: "14px", background: "#fff", color: "#2563a8", fontSize: "14px", fontWeight: 600, cursor: "pointer" }} onMouseOver={e => e.currentTarget.style.borderColor = "#2563a8"} onMouseOut={e => e.currentTarget.style.borderColor = "#cbd5e1"}>+ Aufgabe hinzufügen</button>
             {showTypeMenu && (
               <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0, background: "#fff", borderRadius: "14px", border: "1px solid #e2e8f0", boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 10 }}>
-                {QUESTION_TYPES.map(t => (
-                  <button key={t.id} onClick={() => addQuestion(t.id)} style={{ width: "100%", padding: "13px 20px", border: "none", background: "#fff", textAlign: "left", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid #f8fafc", fontFamily: "inherit" }}
-                    onMouseOver={e => e.currentTarget.style.background = "#f0f7ff"}
-                    onMouseOut={e => e.currentTarget.style.background = "#fff"}>
-                    <span style={{ fontSize: "20px" }}>{t.icon}</span>
-                    <div style={{ fontWeight: 600, color: "#0f172a" }}>{t.label}</div>
-                  </button>
-                ))}
+                {QUESTION_TYPES.map(t => (<button key={t.id} onClick={() => addQuestion(t.id)} style={{ width: "100%", padding: "13px 20px", border: "none", background: "#fff", textAlign: "left", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid #f8fafc", fontFamily: "inherit" }} onMouseOver={e => e.currentTarget.style.background = "#f0f7ff"} onMouseOut={e => e.currentTarget.style.background = "#fff"}><span style={{ fontSize: "20px" }}>{t.icon}</span><div style={{ fontWeight: 600, color: "#0f172a" }}>{t.label}</div></button>))}
               </div>
             )}
           </div>
         </div>
-
       </div>
 
       {showLeaveModal && (
@@ -1020,22 +661,11 @@ Erkenne den Typ automatisch.`;
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "400px", width: "100%", textAlign: "center" }}>
             <div style={{ fontSize: "48px", marginBottom: "12px" }}>💾</div>
             <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Entwurf speichern?</h3>
-            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.5 }}>
-              Du hast ungespeicherte Änderungen. Möchtest du die Vorlage speichern bevor du die Seite verlässt?
-            </p>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.5 }}>Du hast ungespeicherte Änderungen. Möchtest du die Vorlage speichern bevor du die Seite verlässt?</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <button onClick={async () => { await handleSave(); setShowLeaveModal(false); if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data); }}
-                style={{ padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
-                💾 Speichern und verlassen
-              </button>
-              <button onClick={() => { setShowLeaveModal(false); if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data); }}
-                style={{ padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
-                Ohne Speichern verlassen
-              </button>
-              <button onClick={() => setShowLeaveModal(false)}
-                style={{ padding: "12px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
-                Abbrechen — weiter bearbeiten
-              </button>
+              <button onClick={async () => { await handleSave(); setShowLeaveModal(false); if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data); }} style={{ padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>💾 Speichern und verlassen</button>
+              <button onClick={() => { setShowLeaveModal(false); if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data); }} style={{ padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>Ohne Speichern verlassen</button>
+              <button onClick={() => setShowLeaveModal(false)} style={{ padding: "12px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>Abbrechen — weiter bearbeiten</button>
             </div>
           </div>
         </div>
