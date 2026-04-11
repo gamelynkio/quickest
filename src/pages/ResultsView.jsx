@@ -154,13 +154,43 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     return () => supabase.removeChannel(channel);
   }, [assignment]);
 
-  // Polling-Fallback: solange unfertige Abgaben vorhanden, alle 3s neu laden
+  // Beim Laden: unreviewte Submissions automatisch KI-korrigieren
   useEffect(() => {
-    const hasUnreviewed = submissions.some(s => !s.reviewed);
-    if (!hasUnreviewed || !assignment?.id) return;
-    const poll = setInterval(() => fetchSubmissions(), 3000);
-    return () => clearInterval(poll);
-  }, [submissions, assignment]);
+    if (!assignmentData || submissions.length === 0) return;
+    const pending = submissions.filter(s =>
+      !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
+    );
+    if (pending.length === 0) return;
+    // Still im Hintergrund korrigieren
+    (async () => {
+      for (const s of pending) {
+        const { corrections, changed } = await aiCorrectOpenQuestions(s, assignmentData);
+        if (!changed) continue;
+        let newScore = 0;
+        for (const [qId, correction] of Object.entries(corrections)) {
+          const ov = (s.manual_overrides || {})[qId];
+          newScore += ov !== undefined ? Number(ov) : (correction.points !== null && correction.points !== undefined ? Number(correction.points) : 0);
+        }
+        const percent = (newScore / (s.total_points || 1)) * 100;
+        const gs = [...(assignmentData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
+        let newGrade = "6";
+        for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
+        const hasStillOpen = Object.values(corrections).some(c => c.needsReview && !c.aiReviewed);
+        await supabase.from("submissions").update({
+          ai_corrections: corrections,
+          score: newScore,
+          grade: newGrade,
+          reviewed: !hasStillOpen,
+        }).eq("id", s.id);
+        setSubmissions(prev => prev.map(sub =>
+          sub.id === s.id ? { ...sub, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen } : sub
+        ));
+        if (selectedSubmission?.id === s.id) {
+          setSelectedSubmission(prev => ({ ...prev, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen }));
+        }
+      }
+    })();
+  }, [assignmentData, submissions.length]);
 
   const fetchAll = async () => {
     setLoading(true);
