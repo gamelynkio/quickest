@@ -3,12 +3,152 @@ import { supabase } from "@/integrations/supabase/client";
 
 const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97316", "5": "#ef4444", "6": "#dc2626" };
 
+function SubmissionDetailModal({ submission, onClose }) {
+  const corrections = submission.ai_corrections || {};
+
+  // Originalreihenfolge aus question_data rekonstruieren
+  const [orderedCorrections, setOrderedCorrections] = useState([]);
+
+  useEffect(() => {
+    const flat = [];
+    const qs = submission.question_data || [];
+    for (const q of qs) {
+      if (q.type === "section") {
+        for (const task of (q.tasks || [])) {
+          for (const tq of (task.questions || [])) flat.push(tq);
+        }
+      } else {
+        flat.push(q);
+      }
+    }
+    const ordered = flat
+      .map(q => ({ q, correction: corrections[String(q.id)] }))
+      .filter(({ correction }) => correction !== undefined);
+    // Fallback: alle corrections in DB-Reihenfolge
+    if (ordered.length === 0) {
+      setOrderedCorrections(Object.entries(corrections).map(([qId, correction]) => ({ qId, correction })));
+    } else {
+      setOrderedCorrections(ordered.map(({ q, correction }) => ({ qId: String(q.id), correction, question: q })));
+    }
+  }, [submission]);
+
+  const totalPoints = submission.total_points || 0;
+  const score = submission.score ?? 0;
+  const percent = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 1000, padding: "20px", overflowY: "auto" }}>
+      <div style={{ background: "#fff", borderRadius: "20px", width: "100%", maxWidth: "560px", marginTop: "20px", marginBottom: "20px" }}>
+        {/* Header */}
+        <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "20px 20px 0 0", padding: "22px 24px", color: "#fff" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, marginBottom: "4px" }}>{submission.assignments?.title || "Test"}</div>
+              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>
+                {new Date(submission.submitted_at).toLocaleDateString("de-DE")}
+              </div>
+            </div>
+            <button onClick={onClose} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px", fontWeight: 700 }}>✕</button>
+          </div>
+
+          {/* Score summary */}
+          <div style={{ display: "flex", gap: "16px", marginTop: "16px", alignItems: "center" }}>
+            {submission.grade && (
+              <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: "12px", padding: "10px 18px", textAlign: "center" }}>
+                <div style={{ fontSize: "36px", fontWeight: 900, color: GRADE_COLOR[submission.grade] || "#fff", lineHeight: 1 }}>{submission.grade}</div>
+                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)", marginTop: "2px" }}>Note</div>
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: "22px", fontWeight: 800 }}>{score} / {totalPoints} Pkt.</div>
+              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)", marginTop: "2px" }}>{percent}% erreicht</div>
+              {/* Progress bar */}
+              <div style={{ height: "6px", background: "rgba(255,255,255,0.2)", borderRadius: "4px", width: "180px", marginTop: "8px" }}>
+                <div style={{ height: "6px", borderRadius: "4px", background: "#fff", width: `${percent}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Corrections */}
+        <div style={{ padding: "20px 24px" }}>
+          {orderedCorrections.map(({ qId, correction, question }, i) => {
+            const isCorrect = correction.correct === true;
+            const isWrong = correction.correct === false;
+            const isAi = correction.aiReviewed;
+            const pts = correction.points ?? 0;
+
+            return (
+              <div key={qId} style={{ marginBottom: "14px", background: "#f8fafc", borderRadius: "12px", padding: "14px 16px", border: `1px solid ${isCorrect ? "#bbf7d0" : isWrong ? "#fecaca" : "#e2e8f0"}` }}>
+                {/* Question header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: "#374151" }}>Aufgabe {i + 1}</span>
+                    {isCorrect && <span style={{ color: "#16a34a", fontSize: "14px" }}>✓</span>}
+                    {isWrong && <span style={{ color: "#dc2626", fontSize: "14px" }}>✗</span>}
+                    {isAi && <span style={{ fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 5px", fontWeight: 700 }}>🤖 KI</span>}
+                  </div>
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: isCorrect ? "#16a34a" : isWrong ? "#dc2626" : "#374151" }}>
+                    {pts} / {correction.maxPoints} Pkt.
+                  </span>
+                </div>
+
+                {/* Student answer */}
+                <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
+                  <span style={{ color: "#94a3b8" }}>Deine Antwort: </span>
+                  {correction.studentAnswer ?? "–"}
+                </div>
+
+                {/* AI/teacher comment */}
+                {correction.comment && (
+                  <div style={{ background: isCorrect ? "#dcfce7" : isAi ? "#eff6ff" : isWrong ? "#fef2f2" : "#fef9c3", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isCorrect ? "#16a34a" : isAi ? "#1e40af" : isWrong ? "#dc2626" : "#92400e" }}>
+                    {correction.comment}
+                  </div>
+                )}
+
+                {/* Solution */}
+                {correction.solution && (
+                  <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
+                    <strong>📝 Musterlösung:</strong> {correction.solution}
+                  </div>
+                )}
+
+                {/* Partial points / rubric */}
+                {(correction.partialPoints?.length > 0) && (
+                  <details>
+                    <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "2px 0" }}>
+                      📋 Bewertungsmaßstab
+                    </summary>
+                    <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "3px" }}>
+                      {correction.partialPoints.map((p, pi) => (
+                        <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", alignItems: "center" }}>
+                          <span style={{ background: "#eff6ff", borderRadius: "4px", padding: "1px 6px", fontWeight: 700, color: "#2563a8", flexShrink: 0 }}>{p.points} Pkt.</span>
+                          <span>{p.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            );
+          })}
+
+          <button onClick={onClose} style={{ width: "100%", padding: "13px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", marginTop: "4px" }}>
+            Schließen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function StudentDashboard({ currentUser, onStartTest, onLogout }) {
   const [assignments, setAssignments] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [allMakeupAssignments, setAllMakeupAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sebBlockedAssignment, setSebBlockedAssignment] = useState(null);
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -24,7 +164,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     const [{ data: asgn }, { data: subs }, { data: allMakeups }] = await Promise.all([
       supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv"),
       supabase.from("submissions")
-        .select("*, assignments(title)")
+        .select("*, assignments(title, question_data)")
         .eq("username", currentUser.username)
         .order("submitted_at", { ascending: false }),
       supabase.from("assignments").select("id, parent_assignment_id")
