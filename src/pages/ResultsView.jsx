@@ -37,6 +37,7 @@ const aiCorrectOpenQuestions = async (submission, assignmentData) => {
   }[gradingMode] || "";
 
   let changed = false;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
   for (const q of openQuestions) {
     const existingCorrection = corrections[q.id];
@@ -81,7 +82,7 @@ Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
 {"points": <Zahl, max ${q.points}, Vielfaches von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
 
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
