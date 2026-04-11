@@ -66,8 +66,15 @@ Schülerantwort: ${studentAnswer}
 
 Bewertungsregeln: ${gradingModeText}
 
+WICHTIG — Teilbepunktung:
+- Vergib IMMER anteilige Punkte wenn die Antwort teilweise korrekt ist. Niemals nur 0 oder volle Punktzahl, außer die Antwort ist komplett falsch oder komplett richtig.
+- Beispiel: Musterlösung "am 30. April um 3 Uhr", Schüler schreibt "30. April" → er hat das Datum richtig, die Uhrzeit fehlt → vergib die Hälfte der Punkte.
+- Orientiere dich daran, welcher Anteil der geforderten Information korrekt genannt wurde.
+- Bei ${q.points} Punkten sind auch Zwischenwerte wie ${q.points === 1 ? "0.5" : q.points === 2 ? "0.5, 1 oder 1.5" : "0.5-Schritte"} möglich.
+- Erkläre im Kommentar kurz was richtig war und was gefehlt hat.
+
 Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
-{"points": <Zahl, max ${q.points}>, "comment": "<kurze Begründung auf Deutsch, max 1-2 Sätze>"}`;
+{"points": <Zahl, max ${q.points}, Schritte von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
 
     try {
       const response = await fetch("https://api.anthropic.com/v1/messages", {
