@@ -132,6 +132,7 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [localPairs, setLocalPairs] = useState(tq.pairs?.length ? tq.pairs : [{ left: "", right: "" }]);
   const [localPartialPoints, setLocalPartialPoints] = useState(tq.partialPoints || []);
   const [suggestingRubric, setSuggestingRubric] = useState(false);
+  const rubricDebounceRef = useRef(null);
 
   const localRef = useRef({});
   localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localCardFront, localCardBack, localCardAlts, localPairs, localPartialPoints };
@@ -146,16 +147,24 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
     };
   }, []);
 
-  const handleSuggestRubric = async () => {
-    setSuggestingRubric(true);
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
-      if (result.solution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
-      if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); }
-    } catch (e) { alert("KI-Maßstab konnte nicht erstellt werden. Bitte versuche es erneut."); }
-    setSuggestingRubric(false);
-  };
+  // Automatisch KI-Maßstab vorschlagen sobald Musterlösung eingetragen (mit Debounce)
+  useEffect(() => {
+    if (tq.type !== "open") return;
+    if (!localSolution.trim()) return;
+    if (localPartialPoints.length > 0) return; // Bereits Kriterien vorhanden — nicht überschreiben
+    clearTimeout(rubricDebounceRef.current);
+    rubricDebounceRef.current = setTimeout(async () => {
+      setSuggestingRubric(true);
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
+        if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); }
+        if (result.solution && !localSolution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
+      } catch (e) { /* still */ }
+      setSuggestingRubric(false);
+    }, 1500);
+    return () => clearTimeout(rubricDebounceRef.current);
+  }, [localSolution]);
 
   return (
     <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px", color: "#1e293b" }}>
@@ -253,12 +262,23 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
           {tq.type === "open" && (
             <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: "11px", color: "#2563a8", fontWeight: 600 }}>
-                {localPartialPoints.length > 0 ? "✓ Bewertungsmaßstab hinterlegt" : "Noch kein Maßstab — KI bewertet nach eigenem Ermessen"}
+                {suggestingRubric ? "⏳ KI erstellt Maßstab..." : localPartialPoints.length > 0 ? "✓ Bewertungsmaßstab hinterlegt" : "Musterlösung eingeben → KI erstellt Maßstab automatisch"}
               </span>
-              <button onClick={handleSuggestRubric} disabled={suggestingRubric}
-                style={{ padding: "5px 12px", background: suggestingRubric ? "#e2e8f0" : "#2563a8", color: suggestingRubric ? "#94a3b8" : "#fff", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: suggestingRubric ? "not-allowed" : "pointer" }}>
-                {suggestingRubric ? "⏳ KI denkt..." : "🤖 KI-Maßstab vorschlagen"}
-              </button>
+              {localPartialPoints.length > 0 && !suggestingRubric && (
+                <button onClick={async () => {
+                  setSuggestingRubric(true);
+                  try {
+                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                    const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
+                    if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); }
+                    if (result.solution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
+                  } catch (e) {}
+                  setSuggestingRubric(false);
+                }}
+                  style={{ padding: "4px 10px", background: "none", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
+                  🔄 Neu vorschlagen
+                </button>
+              )}
             </div>
           )}
           <textarea value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
@@ -314,7 +334,37 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
 
   const addQuestion = (type) => { setQuestions(prev => [...prev, newQuestion(type)]); setShowTypeMenu(false); };
   const addSection = () => setQuestions(prev => [...prev, newSection()]);
-  const updateQuestion = (id, field, value) => setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
+  const rubricDebounceRef = useRef({});
+
+  const handleSuggestRubricForQuestion = async (q) => {
+    setSuggestingRubricId(q.id);
+    try {
+      const result = await suggestRubric(q.text, q.points, q.solution, supabaseUrl);
+      if (result.solution) updateQuestion(q.id, "solution", result.solution);
+      if (result.partialPoints?.length) updateQuestion(q.id, "partialPoints", result.partialPoints);
+    } catch (e) {}
+    setSuggestingRubricId(null);
+  };
+
+  const triggerAutoRubric = (q) => {
+    if (q.type !== "open") return;
+    if (!q.solution?.trim()) return;
+    if ((q.partialPoints || []).length > 0) return;
+    clearTimeout(rubricDebounceRef.current[q.id]);
+    rubricDebounceRef.current[q.id] = setTimeout(() => handleSuggestRubricForQuestion(q), 1500);
+  };
+
+  const updateQuestion = (id, field, value) => {
+    setQuestions(prev => {
+      const next = prev.map(q => q.id === id ? { ...q, [field]: value } : q);
+      if (field === "solution") {
+        const q = next.find(q => q.id === id);
+        if (q) triggerAutoRubric(q);
+      }
+      return next;
+    });
+  };
+
   const removeQuestion = (id) => setQuestions(prev => prev.filter(q => q.id !== id));
   const addTask = (sectionId) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: [...(q.tasks || []), newTask()] } : q));
   const updateTask = (sectionId, taskId, field, value) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, [field]: value } : t) } : q));
@@ -323,16 +373,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const updateTaskQuestion = (sectionId, taskId, qId, field, value) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, questions: t.questions.map(tq => tq.id === qId ? { ...tq, [field]: value } : tq) } : t) } : q));
   const removeTaskQuestion = (sectionId, taskId, qId) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, questions: t.questions.filter(tq => tq.id !== qId) } : t) } : q));
   const moveQuestion = (index, dir) => { const next = [...questions]; const swap = index + dir; if (swap < 0 || swap >= next.length) return; [next[index], next[swap]] = [next[swap], next[index]]; setQuestions(next); };
-
-  const handleSuggestRubricForQuestion = async (q) => {
-    setSuggestingRubricId(q.id);
-    try {
-      const result = await suggestRubric(q.text, q.points, q.solution, supabaseUrl);
-      if (result.solution) updateQuestion(q.id, "solution", result.solution);
-      if (result.partialPoints?.length) updateQuestion(q.id, "partialPoints", result.partialPoints);
-    } catch (e) { alert("KI-Maßstab konnte nicht erstellt werden. Bitte versuche es erneut."); }
-    setSuggestingRubricId(null);
-  };
 
   const totalPoints = questions.filter(q => q.type !== "section").reduce((sum, q) => sum + Number(q.points || 0), 0);
   const getSectionPoints = (sectionIndex) => { let sum = 0; for (let i = sectionIndex + 1; i < questions.length; i++) { if (questions[i].type === "section") break; sum += Number(questions[i].points || 0); } return sum; };
@@ -603,12 +643,14 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
                   {q.type === "open" && (
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                       <span style={{ fontSize: "12px", color: "#2563a8", fontWeight: 600 }}>
-                        {(q.partialPoints || []).length > 0 ? "✓ Bewertungsmaßstab hinterlegt — KI folgt diesen Kriterien" : "Noch kein Maßstab — KI bewertet nach eigenem Ermessen"}
+                        {suggestingRubricId === q.id ? "⏳ KI erstellt Maßstab..." : (q.partialPoints || []).length > 0 ? "✓ Bewertungsmaßstab hinterlegt — KI folgt diesen Kriterien" : "Musterlösung eingeben → KI erstellt Maßstab automatisch"}
                       </span>
-                      <button onClick={() => handleSuggestRubricForQuestion(q)} disabled={suggestingRubricId === q.id}
-                        style={{ padding: "6px 14px", background: suggestingRubricId === q.id ? "#e2e8f0" : "#2563a8", color: suggestingRubricId === q.id ? "#94a3b8" : "#fff", border: "none", borderRadius: "7px", fontSize: "12px", fontWeight: 700, cursor: suggestingRubricId === q.id ? "not-allowed" : "pointer" }}>
-                        {suggestingRubricId === q.id ? "⏳ KI denkt..." : "🤖 KI-Maßstab vorschlagen"}
-                      </button>
+                      {(q.partialPoints || []).length > 0 && suggestingRubricId !== q.id && (
+                        <button onClick={() => handleSuggestRubricForQuestion(q)}
+                          style={{ padding: "5px 12px", background: "none", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "7px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                          🔄 Neu vorschlagen
+                        </button>
+                      )}
                     </div>
                   )}
                   <div style={{ marginBottom: "10px" }}>
