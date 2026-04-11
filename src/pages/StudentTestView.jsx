@@ -584,12 +584,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   );
 
   const handleFinish = () => {
-    const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
-    if (isSEB) {
-      window.location.href = "https://quickest.lovable.app/seb-quit.html";
-    } else {
-      onFinish();
-    }
+    onFinish();
   };
 
   if (submitted) return (
