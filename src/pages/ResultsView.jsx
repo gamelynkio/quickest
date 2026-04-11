@@ -149,6 +149,14 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     return () => supabase.removeChannel(channel);
   }, [assignment]);
 
+  // Polling-Fallback: solange unfertige Abgaben vorhanden, alle 3s neu laden
+  useEffect(() => {
+    const hasUnreviewed = submissions.some(s => !s.reviewed);
+    if (!hasUnreviewed || !assignment?.id) return;
+    const poll = setInterval(() => fetchSubmissions(), 3000);
+    return () => clearInterval(poll);
+  }, [submissions, assignment]);
+
   const fetchAll = async () => {
     setLoading(true);
     await Promise.all([fetchSubmissions(), fetchGroup(), fetchTemplates(), fetchAssignmentData()]);
