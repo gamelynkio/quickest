@@ -73,10 +73,14 @@ WICHTIGE HINWEISE zur Musterlösung:
 - Wenn keine Musterlösung hinterlegt ist, bewerte ob die Antwort inhaltlich sinnvoll und vollständig zur Frage passt.
 
 TEILBEPUNKTUNG:
-- Vergib IMMER anteilige Punkte wenn die Antwort teilweise korrekt ist.
+${(q.partialPoints || []).length > 0
+  ? `Der Lehrer hat folgende verbindliche Bewertungskriterien festgelegt — halte dich EXAKT daran:
+${(q.partialPoints).map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}
+Vergib nur die Punkte, die der Schüler laut diesen Kriterien verdient hat. Summe darf maximal ${q.points} sein.`
+  : `- Vergib IMMER anteilige Punkte wenn die Antwort teilweise korrekt ist.
 - Nur bei komplett falscher oder komplett richtiger Antwort darfst du 0 oder volle Punktzahl vergeben.
 - Bei ${q.points} Punkt${Number(q.points) !== 1 ? "en" : ""} sind Schritte von 0.5 möglich.
-- Erkläre kurz was richtig war und was gefehlt hat (oder warum volle/keine Punkte).
+- Erkläre kurz was richtig war und was gefehlt hat (oder warum volle/keine Punkte).`}
 
 Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
 {"points": <Zahl, max ${q.points}, Vielfaches von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
@@ -444,12 +448,20 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                   <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "22px", overflowY: "auto", maxHeight: "600px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
                       <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{selectedSubmission.username}</h3>
-                      {Object.values(selectedSubmission.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed) && (
-                        <button onClick={() => runAiCorrection(selectedSubmission)} disabled={aiRunning}
-                          style={{ padding: "7px 14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: aiRunning ? "not-allowed" : "pointer" }}>
-                          {aiRunning ? "⏳ KI läuft..." : "🤖 KI korrigieren"}
-                        </button>
-                      )}
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        {Object.values(selectedSubmission.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed) && (
+                          <button onClick={() => runAiCorrection(selectedSubmission)} disabled={aiRunning}
+                            style={{ padding: "7px 14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: aiRunning ? "not-allowed" : "pointer" }}>
+                            {aiRunning ? "⏳ KI läuft..." : "🤖 KI korrigieren"}
+                          </button>
+                        )}
+                        {Object.values(selectedSubmission.ai_corrections || {}).some(c => c.aiReviewed) && (
+                          <button onClick={() => runAiCorrection({ ...selectedSubmission, ai_corrections: Object.fromEntries(Object.entries(selectedSubmission.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }])) })} disabled={aiRunning}
+                            style={{ padding: "7px 14px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: aiRunning ? "not-allowed" : "pointer" }}>
+                            {aiRunning ? "⏳..." : "🔄 Neu korrigieren"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <p style={{ margin: "0 0 18px", color: "#64748b", fontSize: "13px" }}>
                       Abgegeben: {new Date(selectedSubmission.submitted_at).toLocaleString("de-DE")}
@@ -491,7 +503,49 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                               <strong>📝 Musterlösung:</strong> {correction.solution}
                             </div>
                           )}
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          {(correction.partialPoints?.length > 0) && (
+                            <details style={{ marginBottom: "8px" }}>
+                              <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "2px 0" }}>📋 Bewertungsmaßstab ({correction.partialPoints.length} Kriterien)</summary>
+                              <div style={{ marginTop: "6px", background: "#f8fafc", borderRadius: "6px", padding: "8px 10px", border: "1px solid #e2e8f0" }}>
+                                {correction.partialPoints.map((p, pi) => (
+                                  <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", marginBottom: "3px", alignItems: "center" }}>
+                                    <span style={{ background: "#eff6ff", borderRadius: "4px", padding: "1px 6px", fontWeight: 700, color: "#2563a8", flexShrink: 0 }}>{p.points} Pkt.</span>
+                                    <span>{p.description}</span>
+                                  </div>
+                                ))}
+                                <button onClick={async () => {
+                                  const toReCorrect = submissions.filter(s => Object.values(s.ai_corrections || {}).some(c => c.aiReviewed));
+                                  if (toReCorrect.length === 0) return;
+                                  if (!window.confirm(`Alle ${toReCorrect.length} KI-bewerteten Abgaben mit dem aktuellen Maßstab neu korrigieren?`)) return;
+                                  setAiRunning(true);
+                                  const aData = assignmentData || assignment;
+                                  for (const s of toReCorrect) {
+                                    setAiProgress(`Neu korrigiere ${s.username}...`);
+                                    const resetCorrections = Object.fromEntries(Object.entries(s.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }]));
+                                    const { corrections, changed } = await aiCorrectOpenQuestions({ ...s, ai_corrections: resetCorrections }, aData);
+                                    if (!changed) continue;
+                                    let newScore = 0;
+                                    for (const [qId, c] of Object.entries(corrections)) {
+                                      const ov = (s.manual_overrides || {})[qId];
+                                      newScore += ov !== undefined ? Number(ov) : (c.points !== null && c.points !== undefined ? Number(c.points) : 0);
+                                    }
+                                    const percent = (newScore / (s.total_points || 1)) * 100;
+                                    const gs = [...(aData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
+                                    let newGrade = "6"; for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
+                                    await supabase.from("submissions").update({ ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !Object.values(corrections).some(c => c.needsReview) }).eq("id", s.id);
+                                    setSubmissions(prev => prev.map(sub => sub.id === s.id ? { ...sub, ai_corrections: corrections, score: newScore, grade: newGrade } : sub));
+                                    if (selectedSubmission?.id === s.id) setSelectedSubmission(prev => ({ ...prev, ai_corrections: corrections, score: newScore, grade: newGrade }));
+                                  }
+                                  setAiProgress(`✅ Alle ${toReCorrect.length} Abgaben neu bewertet!`);
+                                  setTimeout(() => setAiProgress(""), 4000);
+                                  setAiRunning(false);
+                                }} disabled={aiRunning}
+                                  style={{ marginTop: "8px", padding: "5px 12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: aiRunning ? "not-allowed" : "pointer" }}>
+                                  🔄 Alle Abgaben mit diesem Maßstab neu korrigieren
+                                </button>
+                              </div>
+                            </details>
+                          )}
                             <label style={{ fontSize: "12px", color: "#64748b" }}>Punkte:</label>
                             <input type="number" min={0} max={correction.maxPoints} step={0.5}
                               value={currentPoints ?? ""} placeholder={currentPoints === null ? "–" : ""}
