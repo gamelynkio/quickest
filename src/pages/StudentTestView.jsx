@@ -441,47 +441,19 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const realQuestions = flattenQuestions(allQuestions).filter(q => q.type !== "section");
     const totalPoints = realQuestions.reduce((sum, q) => sum + Number(q.points || 0), 0);
     const { score: initialScore, corrections } = autoCorrect(realQuestions, answers);
+    const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
+    const grade = hasOpenQuestions ? null : calcGrade(initialScore, totalPoints, assignment.grading_scale);
 
-    // Submission erst speichern
     const { data: newSubmission } = await supabase.from("submissions").insert({
       assignment_id: assignment.id,
       student_id: currentUser.id,
       username: currentUser.username,
-      answers, score: initialScore, total_points: totalPoints, grade: null,
+      answers, score: initialScore, total_points: totalPoints, grade,
       ai_corrections: corrections,
-      reviewed: false,
+      reviewed: !hasOpenQuestions,
       cheat_log: cheatLogRef.current,
     }).select("id").single();
     if (newSubmission) submissionIdRef.current = newSubmission.id;
-
-    // KI korrigiert offene Antworten sofort
-    const openQuestions = realQuestions.filter(q => q.type === "open");
-    if (openQuestions.length > 0 && newSubmission) {
-      try {
-        const aiResults = await aiCorrectOpenAnswers(realQuestions, answers, assignment);
-        let newScore = 0;
-        for (const [qId, correction] of Object.entries(corrections)) {
-          const aiResult = aiResults[qId];
-          if (aiResult) corrections[qId] = { ...correction, ...aiResult };
-          const pts = corrections[qId].points;
-          if (pts !== null && pts !== undefined) newScore += Number(pts);
-        }
-        const hasStillOpen = Object.values(corrections).some(c => c.needsReview && !c.aiReviewed);
-        const grade = hasStillOpen ? null : calcGrade(newScore, totalPoints, assignment.grading_scale);
-        await supabase.from("submissions").update({
-          ai_corrections: corrections,
-          score: newScore,
-          grade,
-          reviewed: !hasStillOpen,
-        }).eq("id", newSubmission.id);
-      } catch (e) {
-        console.error("KI-Korrektur fehlgeschlagen:", e);
-      }
-    } else if (newSubmission) {
-      const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
-      const grade = hasOpenQuestions ? null : calcGrade(initialScore, totalPoints, assignment.grading_scale);
-      await supabase.from("submissions").update({ grade, reviewed: !hasOpenQuestions }).eq("id", newSubmission.id);
-    }
 
     if (assignment.timing_mode === "lobby" || assignment.timing_mode === "countdown") {
       const { count: submissionCount } = await supabase
@@ -966,7 +938,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               <button onClick={handleSubmit} disabled={submitting}
                 style={{ padding: "16px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 800, fontSize: "16px", cursor: submitting ? "not-allowed" : "pointer", touchAction: "manipulation" }}>
-                {submitting ? "🤖 KI korrigiert..." : "Ja, jetzt abgeben"}
+                {submitting ? "Wird gespeichert..." : "Ja, jetzt abgeben"}
               </button>
               <button onClick={() => setShowConfirm(false)}
                 style={{ padding: "16px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "16px", cursor: "pointer", touchAction: "manipulation" }}>
