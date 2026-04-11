@@ -164,7 +164,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     const [{ data: asgn }, { data: subs }, { data: allMakeups }] = await Promise.all([
       supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv"),
       supabase.from("submissions")
-        .select("*, assignments(title, question_data)")
+        .select("*, assignments(title)")
         .eq("username", currentUser.username)
         .order("submitted_at", { ascending: false }),
       supabase.from("assignments").select("id, parent_assignment_id")
@@ -221,7 +221,18 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     return false;
   });
 
-  const handleStartTest = (assignment) => {
+  const handleOpenSubmission = async (s) => {
+    // question_data separat laden da es nicht immer im Join enthalten ist
+    const { data: assignmentData } = await supabase
+      .from("assignments")
+      .select("question_data")
+      .eq("id", s.assignment_id)
+      .single();
+    setSelectedSubmission({
+      ...s,
+      question_data: assignmentData?.question_data || [],
+    });
+  };
     const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
     if (assignment.require_seb && !isSEB) {
       setSebBlockedAssignment(assignment);
@@ -371,11 +382,15 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                 {submissions.map(s => {
                   const percent = s.total_points > 0 ? Math.round((s.score / s.total_points) * 100) : 0;
                   return (
-                    <div key={s.id} style={{ background: "rgba(255,255,255,0.07)", borderRadius: "14px", padding: "14px 18px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)" }}>
+                    <div key={s.id} onClick={() => s.reviewed && handleOpenSubmission(s)}
+                      style={{ background: "rgba(255,255,255,0.07)", borderRadius: "14px", padding: "14px 18px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)", cursor: s.reviewed ? "pointer" : "default", transition: "background 0.15s" }}
+                      onMouseOver={e => s.reviewed && (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
+                      onMouseOut={e => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: "15px", color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.assignments?.title || "Test"}</div>
                         <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)", marginTop: "3px" }}>
                           {new Date(s.submitted_at).toLocaleDateString("de-DE")} · {s.score ?? "–"}/{s.total_points} Pkt. · {percent}%
+                          {s.reviewed && <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.4)" }}>· Tippen für Details</span>}
                         </div>
                       </div>
                       <div style={{ textAlign: "center", flexShrink: 0, marginLeft: "14px" }}>
@@ -394,6 +409,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
         )}
       </div>
       {sebBlockedAssignment && <SEB_MODAL />}
+      {selectedSubmission && <SubmissionDetailModal submission={selectedSubmission} onClose={() => setSelectedSubmission(null)} />}
     </div>
   );
 }
