@@ -344,22 +344,6 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           </p>
         </div>
 
-        {/* KI-Sammelkorrektur Banner */}
-        {pendingAiCount > 0 && (
-          <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "14px", padding: "16px 20px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
-            <div style={{ color: "#fff" }}>
-              <div style={{ fontWeight: 700, fontSize: "15px" }}>🤖 KI-Korrektur verfügbar</div>
-              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.8)", marginTop: "2px" }}>
-                {pendingAiCount} Abgabe{pendingAiCount !== 1 ? "n" : ""} mit offenen Antworten warten auf KI-Bewertung
-              </div>
-            </div>
-            <button onClick={runAiCorrectionAll} disabled={aiRunning}
-              style={{ padding: "10px 20px", background: aiRunning ? "rgba(255,255,255,0.2)" : "#fff", color: aiRunning ? "rgba(255,255,255,0.6)" : "#1e3a5f", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: aiRunning ? "not-allowed" : "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
-              {aiRunning ? "⏳ Läuft..." : `Alle ${pendingAiCount} jetzt korrigieren →`}
-            </button>
-          </div>
-        )}
-
         {/* Fortschrittsanzeige */}
         {aiProgress && (
           <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "14px", color: "#1e3a5f", fontWeight: 600 }}>
@@ -431,7 +415,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                               {s.reviewed
                                 ? <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>✓ Geprüft</span>
                                 : hasAiPending
-                                ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>🤖 KI ausstehend</span>
+                                ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }} onClick={() => runAiCorrection(s)}>🤖 KI wiederholen</span>
                                 : <span style={{ background: "#fef9c3", color: "#ca8a04", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>Offen</span>}
                             </td>
                             <td style={{ padding: "13px 16px" }}>
