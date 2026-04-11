@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           anti_cheat: boolean | null
           created_at: string
+          grading_mode: string | null
           grading_scale: Json
           group_id: number
           id: number
@@ -38,6 +39,7 @@ export type Database = {
         Insert: {
           anti_cheat?: boolean | null
           created_at?: string
+          grading_mode?: string | null
           grading_scale?: Json
           group_id: number
           id?: number
@@ -58,6 +60,7 @@ export type Database = {
         Update: {
           anti_cheat?: boolean | null
           created_at?: string
+          grading_mode?: string | null
           grading_scale?: Json
           group_id?: number
           id?: number
@@ -283,6 +286,7 @@ export type Database = {
           created_at: string
           description: string | null
           grade_level: string | null
+          grading_mode: string | null
           grading_scale: Json
           id: number
           question_data: Json
@@ -299,6 +303,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           grade_level?: string | null
+          grading_mode?: string | null
           grading_scale?: Json
           id?: number
           question_data?: Json
@@ -315,6 +320,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           grade_level?: string | null
+          grading_mode?: string | null
           grading_scale?: Json
           id?: number
           question_data?: Json
