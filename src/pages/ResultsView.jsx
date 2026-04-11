@@ -4,6 +4,105 @@ import TeacherLayout from "../components/TeacherLayout";
 
 const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97316", "5": "#ef4444", "6": "#dc2626" };
 
+// KI-Korrektur für offene Antworten
+const aiCorrectOpenQuestions = async (submission, assignmentData) => {
+  const corrections = { ...(submission.ai_corrections || {}) };
+  const questions = assignmentData?.question_data || [];
+  const gradingMode = assignmentData?.grading_mode || "standard";
+
+  // Alle offenen Fragen herausfinden (auch in sections/tasks)
+  const flattenQuestions = (qs) => {
+    const result = [];
+    for (const q of qs) {
+      if (q.type === "section") {
+        for (const task of (q.tasks || [])) {
+          for (const tq of (task.questions || [])) result.push(tq);
+        }
+      } else {
+        result.push(q);
+      }
+    }
+    return result;
+  };
+
+  const allQuestions = flattenQuestions(questions);
+  const openQuestions = allQuestions.filter(q => q.type === "open");
+
+  if (openQuestions.length === 0) return { corrections, changed: false };
+
+  const gradingModeText = {
+    content: "Bewerte NUR den inhaltlichen Kern. Rechtschreibung, Grammatik und Zeichensetzung sind vollkommen egal.",
+    standard: "Bewerte primär den Inhalt. Grobe Rechtschreib- oder Grammatikfehler können leicht abgezogen werden, spielen aber keine große Rolle.",
+    strict: "Bewerte Inhalt UND Sprachform. Rechtschreibfehler, Grammatikfehler und falsche Zeichensetzung führen zu Punktabzügen.",
+  }[gradingMode] || "";
+
+  let changed = false;
+
+  for (const q of openQuestions) {
+    const existingCorrection = corrections[q.id];
+    // Nur korrigieren wenn noch nicht KI-bewertet (needsReview = true und kein aiReviewed-Flag)
+    if (!existingCorrection?.needsReview || existingCorrection?.aiReviewed) continue;
+
+    const studentAnswer = submission.answers?.[q.id] || "";
+    if (!studentAnswer.trim()) {
+      corrections[q.id] = {
+        ...existingCorrection,
+        points: 0,
+        correct: false,
+        comment: "Keine Antwort gegeben.",
+        aiReviewed: true,
+        needsReview: false,
+      };
+      changed = true;
+      continue;
+    }
+
+    const prompt = `Du bist ein Schullehrer und bewertest die folgende Schülerantwort auf Deutsch.
+
+Frage: ${q.text}
+Musterlösung (als Orientierung, nicht als einzig richtige Antwort): ${q.solution || "Keine Musterlösung hinterlegt"}
+Maximale Punktzahl: ${q.points}
+Schülerantwort: ${studentAnswer}
+
+Bewertungsregeln: ${gradingModeText}
+
+Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
+{"points": <Zahl, max ${q.points}>, "comment": "<kurze Begründung auf Deutsch, max 1-2 Sätze>"}`;
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      const points = Math.min(Math.max(0, Number(parsed.points) || 0), Number(q.points));
+
+      corrections[q.id] = {
+        ...existingCorrection,
+        points,
+        correct: points >= Number(q.points),
+        comment: `🤖 ${parsed.comment}`,
+        aiReviewed: true,
+        needsReview: false,
+        maxPoints: Number(q.points),
+      };
+      changed = true;
+    } catch (e) {
+      console.error("KI-Korrektur fehlgeschlagen für Frage", q.id, e);
+    }
+  }
+
+  return { corrections, changed };
+};
+
 export default function ResultsView({ navigate, onLogout, currentUser, assignment }) {
   const [submissions, setSubmissions] = useState([]);
   const [groupUsernames, setGroupUsernames] = useState([]);
@@ -12,13 +111,17 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [overrides, setOverrides] = useState({});
   const [saving, setSaving] = useState(false);
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiProgress, setAiProgress] = useState("");
   const [makeupModal, setMakeupModal] = useState(false);
   const [makeupSelected, setMakeupSelected] = useState(new Set());
   const [makeupTemplateId, setMakeupTemplateId] = useState("");
   const [makeupTimeLimit, setMakeupTimeLimit] = useState(20);
   const [makeupTimingMode, setMakeupTimingMode] = useState("lobby");
   const [makeupAntiCheat, setMakeupAntiCheat] = useState(false);
+  const [makeupRequireSeb, setMakeupRequireSeb] = useState(true);
   const [creatingMakeup, setCreatingMakeup] = useState(false);
+  const [assignmentData, setAssignmentData] = useState(null);
 
   useEffect(() => {
     if (!assignment?.id) return;
@@ -32,17 +135,20 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
 
   const fetchAll = async () => {
     setLoading(true);
-    await Promise.all([fetchSubmissions(), fetchGroup(), fetchTemplates()]);
+    await Promise.all([fetchSubmissions(), fetchGroup(), fetchTemplates(), fetchAssignmentData()]);
     setLoading(false);
   };
 
+  const fetchAssignmentData = async () => {
+    const { data } = await supabase.from("assignments").select("*").eq("id", assignment.id).single();
+    setAssignmentData(data);
+  };
+
   const fetchSubmissions = async () => {
-    // Load submissions from this assignment AND any makeup assignments linked to it
     const { data: makeupAssignments } = await supabase
       .from("assignments").select("id").eq("parent_assignment_id", assignment.id);
     const makeupIds = (makeupAssignments || []).map(a => a.id);
     const allIds = [assignment.id, ...makeupIds];
-
     const { data } = await supabase.from("submissions").select("*, assignments(title)")
       .in("assignment_id", allIds).order("submitted_at", { ascending: false });
     setSubmissions(data || []);
@@ -59,31 +165,90 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setTemplates(data || []);
   };
 
-  const createMakeupTest = async () => {
-    if (!makeupTemplateId || makeupSelected.size === 0) return;
-    setCreatingMakeup(true);
-    const { data: t } = await supabase.from("templates").select("*").eq("id", makeupTemplateId).single();
+  // KI-Korrektur für eine einzelne Abgabe ausführen
+  const runAiCorrection = async (submission) => {
+    setAiRunning(true);
+    setAiProgress("KI bewertet offene Antworten...");
+    try {
+      const aData = assignmentData || assignment;
+      const { corrections, changed } = await aiCorrectOpenQuestions(submission, aData);
+      if (!changed) {
+        setAiProgress("Alle Antworten bereits bewertet.");
+        setTimeout(() => setAiProgress(""), 2000);
+        setAiRunning(false);
+        return;
+      }
+      // Punkte neu berechnen
+      let newScore = 0;
+      const updatedOverrides = submission.manual_overrides || {};
+      for (const [qId, correction] of Object.entries(corrections)) {
+        if (updatedOverrides[qId] !== undefined) newScore += Number(updatedOverrides[qId]);
+        else if (correction.points !== null && correction.points !== undefined) newScore += Number(correction.points);
+      }
+      const totalPoints = submission.total_points || 1;
+      const percent = (newScore / totalPoints) * 100;
+      const gradingScale = aData?.grading_scale || [];
+      const sorted = [...gradingScale].sort((a, b) => b.minPercent - a.minPercent);
+      let newGrade = "6";
+      for (const g of sorted) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
+      const hasStillOpen = Object.values(corrections).some(c => c.needsReview);
 
-    await supabase.from("assignments").insert({
-      template_id: Number(makeupTemplateId),
-      group_id: assignment.group_id,
-      teacher_id: currentUser?.id,
-      title: `${t.title} (Nachtest)`,
-      status: "aktiv",
-      time_limit: makeupTimeLimit * 60,
-      timing_mode: makeupTimingMode,
-      anti_cheat: makeupAntiCheat,
-      question_data: t.question_data,
-      grading_scale: t.grading_scale || assignment.grading_scale,
-      parent_assignment_id: assignment.id,
-      makeup_usernames: [...makeupSelected],
-    });
+      await supabase.from("submissions").update({
+        ai_corrections: corrections,
+        score: newScore,
+        grade: newGrade,
+        reviewed: !hasStillOpen,
+      }).eq("id", submission.id);
 
-    setCreatingMakeup(false);
-    setMakeupModal(false);
-    setMakeupSelected(new Set());
-    setMakeupTemplateId("");
-    await fetchSubmissions();
+      const updated = { ...submission, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen };
+      setSubmissions(prev => prev.map(s => s.id === submission.id ? updated : s));
+      setSelectedSubmission(updated);
+      setAiProgress("✅ KI-Korrektur abgeschlossen!");
+      setTimeout(() => setAiProgress(""), 3000);
+    } catch (e) {
+      setAiProgress("❌ Fehler bei der KI-Korrektur.");
+      setTimeout(() => setAiProgress(""), 3000);
+    }
+    setAiRunning(false);
+  };
+
+  // KI-Korrektur für ALLE Abgaben auf einmal
+  const runAiCorrectionAll = async () => {
+    const pending = submissions.filter(s => !s.reviewed || Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed));
+    if (pending.length === 0) return;
+    setAiRunning(true);
+    const aData = assignmentData || assignment;
+    for (let i = 0; i < pending.length; i++) {
+      const s = pending[i];
+      setAiProgress(`KI bewertet ${i + 1}/${pending.length}: ${s.username}...`);
+      const { corrections, changed } = await aiCorrectOpenQuestions(s, aData);
+      if (!changed) continue;
+      let newScore = 0;
+      const updatedOverrides = s.manual_overrides || {};
+      for (const [qId, correction] of Object.entries(corrections)) {
+        if (updatedOverrides[qId] !== undefined) newScore += Number(updatedOverrides[qId]);
+        else if (correction.points !== null && correction.points !== undefined) newScore += Number(correction.points);
+      }
+      const totalPoints = s.total_points || 1;
+      const percent = (newScore / totalPoints) * 100;
+      const gradingScale = aData?.grading_scale || [];
+      const sorted = [...gradingScale].sort((a, b) => b.minPercent - a.minPercent);
+      let newGrade = "6";
+      for (const g of sorted) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
+      const hasStillOpen = Object.values(corrections).some(c => c.needsReview);
+      await supabase.from("submissions").update({
+        ai_corrections: corrections,
+        score: newScore,
+        grade: newGrade,
+        reviewed: !hasStillOpen,
+      }).eq("id", s.id);
+      const updated = { ...s, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen };
+      setSubmissions(prev => prev.map(sub => sub.id === s.id ? updated : sub));
+      if (selectedSubmission?.id === s.id) setSelectedSubmission(updated);
+    }
+    setAiProgress(`✅ Alle ${pending.length} Abgaben bewertet!`);
+    setTimeout(() => setAiProgress(""), 4000);
+    setAiRunning(false);
   };
 
   const saveOverrides = async () => {
@@ -98,8 +263,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     }
     const totalPoints = selectedSubmission.total_points || 1;
     const percent = (newScore / totalPoints) * 100;
-    const { data: assignmentData } = await supabase.from("assignments").select("grading_scale").eq("id", selectedSubmission.assignment_id).single();
-    const gradingScale = assignmentData?.grading_scale || [];
+    const { data: aData } = await supabase.from("assignments").select("grading_scale").eq("id", selectedSubmission.assignment_id).single();
+    const gradingScale = aData?.grading_scale || [];
     const sorted = [...gradingScale].sort((a, b) => b.minPercent - a.minPercent);
     let newGrade = "6";
     for (const g of sorted) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
@@ -111,11 +276,36 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setSaving(false);
   };
 
+  const createMakeupTest = async () => {
+    if (!makeupTemplateId || makeupSelected.size === 0) return;
+    setCreatingMakeup(true);
+    const { data: t } = await supabase.from("templates").select("*").eq("id", makeupTemplateId).single();
+    await supabase.from("assignments").insert({
+      template_id: Number(makeupTemplateId),
+      group_id: assignment.group_id,
+      teacher_id: currentUser?.id,
+      title: `${t.title} (Nachtest)`,
+      status: "aktiv",
+      time_limit: makeupTimeLimit * 60,
+      timing_mode: makeupTimingMode,
+      anti_cheat: makeupAntiCheat,
+      require_seb: makeupRequireSeb,
+      question_data: t.question_data,
+      grading_scale: t.grading_scale || assignment.grading_scale,
+      parent_assignment_id: assignment.id,
+      makeup_usernames: [...makeupSelected],
+    });
+    setCreatingMakeup(false);
+    setMakeupModal(false);
+    setMakeupSelected(new Set());
+    setMakeupTemplateId("");
+    await fetchSubmissions();
+  };
+
   const submittedUsernames = new Set(submissions.map(s => s.username));
-  const relevantUsernames = assignment?.makeup_usernames?.length
-    ? assignment.makeup_usernames
-    : groupUsernames;
+  const relevantUsernames = assignment?.makeup_usernames?.length ? assignment.makeup_usernames : groupUsernames;
   const missingStudents = relevantUsernames.filter(u => !submittedUsernames.has(u));
+  const pendingAiCount = submissions.filter(s => Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)).length;
   const avg = submissions.length > 0
     ? (submissions.reduce((s, r) => s + ((r.score || 0) / (r.total_points || 1)) * 100, 0) / submissions.length).toFixed(1)
     : null;
@@ -138,11 +328,33 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           </p>
         </div>
 
+        {/* KI-Sammelkorrektur Banner */}
+        {pendingAiCount > 0 && (
+          <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "14px", padding: "16px 20px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+            <div style={{ color: "#fff" }}>
+              <div style={{ fontWeight: 700, fontSize: "15px" }}>🤖 KI-Korrektur verfügbar</div>
+              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.8)", marginTop: "2px" }}>
+                {pendingAiCount} Abgabe{pendingAiCount !== 1 ? "n" : ""} mit offenen Antworten warten auf KI-Bewertung
+              </div>
+            </div>
+            <button onClick={runAiCorrectionAll} disabled={aiRunning}
+              style={{ padding: "10px 20px", background: aiRunning ? "rgba(255,255,255,0.2)" : "#fff", color: aiRunning ? "rgba(255,255,255,0.6)" : "#1e3a5f", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: aiRunning ? "not-allowed" : "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+              {aiRunning ? "⏳ Läuft..." : `Alle ${pendingAiCount} jetzt korrigieren →`}
+            </button>
+          </div>
+        )}
+
+        {/* Fortschrittsanzeige */}
+        {aiProgress && (
+          <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "14px", color: "#1e3a5f", fontWeight: 600 }}>
+            {aiProgress}
+          </div>
+        )}
+
         {loading ? (
           <div style={{ padding: "48px", textAlign: "center", color: "#94a3b8" }}>Wird geladen...</div>
         ) : (
           <>
-            {/* Missing students */}
             {missingStudents.length > 0 && (
               <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "14px", padding: "18px 20px", marginBottom: "20px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
@@ -162,7 +374,6 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
               </div>
             )}
 
-            {/* Submissions table */}
             {submissions.length === 0 ? (
               <div style={{ background: "#fff", borderRadius: "16px", padding: "48px", textAlign: "center", border: "1px solid #e2e8f0", color: "#94a3b8" }}>
                 <div style={{ fontSize: "40px", marginBottom: "12px" }}>📭</div>
@@ -180,92 +391,92 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                       </tr>
                     </thead>
                     <tbody>
-                      {submissions.map((s, i) => (
-                        <tr key={s.id} style={{ borderBottom: i < submissions.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent" }}>
-                          <td style={{ padding: "13px 16px", fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>
-                            {s.username}
-                            {s.cheat_log?.length > 0 && (
-                              <span title={`${s.cheat_log.length}× Tab-Wechsel`} style={{ marginLeft: "6px", fontSize: "11px", background: "#fef2f2", color: "#dc2626", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>
-                                ⚠️ {s.cheat_log.length}×
-                              </span>
-                            )}
-                            {s.assignments?.title !== assignment.title && (
-                              <span style={{ marginLeft: "6px", fontSize: "10px", background: "#f0f7ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px" }}>Nachtest</span>
-                            )}
-                          </td>
-                          <td style={{ padding: "13px 16px", fontSize: "14px" }}>
-                            <span style={{ fontWeight: 700 }}>{s.score ?? "–"}</span>
-                            {s.total_points && <span style={{ color: "#94a3b8", fontSize: "12px" }}>/{s.total_points}</span>}
-                          </td>
-                          <td style={{ padding: "13px 16px" }}>
-                            {s.grade ? <span style={{ fontWeight: 800, fontSize: "18px", color: GRADE_COLOR[s.grade] || "#374151" }}>{s.grade}</span> : <span style={{ color: "#94a3b8" }}>–</span>}
-                          </td>
-                          <td style={{ padding: "13px 16px" }}>
-                            {s.reviewed
-                              ? <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>✓ Geprüft</span>
-                              : <span style={{ background: "#fef9c3", color: "#ca8a04", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>Offen</span>}
-                          </td>
-                          <td style={{ padding: "13px 16px" }}>
-                            <button onClick={() => { setSelectedSubmission(s); setOverrides({}); }} style={{ padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer" }}>Details</button>
-                          </td>
-                        </tr>
-                      ))}
+                      {submissions.map((s, i) => {
+                        const hasAiPending = Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed);
+                        return (
+                          <tr key={s.id} style={{ borderBottom: i < submissions.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent" }}>
+                            <td style={{ padding: "13px 16px", fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>
+                              {s.username}
+                              {s.cheat_log?.length > 0 && (
+                                <span title={`${s.cheat_log.length}× Tab-Wechsel`} style={{ marginLeft: "6px", fontSize: "11px", background: "#fef2f2", color: "#dc2626", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>⚠️ {s.cheat_log.length}×</span>
+                              )}
+                              {s.assignments?.title !== assignment.title && (
+                                <span style={{ marginLeft: "6px", fontSize: "10px", background: "#f0f7ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px" }}>Nachtest</span>
+                              )}
+                            </td>
+                            <td style={{ padding: "13px 16px", fontSize: "14px" }}>
+                              <span style={{ fontWeight: 700 }}>{s.score ?? "–"}</span>
+                              {s.total_points && <span style={{ color: "#94a3b8", fontSize: "12px" }}>/{s.total_points}</span>}
+                            </td>
+                            <td style={{ padding: "13px 16px" }}>
+                              {s.grade ? <span style={{ fontWeight: 800, fontSize: "18px", color: GRADE_COLOR[s.grade] || "#374151" }}>{s.grade}</span> : <span style={{ color: "#94a3b8" }}>–</span>}
+                            </td>
+                            <td style={{ padding: "13px 16px" }}>
+                              {s.reviewed
+                                ? <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>✓ Geprüft</span>
+                                : hasAiPending
+                                ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>🤖 KI ausstehend</span>
+                                : <span style={{ background: "#fef9c3", color: "#ca8a04", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>Offen</span>}
+                            </td>
+                            <td style={{ padding: "13px 16px" }}>
+                              <button onClick={() => { setSelectedSubmission(s); setOverrides({}); }} style={{ padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer" }}>Details</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
                 {selectedSubmission && (
                   <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "22px", overflowY: "auto", maxHeight: "600px" }}>
-                    <h3 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 700 }}>{selectedSubmission.username}</h3>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
+                      <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{selectedSubmission.username}</h3>
+                      {Object.values(selectedSubmission.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed) && (
+                        <button onClick={() => runAiCorrection(selectedSubmission)} disabled={aiRunning}
+                          style={{ padding: "7px 14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: aiRunning ? "not-allowed" : "pointer" }}>
+                          {aiRunning ? "⏳ KI läuft..." : "🤖 KI korrigieren"}
+                        </button>
+                      )}
+                    </div>
                     <p style={{ margin: "0 0 18px", color: "#64748b", fontSize: "13px" }}>
                       Abgegeben: {new Date(selectedSubmission.submitted_at).toLocaleString("de-DE")}
                     </p>
+
                     {selectedSubmission.cheat_log?.length > 0 && (
                       <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 14px", marginBottom: "16px" }}>
-                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626", marginBottom: "6px" }}>
-                          ⚠️ {selectedSubmission.cheat_log.length}× Tab/App-Wechsel erkannt
-                        </div>
+                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626", marginBottom: "6px" }}>⚠️ {selectedSubmission.cheat_log.length}× Tab/App-Wechsel erkannt</div>
                         {selectedSubmission.cheat_log.map((e, i) => (
-                          <div key={i} style={{ fontSize: "12px", color: "#64748b" }}>
-                            {new Date(e.time).toLocaleTimeString("de-DE")} — Tab verlassen
-                          </div>
+                          <div key={i} style={{ fontSize: "12px", color: "#64748b" }}>{new Date(e.time).toLocaleTimeString("de-DE")} — Tab verlassen</div>
                         ))}
                       </div>
                     )}
+
                     {Object.entries(selectedSubmission.ai_corrections || {}).map(([qId, correction], i) => {
                       const override = overrides[qId];
                       const currentPoints = override !== undefined ? Number(override) : (selectedSubmission.manual_overrides?.[qId] !== undefined ? selectedSubmission.manual_overrides[qId] : correction.points);
-                      const isOpen = correction.needsReview;
+                      const isAiReviewed = correction.aiReviewed;
+                      const isStillOpen = correction.needsReview && !correction.aiReviewed;
                       return (
-                        <div key={qId} style={{ marginBottom: "16px", background: "#f8fafc", borderRadius: "12px", padding: "14px", border: `1px solid ${correction.correct === true ? "#bbf7d0" : correction.correct === false ? "#fecaca" : "#e2e8f0"}` }}>
-                          <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
+                        <div key={qId} style={{ marginBottom: "16px", background: "#f8fafc", borderRadius: "12px", padding: "14px", border: `1px solid ${correction.correct === true ? "#bbf7d0" : correction.correct === false ? "#fecaca" : isAiReviewed ? "#bfdbfe" : "#e2e8f0"}` }}>
+                          <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
                             Aufgabe {i + 1}
-                            {correction.correct === true && <span style={{ marginLeft: "8px", color: "#16a34a" }}>✓</span>}
-                            {correction.correct === false && <span style={{ marginLeft: "8px", color: "#dc2626" }}>✗</span>}
-                            {correction.correct === null && <span style={{ marginLeft: "8px", color: "#ca8a04" }}>⏳</span>}
+                            {correction.correct === true && <span style={{ color: "#16a34a" }}>✓</span>}
+                            {correction.correct === false && <span style={{ color: "#dc2626" }}>✗</span>}
+                            {isAiReviewed && <span style={{ fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>🤖 KI</span>}
+                            {isStillOpen && <span style={{ fontSize: "10px", background: "#fef9c3", color: "#ca8a04", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>Ausstehend</span>}
                           </div>
                           <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
                             <em style={{ color: "#94a3b8" }}>Antwort:</em> {correction.studentAnswer ?? "–"}
                           </div>
                           {correction.comment && (
-                            <div style={{ background: isOpen ? "#fef9c3" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isOpen ? "#92400e" : correction.correct ? "#16a34a" : "#dc2626" }}>
+                            <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
                               {correction.comment}
                             </div>
                           )}
                           {correction.solution && (
                             <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
                               <strong>📝 Musterlösung:</strong> {correction.solution}
-                            </div>
-                          )}
-                          {correction.partialPoints?.length > 0 && (
-                            <div style={{ marginBottom: "8px" }}>
-                              <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "4px" }}>Teilbepunktung:</div>
-                              {correction.partialPoints.map((p, pi) => (
-                                <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", marginBottom: "2px" }}>
-                                  <span style={{ background: "#f1f5f9", borderRadius: "4px", padding: "1px 6px", fontWeight: 700, color: "#2563a8" }}>{p.points} Pkt.</span>
-                                  <span>{p.description}</span>
-                                </div>
-                              ))}
                             </div>
                           )}
                           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -280,9 +491,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                         </div>
                       );
                     })}
-                    {Object.keys(selectedSubmission.answers || {}).length === 0 && (
-                      <p style={{ color: "#94a3b8", fontSize: "13px" }}>Keine Detailantworten verfügbar.</p>
-                    )}
+
                     <button onClick={saveOverrides} disabled={saving} style={{ width: "100%", marginTop: "8px", padding: "10px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: saving ? "not-allowed" : "pointer" }}>
                       {saving ? "Wird gespeichert..." : "✓ Korrekturen speichern"}
                     </button>
@@ -299,11 +508,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "500px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
             <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 4px", color: "#0f172a" }}>Nachtest erstellen</h3>
-            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "24px" }}>
-              Ergebnisse werden dem Original-Test „{assignment.title}" zugeordnet.
-            </p>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "24px" }}>Ergebnisse werden dem Original-Test „{assignment.title}" zugeordnet.</p>
 
-            {/* Student selection */}
             <div style={{ marginBottom: "20px" }}>
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "8px" }}>
                 Teilnehmende Schüler/innen
@@ -313,11 +519,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                 {missingStudents.map(u => {
                   const selected = makeupSelected.has(u);
                   return (
-                    <button key={u} onClick={() => setMakeupSelected(prev => {
-                      const next = new Set(prev);
-                      next.has(u) ? next.delete(u) : next.add(u);
-                      return next;
-                    })} style={{ padding: "8px 12px", borderRadius: "8px", cursor: "pointer", textAlign: "left", border: `2px solid ${selected ? "#2563a8" : "#e2e8f0"}`, background: selected ? "#eff6ff" : "#f8fafc", fontFamily: "inherit" }}>
+                    <button key={u} onClick={() => setMakeupSelected(prev => { const next = new Set(prev); next.has(u) ? next.delete(u) : next.add(u); return next; })}
+                      style={{ padding: "8px 12px", borderRadius: "8px", cursor: "pointer", textAlign: "left", border: `2px solid ${selected ? "#2563a8" : "#e2e8f0"}`, background: selected ? "#eff6ff" : "#f8fafc", fontFamily: "inherit" }}>
                       <span style={{ fontSize: "12px", color: selected ? "#2563a8" : "#94a3b8", display: "block" }}>{selected ? "✓ Ausgewählt" : "Nicht ausgewählt"}</span>
                       <span style={{ fontSize: "13px", fontWeight: 600, color: selected ? "#1e40af" : "#374151" }}>{u}</span>
                     </button>
@@ -331,7 +534,6 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
               </div>
             </div>
 
-            {/* Test settings */}
             <div style={{ marginBottom: "16px" }}>
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Test-Vorlage wählen *</label>
               <select value={makeupTemplateId} onChange={e => setMakeupTemplateId(e.target.value)}
@@ -358,16 +560,16 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
               </div>
             </div>
 
-            <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", marginBottom: "8px" }}>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", marginBottom: "12px" }}>
               <input type="checkbox" checked={makeupAntiCheat} onChange={e => setMakeupAntiCheat(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
               🛡️ Anti-Cheat aktivieren
             </label>
 
             <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", marginBottom: makeupRequireSeb ? "8px" : "24px" }}>
-              <input type="checkbox" checked={makeupRequireSeb ?? true} onChange={e => setMakeupRequireSeb?.(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#7c3aed", marginTop: "1px", flexShrink: 0 }} />
-              <div>🔒 Safe Exam Browser erforderlich</div>
+              <input type="checkbox" checked={makeupRequireSeb} onChange={e => setMakeupRequireSeb(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#7c3aed", marginTop: "1px", flexShrink: 0 }} />
+              🔒 Safe Exam Browser erforderlich
             </label>
-            {(makeupRequireSeb ?? true) && (
+            {makeupRequireSeb && (
               <div style={{ marginBottom: "24px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", padding: "12px 14px", fontSize: "13px", color: "#92400e", lineHeight: 1.5 }}>
                 <strong>⚠️ Hinweis:</strong> SEB ist für Android nicht verfügbar. Schüler mit Android-Geräten können die Systemtastatur mit Autokorrektur weiterhin nutzen.
               </div>
