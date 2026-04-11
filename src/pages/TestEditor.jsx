@@ -53,7 +53,6 @@ const newSection = () => ({
   tasks: [],
 });
 
-// Separate component to avoid re-render focus loss in task inputs
 function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, onUpdateQuestion, onRemoveQuestion }) {
   const [localTitle, setLocalTitle] = useState(task.taskTitle || "");
   const [localInstruction, setLocalInstruction] = useState(task.taskInstruction || "");
@@ -157,7 +156,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         placeholder="Unteraufgabe / Frage eingeben..."
         style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
 
-      {/* Multiple Choice */}
       {tq.type === "multiple_choice" && (
         <div>
           {localOptions.map((opt, oi) => {
@@ -184,7 +182,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         </div>
       )}
 
-      {/* True/False */}
       {tq.type === "true_false" && (
         <div style={{ display: "flex", gap: "8px" }}>
           {["Wahr", "Falsch"].map((opt, oi) => (
@@ -194,14 +191,12 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         </div>
       )}
 
-      {/* Open */}
       {tq.type === "open" && (
         <input value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
           placeholder="Musterlösung (optional)"
           style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", background: "#f8fafc" }} />
       )}
 
-      {/* Flashcard */}
       {tq.type === "flashcard" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
@@ -233,7 +228,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         </div>
       )}
 
-      {/* Assignment */}
       {tq.type === "assignment" && (
         <div>
           {localPairs.map((pair, i) => (
@@ -258,7 +252,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         </div>
       )}
 
-      {/* Fill blank */}
       {tq.type === "fill_blank" && (
         <div>
           <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
@@ -321,7 +314,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         </div>
       )}
 
-      {/* Solution / partial points */}
       <details style={{ marginTop: "10px" }}>
         <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "4px 0" }}>
           📝 Musterlösung & Teilbepunktung
@@ -359,6 +351,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const [gradeLevel, setGradeLevel] = useState(editingTest?.grade_level || "");
   const [timeLimit, setTimeLimit] = useState(editingTest?.time_limit ? Math.round(editingTest.time_limit / 60) : 20);
   const [antiCheat, setAntiCheat] = useState(editingTest?.anti_cheat || false);
+  const [gradingMode, setGradingMode] = useState(editingTest?.grading_mode || "standard");
   const [questions, setQuestions] = useState(editingTest?.question_data || []);
   const [gradingScale, setGradingScale] = useState(editingTest?.grading_scale?.length ? editingTest.grading_scale : [
     { grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
@@ -375,7 +368,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
 
   const safeNavigate = (target, data = null) => {
     if (saved) { navigate(target, data); return; }
-    // Check if there's anything worth saving
     const hasContent = title.trim() || questions.length > 0;
     if (!hasContent) { navigate(target, data); return; }
     setPendingNavTarget({ target, data });
@@ -387,7 +379,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const updateQuestion = (id, field, value) => setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
   const removeQuestion = (id) => setQuestions(prev => prev.filter(q => q.id !== id));
 
-  // Task (within section) manipulation
   const addTask = (sectionId) => setQuestions(prev => prev.map(q =>
     q.id === sectionId ? { ...q, tasks: [...(q.tasks || []), newTask()] } : q
   ));
@@ -420,7 +411,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
 
   const totalPoints = questions.filter(q => q.type !== "section").reduce((sum, q) => sum + Number(q.points || 0), 0);
 
-  // Points per section for display
   const getSectionPoints = (sectionIndex) => {
     let sum = 0;
     for (let i = sectionIndex + 1; i < questions.length; i++) {
@@ -430,7 +420,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     return sum;
   };
 
-  // Question number (skipping sections)
   const getQuestionNumber = (index) => {
     return questions.slice(0, index).filter(q => q.type !== "section").length + 1;
   };
@@ -536,6 +525,7 @@ Erkenne den Typ automatisch.`;
       description, subject, grade_level: gradeLevel,
       time_limit: timeLimit * 60,
       anti_cheat: antiCheat,
+      grading_mode: gradingMode,
       question_data: questions,
       grading_scale: gradingScale,
     };
@@ -550,11 +540,22 @@ Erkenne den Typ automatisch.`;
 
   const SUBJECTS = ["Mathematik", "Deutsch", "Englisch", "Sachkunde", "Geschichte", "Geographie", "Biologie", "Physik", "Chemie", "Musik", "Kunst", "Sport"];
 
+  const GRADING_MODES = [
+    { id: "content", label: "🎯 Nur Inhalt", description: "Rechtschreibung & Grammatik werden ignoriert" },
+    { id: "standard", label: "⚖️ Standard", description: "Inhalt zählt hauptsächlich, grobe Fehler leicht abgezogen" },
+    { id: "strict", label: "🔍 Streng", description: "Inhalt + Rechtschreibung + Grammatik + Zeichensetzung" },
+  ];
+
+  const hasOpenQuestions = questions.some(q => {
+    if (q.type === "open") return true;
+    if (q.type === "section") return (q.tasks || []).some(t => (t.questions || []).some(tq => tq.type === "open"));
+    return false;
+  });
+
   return (
     <TeacherLayout navigate={safeNavigate} onLogout={onLogout} currentUser={currentUser} activePage="testEditor">
       <div style={{ padding: "32px", maxWidth: "860px" }}>
 
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
           <div>
             <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: 0 }}>{editingTest ? "Vorlage bearbeiten" : "Neue Vorlage erstellen"}</h1>
@@ -565,7 +566,8 @@ Erkenne den Typ automatisch.`;
               {importing ? "⏳ Wird analysiert..." : "📄 Aus Datei importieren"}
               <input type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={handleImport} disabled={importing} />
             </label>
-            <button onClick={() => navigate("testPreview", { ...editingTest, title, description, subject, grade_level: gradeLevel, time_limit: timeLimit * 60, question_data: questions, grading_scale: gradingScale })}              style={{ padding: "10px 18px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+            <button onClick={() => navigate("testPreview", { ...editingTest, title, description, subject, grade_level: gradeLevel, time_limit: timeLimit * 60, question_data: questions, grading_scale: gradingScale })}
+              style={{ padding: "10px 18px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
               👁 Vorschau
             </button>
             <button onClick={handleSave} disabled={saving} style={{ padding: "10px 24px", background: saved ? "#16a34a" : "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: saving ? "not-allowed" : "pointer", transition: "background 0.3s" }}>
@@ -622,10 +624,34 @@ Erkenne den Typ automatisch.`;
                 style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
             </div>
           </div>
+
           <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", marginBottom: "16px" }}>
             <input type="checkbox" checked={antiCheat} onChange={e => setAntiCheat(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
             🛡️ Anti-Cheat als Standard aktivieren
           </label>
+
+          {/* ── NEU: Bewertungsmodus für KI-Korrektur ── */}
+          {hasOpenQuestions && (
+            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #e2e8f0" }}>
+              <label style={{ fontSize: "13px", fontWeight: 700, color: "#374151", display: "block", marginBottom: "10px" }}>
+                🤖 KI-Bewertungsmodus für offene Antworten
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                {GRADING_MODES.map(mode => (
+                  <button key={mode.id} onClick={() => setGradingMode(mode.id)}
+                    style={{
+                      padding: "12px", border: `2px solid ${gradingMode === mode.id ? "#2563a8" : "#e2e8f0"}`,
+                      borderRadius: "10px", background: gradingMode === mode.id ? "#eff6ff" : "#fff",
+                      cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+                    }}>
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: gradingMode === mode.id ? "#1e40af" : "#374151", marginBottom: "4px" }}>{mode.label}</div>
+                    <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.4 }}>{mode.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <details>
             <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#374151", userSelect: "none" }}>📊 Notenschlüssel anpassen</summary>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
@@ -643,7 +669,6 @@ Erkenne den Typ automatisch.`;
         {/* Questions & Sections */}
         {questions.map((q, index) => {
 
-          // ── SECTION ──
           if (q.type === "section") {
             const pts = getSectionPoints(index);
             return (
@@ -696,7 +721,6 @@ Erkenne den Typ automatisch.`;
                     {q.sectionMedia && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)" }}>✓ {q.sectionMedia}</span>}
                   </label>
 
-                  {/* Tasks within section */}
                   {(q.tasks || []).map((task, tIdx) => (
                     <TaskEditor key={task.id} task={task} tIdx={tIdx} sectionId={q.id}
                       onUpdate={(field, val) => updateTask(q.id, task.id, field, val)}
@@ -716,7 +740,6 @@ Erkenne den Typ automatisch.`;
             );
           }
 
-          // ── REGULAR QUESTION ──
           return (
             <div key={q.id} style={{ background: "#fff", borderRadius: "16px", padding: "22px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
@@ -787,13 +810,14 @@ Erkenne den Typ automatisch.`;
                 </div>
               )}
               {q.type === "open" && (
-                <div style={{ marginTop: "10px", background: "#f0f7ff", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#2563a8", border: "1px solid #bfdbfe" }}>
-                  🤖 Diese Aufgabe wird automatisch von der KI bewertet.
+                <div style={{ marginTop: "10px" }}>
+                  <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#2563a8", border: "1px solid #bfdbfe", marginBottom: "8px" }}>
+                    🤖 Diese Aufgabe wird von der KI bewertet — Modus: <strong>{GRADING_MODES.find(m => m.id === gradingMode)?.label || "Standard"}</strong>
+                  </div>
                 </div>
               )}
               {q.type === "fill_blank" && (
                 <div style={{ marginTop: "12px" }}>
-                  {/* Full text input */}
                   <div style={{ marginBottom: "10px" }}>
                     <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>
                       Vollständiger Text — markiere Wörter um Lücken zu erstellen
@@ -808,16 +832,14 @@ Erkenne den Typ automatisch.`;
                         const text = q.fullText;
                         const start = text.indexOf(selected);
                         if (start === -1) return;
-                        // Replace selected text with [Lücke] and store solution
                         const newText = text.slice(0, start) + "[Lücke]" + text.slice(start + selected.length);
                         const newBlanks = [...(q.blanks || []), { solution: selected, alternatives: [] }];
                         updateQuestion(q.id, "fullText", newText);
                         updateQuestion(q.id, "blanks", newBlanks);
-                        // Also update the main text field for display
                         updateQuestion(q.id, "text", newText);
                         sel.removeAllRanges();
                       }}
-                      placeholder="z.B. Tom _____ to school every day. He _____ his homework in the evening."
+                      placeholder="z.B. Tom _____ to school every day."
                       rows={4}
                       style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }}
                     />
@@ -825,8 +847,6 @@ Erkenne den Typ automatisch.`;
                       💡 Text eingeben → Wort mit Maus markieren → Lücke wird automatisch erstellt
                     </div>
                   </div>
-
-                  {/* Preview */}
                   {(q.fullText || "").includes("[Lücke]") && (
                     <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px 14px", marginBottom: "10px", fontSize: "13px", color: "#1e3a5f", lineHeight: 1.8 }}>
                       <strong style={{ fontSize: "11px", color: "#64748b", display: "block", marginBottom: "4px" }}>VORSCHAU FÜR SCHÜLER:</strong>
@@ -840,36 +860,24 @@ Erkenne den Typ automatisch.`;
                       ))}
                     </div>
                   )}
-
-                  {/* Blanks / solutions */}
                   {(q.blanks || []).length > 0 && (
                     <div>
-                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "8px" }}>
-                        Lücken & Lösungen
-                      </label>
+                      <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "8px" }}>Lücken & Lösungen</label>
                       {(q.blanks || []).map((blank, bi) => (
                         <div key={bi} style={{ background: "#f8fafc", borderRadius: "8px", padding: "10px 14px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
                             <span style={{ background: "#2563a8", color: "#fff", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", fontWeight: 700 }}>Lücke {bi + 1}</span>
                             <input
                               value={blank.solution}
-                              onChange={e => {
-                                const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], solution: e.target.value }; updateQuestion(q.id, "blanks", nb);
-                              }}
+                              onChange={e => { const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], solution: e.target.value }; updateQuestion(q.id, "blanks", nb); }}
                               placeholder="Hauptlösung"
                               style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }}
                             />
                             <button onClick={() => {
                               const nb = (q.blanks || []).filter((_, i) => i !== bi);
-                              // Remove the bi-th [Lücke] from fullText
                               let count = 0;
-                              const newText = (q.fullText || "").replace(/\[Lücke\]/g, match => {
-                                count++;
-                                return count - 1 === bi ? blank.solution : match;
-                              });
-                              updateQuestion(q.id, "blanks", nb);
-                              updateQuestion(q.id, "fullText", newText);
-                              updateQuestion(q.id, "text", newText);
+                              const newText = (q.fullText || "").replace(/\[Lücke\]/g, match => { count++; return count - 1 === bi ? blank.solution : match; });
+                              updateQuestion(q.id, "blanks", nb); updateQuestion(q.id, "fullText", newText); updateQuestion(q.id, "text", newText);
                             }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
                           </div>
                           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
@@ -877,20 +885,12 @@ Erkenne den Typ automatisch.`;
                             {(blank.alternatives || []).map((alt, ai) => (
                               <span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
                                 {alt}
-                                <button onClick={() => {
-                                  const nb = [...(q.blanks || [])];
-                                  nb[bi] = { ...nb[bi], alternatives: nb[bi].alternatives.filter((_, i) => i !== ai) };
-                                  updateQuestion(q.id, "blanks", nb);
-                                }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "12px", padding: 0 }}>✕</button>
+                                <button onClick={() => { const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], alternatives: nb[bi].alternatives.filter((_, i) => i !== ai) }; updateQuestion(q.id, "blanks", nb); }}
+                                  style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "12px", padding: 0 }}>✕</button>
                               </span>
                             ))}
-                            <button onClick={() => {
-                              const alt = prompt("Alternative Lösung eingeben:");
-                              if (!alt?.trim()) return;
-                              const nb = [...(q.blanks || [])];
-                              nb[bi] = { ...nb[bi], alternatives: [...(nb[bi].alternatives || []), alt.trim()] };
-                              updateQuestion(q.id, "blanks", nb);
-                            }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
+                            <button onClick={() => { const alt = prompt("Alternative Lösung eingeben:"); if (!alt?.trim()) return; const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], alternatives: [...(nb[bi].alternatives || []), alt.trim()] }; updateQuestion(q.id, "blanks", nb); }}
+                              style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
                           </div>
                         </div>
                       ))}
@@ -921,11 +921,8 @@ Erkenne den Typ automatisch.`;
                           style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "12px", padding: 0 }}>✕</button>
                       </span>
                     ))}
-                    <button onClick={() => {
-                      const alt = prompt("Alternative Lösung eingeben:");
-                      if (!alt?.trim()) return;
-                      updateQuestion(q.id, "cardBackAlternatives", [...(q.cardBackAlternatives || []), alt.trim()]);
-                    }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
+                    <button onClick={() => { const alt = prompt("Alternative Lösung eingeben:"); if (!alt?.trim()) return; updateQuestion(q.id, "cardBackAlternatives", [...(q.cardBackAlternatives || []), alt.trim()]); }}
+                      style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
                   </div>
                 </div>
               )}
@@ -1027,17 +1024,12 @@ Erkenne den Typ automatisch.`;
               Du hast ungespeicherte Änderungen. Möchtest du die Vorlage speichern bevor du die Seite verlässt?
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <button onClick={async () => {
-                await handleSave();
-                setShowLeaveModal(false);
-                if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data);
-              }} style={{ padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
+              <button onClick={async () => { await handleSave(); setShowLeaveModal(false); if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data); }}
+                style={{ padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
                 💾 Speichern und verlassen
               </button>
-              <button onClick={() => {
-                setShowLeaveModal(false);
-                if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data);
-              }} style={{ padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+              <button onClick={() => { setShowLeaveModal(false); if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data); }}
+                style={{ padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
                 Ohne Speichern verlassen
               </button>
               <button onClick={() => setShowLeaveModal(false)}
