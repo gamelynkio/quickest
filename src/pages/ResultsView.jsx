@@ -546,6 +546,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                               </div>
                             </details>
                           )}
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <label style={{ fontSize: "12px", color: "#64748b" }}>Punkte:</label>
                             <input type="number" min={0} max={correction.maxPoints} step={0.5}
                               value={currentPoints ?? ""} placeholder={currentPoints === null ? "–" : ""}
