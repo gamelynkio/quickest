@@ -129,13 +129,15 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [localCardFront, setLocalCardFront] = useState(tq.cardFront || "");
   const [localCardBack, setLocalCardBack] = useState(tq.cardBack || "");
   const [localCardAlts, setLocalCardAlts] = useState(tq.cardBackAlternatives || []);
+  const [localCardFrontMedia, setLocalCardFrontMedia] = useState(tq.cardFrontMedia || null);
+  const [localCardBackMedia, setLocalCardBackMedia] = useState(tq.cardBackMedia || null);
   const [localPairs, setLocalPairs] = useState(tq.pairs?.length ? tq.pairs : [{ left: "", right: "" }]);
   const [localPartialPoints, setLocalPartialPoints] = useState(tq.partialPoints || []);
   const [suggestingRubric, setSuggestingRubric] = useState(false);
   const rubricDebounceRef = useRef(null);
 
   const localRef = useRef({});
-  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localCardFront, localCardBack, localCardAlts, localPairs, localPartialPoints };
+  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localCardFront, localCardBack, localCardAlts, localPairs, localPartialPoints, localCardFrontMedia, localCardBackMedia };
   useEffect(() => {
     return () => {
       const s = localRef.current;
@@ -144,6 +146,8 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
       onUpdate("cardFront", s.localCardFront); onUpdate("cardBack", s.localCardBack);
       onUpdate("cardBackAlternatives", s.localCardAlts); onUpdate("pairs", s.localPairs);
       onUpdate("partialPoints", s.localPartialPoints);
+      onUpdate("cardFrontMedia", s.localCardFrontMedia);
+      onUpdate("cardBackMedia", s.localCardBackMedia);
     };
   }, []);
 
@@ -212,10 +216,10 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
             <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>🃏 A-Seite</label>
               <input value={localCardFront} onChange={e => setLocalCardFront(e.target.value)} onBlur={() => onUpdate("cardFront", localCardFront)} placeholder="z.B. der Hund" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "4px" }} />
-              {tq.cardFrontMedia ? (
+              {localCardFrontMedia ? (
                 <div style={{ position: "relative", display: "inline-block" }}>
-                  <img src={tq.cardFrontMedia} alt="" style={{ maxHeight: "60px", borderRadius: "5px", border: "1px solid #e2e8f0" }} />
-                  <button onClick={() => onUpdate("cardFrontMedia", null)} style={{ position: "absolute", top: "-5px", right: "-5px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "16px", height: "16px", fontSize: "10px", cursor: "pointer" }}>✕</button>
+                  <img src={localCardFrontMedia} alt="" style={{ maxHeight: "60px", borderRadius: "5px", border: "1px solid #e2e8f0" }} />
+                  <button onClick={() => { setLocalCardFrontMedia(null); onUpdate("cardFrontMedia", null); }} style={{ position: "absolute", top: "-5px", right: "-5px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "16px", height: "16px", fontSize: "10px", cursor: "pointer" }}>✕</button>
                 </div>
               ) : (
                 <label style={{ fontSize: "10px", color: "#2563a8", cursor: "pointer" }}>
@@ -224,9 +228,9 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
                     const file = e.target.files[0]; if (!file) return;
                     const ext = file.name.split(".").pop();
                     const path = `flashcard/${Date.now()}.${ext}`;
-                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
                     await supabase.storage.from("test-media").upload(path, file, { upsert: true });
                     const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
+                    setLocalCardFrontMedia(urlData.publicUrl);
                     onUpdate("cardFrontMedia", urlData.publicUrl);
                   }} />
                 </label>
@@ -234,10 +238,10 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
             </div>
             <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>✅ B-Seite</label>
               <input value={localCardBack} onChange={e => setLocalCardBack(e.target.value)} onBlur={() => onUpdate("cardBack", localCardBack)} placeholder="z.B. the dog" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "4px" }} />
-              {tq.cardBackMedia ? (
+              {localCardBackMedia ? (
                 <div style={{ position: "relative", display: "inline-block" }}>
-                  <img src={tq.cardBackMedia} alt="" style={{ maxHeight: "60px", borderRadius: "5px", border: "1px solid #e2e8f0" }} />
-                  <button onClick={() => onUpdate("cardBackMedia", null)} style={{ position: "absolute", top: "-5px", right: "-5px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "16px", height: "16px", fontSize: "10px", cursor: "pointer" }}>✕</button>
+                  <img src={localCardBackMedia} alt="" style={{ maxHeight: "60px", borderRadius: "5px", border: "1px solid #e2e8f0" }} />
+                  <button onClick={() => { setLocalCardBackMedia(null); onUpdate("cardBackMedia", null); }} style={{ position: "absolute", top: "-5px", right: "-5px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "16px", height: "16px", fontSize: "10px", cursor: "pointer" }}>✕</button>
                 </div>
               ) : (
                 <label style={{ fontSize: "10px", color: "#2563a8", cursor: "pointer" }}>
@@ -248,6 +252,7 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
                     const path = `flashcard/${Date.now()}.${ext}`;
                     await supabase.storage.from("test-media").upload(path, file, { upsert: true });
                     const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
+                    setLocalCardBackMedia(urlData.publicUrl);
                     onUpdate("cardBackMedia", urlData.publicUrl);
                   }} />
                 </label>
