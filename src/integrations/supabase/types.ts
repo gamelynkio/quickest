@@ -25,6 +25,7 @@ export type Database = {
           lobby_started_at: string | null
           makeup_usernames: string[] | null
           parent_assignment_id: number | null
+          paused_at: string | null
           question_data: Json
           require_seb: boolean | null
           status: string
@@ -46,6 +47,7 @@ export type Database = {
           lobby_started_at?: string | null
           makeup_usernames?: string[] | null
           parent_assignment_id?: number | null
+          paused_at?: string | null
           question_data?: Json
           require_seb?: boolean | null
           status?: string
@@ -67,6 +69,7 @@ export type Database = {
           lobby_started_at?: string | null
           makeup_usernames?: string[] | null
           parent_assignment_id?: number | null
+          paused_at?: string | null
           question_data?: Json
           require_seb?: boolean | null
           status?: string
