@@ -213,6 +213,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [lobbyWaiting, setLobbyWaiting] = useState(false);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [isEnded, setIsEnded] = useState(false);
   const [sebRequired, setSebRequired] = useState(false);
 
   // Anti-cheat
@@ -362,16 +363,21 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => clearInterval(interval);
   }, [lobbyWaiting, assignment]);
 
-  // Poll paused_at during active test
+  // Poll assignment status + paused_at during active test
   useEffect(() => {
-    if (submitted || loading || lobbyWaiting || !assignment) return;
+    if (submitted || loading || lobbyWaiting || !assignment?.id) return;
     const poll = setInterval(async () => {
       const { data } = await supabase
-        .from("assignments").select("paused_at").eq("id", assignment.id).single();
-      setIsPaused(!!data?.paused_at);
-    }, 3000);
+        .from("assignments").select("paused_at, status").eq("id", assignment.id).single();
+        if (data) {
+        setIsPaused(!!data.paused_at);
+        if (data.status === "beendet" && !submitted) {
+          setIsEnded(true);
+        }
+      }
+    }, 2000);
     return () => clearInterval(poll);
-  }, [submitted, loading, lobbyWaiting, assignment]);
+  }, [submitted, loading, lobbyWaiting, assignment?.id]);
 
   useEffect(() => {
     if (submitted || loading || lobbyWaiting || !assignment) return;
@@ -1007,7 +1013,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       </div>
 
       {/* PAUSE OVERLAY */}
-      {isPaused && !submitted && (
+      {isPaused && !submitted && !isEnded && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.88)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 500, backdropFilter: "blur(4px)" }}>
           <div style={{ textAlign: "center", color: "#fff", padding: "40px" }}>
             <div style={{ fontSize: "64px", marginBottom: "20px" }}>⏸</div>
@@ -1022,6 +1028,22 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
             </div>
           </div>
           <style>{`@keyframes qtpulse { 0%,100%{opacity:0.3;transform:scale(0.8)} 50%{opacity:1;transform:scale(1.3)} }`}</style>
+        </div>
+      )}
+
+      {/* ENDED OVERLAY */}
+      {isEnded && !submitted && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 500, backdropFilter: "blur(4px)" }}>
+          <div style={{ textAlign: "center", color: "#fff", padding: "40px", maxWidth: "400px" }}>
+            <div style={{ fontSize: "64px", marginBottom: "20px" }}>🏁</div>
+            <div style={{ fontSize: "28px", fontWeight: 800, marginBottom: "10px" }}>Test beendet</div>
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.65)", lineHeight: 1.6, marginBottom: "28px" }}>
+              Deine Lehrkraft hat den Test beendet. Deine bisherigen Antworten werden gespeichert.
+            </div>
+            <button onClick={handleSubmit} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer" }}>
+              Antworten abgeben →
+            </button>
+          </div>
         </div>
       )}
 
