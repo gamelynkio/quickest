@@ -1,29 +1,136 @@
 import { useState } from "react";
 import TeacherLayout from "../components/TeacherLayout";
 
+const COLORS = ["#fff8e7", "#f0fdf4", "#f0f9ff", "#fdf2f8", "#f5f3ff", "#fff1f2"];
+
+const flattenQuestions = (qs) => {
+  const result = [];
+  for (const q of qs) {
+    if (q.type === "section") {
+      for (const task of (q.tasks || [])) {
+        for (const tq of (task.questions || [])) {
+          result.push({ ...tq, _taskId: task.id, _sectionId: q.id });
+        }
+      }
+    } else {
+      result.push(q);
+    }
+  }
+  return result;
+};
+
 export default function TestPreview({ navigate, onLogout, currentUser, editingTest, questions }) {
   const [answers, setAnswers] = useState({});
-  const [currentSection, setCurrentSection] = useState(null);
 
-  const allItems = questions || [];
-  const realQuestions = allItems.filter(q => q.type !== "section");
+  const allItems = questions || editingTest?.question_data || [];
+  const realQuestions = flattenQuestions(allItems);
+  const answeredCount = realQuestions.filter(q => {
+    if (q.type === "fill_blank" && q.blanks?.length > 0) return Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim());
+    return answers[q.id] !== undefined && answers[q.id] !== "";
+  }).length;
 
-  const S = {
-    page: { minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px" },
-    card: { background: "#fff", borderRadius: "20px", padding: "28px 28px", maxWidth: "720px", margin: "0 auto", marginBottom: "16px" },
-    qCard: { background: "#fff", borderRadius: "16px", padding: "22px 24px", maxWidth: "720px", margin: "0 auto 14px" },
-  };
-
-  const renderMedia = (section) => {
-    if (!section.sectionMedia) return null;
-    if (section.sectionMediaType === "image") return (
-      <img src={section.sectionMedia} alt="" style={{ maxWidth: "100%", borderRadius: "10px", marginBottom: "14px" }} />
-    );
-    if (section.sectionMediaType === "video") return (
-      <div style={{ position: "relative", paddingBottom: "56.25%", height: 0, marginBottom: "14px" }}>
-        <iframe src={section.sectionMedia} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", borderRadius: "10px" }} frameBorder="0" allowFullScreen />
-      </div>
-    );
+  const renderQuestionInput = (q) => {
+    if (q.type === "multiple_choice") {
+      const multiCorrect = (q.correctAnswers?.length || 0) > 1;
+      const filledOptions = (q.options || []).filter(o => o?.trim() !== "");
+      const currentAnswers = Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] != null ? [answers[q.id]] : []);
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {multiCorrect && <div style={{ fontSize: "11px", color: "#2563a8", fontWeight: 600, background: "#eff6ff", borderRadius: "5px", padding: "3px 8px", alignSelf: "flex-start" }}>☑ Mehrere Antworten möglich</div>}
+          {filledOptions.map((opt, i) => {
+            const selected = currentAnswers.map(Number).includes(i);
+            return (
+              <button key={i} onClick={() => {
+                if (multiCorrect) { const next = selected ? currentAnswers.filter(x => Number(x) !== i) : [...currentAnswers, i]; setAnswers(a => ({ ...a, [q.id]: next })); }
+                else { setAnswers(a => ({ ...a, [q.id]: [i] })); }
+              }} style={{ padding: "10px 14px", border: `2px solid ${selected ? "#2563a8" : "#e2e8f0"}`, borderRadius: "8px", background: selected ? "#2563a8" : "#f8fafc", color: selected ? "#fff" : "#374151", cursor: "pointer", fontWeight: selected ? 700 : 500, fontSize: "14px", textAlign: "left", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ width: "22px", height: "22px", borderRadius: multiCorrect ? "4px" : "50%", border: `2px solid ${selected ? "rgba(255,255,255,0.5)" : "#d1d5db"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, flexShrink: 0 }}>{selected ? "✓" : String.fromCharCode(65 + i)}</span>
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+    if (q.type === "true_false") {
+      return (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+          {["Wahr", "Falsch"].map((opt, i) => (
+            <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))}
+              style={{ padding: "12px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "#e2e8f0"}`, borderRadius: "8px", background: answers[q.id] === i ? "#2563a8" : "#f8fafc", color: answers[q.id] === i ? "#fff" : "#374151", cursor: "pointer", fontWeight: 700, fontSize: "14px", fontFamily: "inherit" }}>
+              {opt}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    if (q.type === "open") {
+      return (
+        <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+          placeholder="Deine Antwort..." rows={3}
+          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+      );
+    }
+    if (q.type === "flashcard") {
+      return (
+        <div>
+          <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "16px", textAlign: "center", marginBottom: "10px", border: "2px solid #e2e8f0" }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", marginBottom: "6px" }}>A-SEITE</div>
+            {q.cardFrontMedia ? (
+              <img src={q.cardFrontMedia} alt="A-Seite" style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", objectFit: "contain" }} />
+            ) : (
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront || <em style={{ color: "#94a3b8" }}>Vorderseite</em>}</div>
+            )}
+          </div>
+          <input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+            placeholder="B-Seite eingeben..."
+            style={{ width: "100%", padding: "12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "15px", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }} />
+        </div>
+      );
+    }
+    if (q.type === "fill_blank") {
+      const text = q.fullText || q.text || "";
+      const hasBlanks = (q.blanks || []).length > 0 && text.includes("[Lücke]");
+      if (hasBlanks) {
+        return (
+          <div style={{ fontSize: "15px", lineHeight: 2.5, background: "rgba(255,255,255,0.8)", borderRadius: "10px", padding: "14px" }}>
+            {text.split("[Lücke]").map((part, i, arr) => (
+              <span key={i}>
+                {part}
+                {i < arr.length - 1 && (
+                  <input value={(answers[q.id] || [])[i] || ""}
+                    onChange={e => { const cur = Array.isArray(answers[q.id]) ? [...answers[q.id]] : []; cur[i] = e.target.value; setAnswers(a => ({ ...a, [q.id]: cur })); }}
+                    placeholder="___"
+                    style={{ display: "inline-block", width: "110px", padding: "4px 8px", border: "none", borderBottom: "3px solid #2563a8", background: "transparent", fontSize: "15px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }} />
+                )}
+              </span>
+            ))}
+          </div>
+        );
+      }
+      return (
+        <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+          placeholder="Deine Antwort..." rows={3}
+          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+      );
+    }
+    if (q.type === "assignment") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {(q.pairs || []).map((pair, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.8)", borderRadius: "8px", padding: "8px 12px" }}>
+              <span style={{ fontWeight: 700, fontSize: "14px", minWidth: "80px" }}>{pair.left}</span>
+              <span style={{ color: "#94a3b8", fontSize: "16px" }}>→</span>
+              <select value={(answers[q.id] || {})[i] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [i]: e.target.value } }))}
+                style={{ flex: 1, padding: "8px 10px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", background: "#fff", fontFamily: "inherit" }}>
+                <option value="">– auswählen –</option>
+                {(q.pairs || []).map((p, j) => <option key={j} value={p.right}>{p.right}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+      );
+    }
     return null;
   };
 
@@ -40,128 +147,143 @@ export default function TestPreview({ navigate, onLogout, currentUser, editingTe
               Vorschau: {editingTest?.title || "Unbenannter Test"}
             </h1>
             <p style={{ color: "#64748b", fontSize: "13px", marginTop: "4px" }}>
-              So sehen Schüler diesen Test — {realQuestions.length} Aufgaben
+              So sehen Schüler diesen Test · {realQuestions.length} Aufgaben
             </p>
           </div>
           <div style={{ background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "10px", padding: "10px 16px", fontSize: "13px", color: "#92400e", fontWeight: 600 }}>
-            👁 Vorschau-Modus — keine echten Antworten werden gespeichert
+            👁 Vorschau-Modus — keine Antworten werden gespeichert
           </div>
         </div>
 
-        {/* Simulated test */}
-        <div style={S.page}>
-          {/* Test header card */}
-          <div style={S.card}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <span style={{ fontSize: "22px" }}>⚡</span>
-              <div style={{ background: "#f1f5f9", borderRadius: "8px", padding: "6px 14px", fontSize: "14px", fontWeight: 700, color: "#374151" }}>
-                ⏱ {editingTest?.time_limit ? Math.round(editingTest.time_limit / 60) : 20} Min.
+        {/* Simulated test — exact same layout as StudentTestView */}
+        <div style={{ minHeight: "100vh", background: "#f1f5f9", borderRadius: "16px", padding: "0 0 40px" }}>
+
+          {/* Sticky header simulation */}
+          <div style={{ background: "#fff", borderRadius: "16px 16px 0 0", borderBottom: "2px solid #e2e8f0", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: "17px", color: "#0f172a" }}>⚡ {editingTest?.title || "Test"}</div>
+              <div style={{ fontSize: "13px", color: "#64748b" }}>Vorschau · {answeredCount}/{realQuestions.length} beantwortet</div>
+            </div>
+            <div style={{ textAlign: "center", flexShrink: 0 }}>
+              <div style={{ fontSize: "32px", fontWeight: 900, color: "#16a34a", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
+                {editingTest?.time_limit ? `${Math.round(editingTest.time_limit / 60)}:00` : "20:00"}
+              </div>
+              <div style={{ height: "5px", background: "#e2e8f0", borderRadius: "4px", width: "90px", marginTop: "5px" }}>
+                <div style={{ height: "5px", borderRadius: "4px", background: "#16a34a", width: "100%" }} />
               </div>
             </div>
-            <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 6px" }}>{editingTest?.title || "Test"}</h2>
-            {editingTest?.description && <p style={{ color: "#64748b", fontSize: "14px", margin: 0 }}>{editingTest.description}</p>}
+            <button disabled style={{ padding: "12px 20px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", opacity: 0.5, cursor: "not-allowed" }}>
+              Abgeben
+            </button>
           </div>
 
-          {/* Questions */}
-          {allItems.map((item, idx) => {
-            if (item.type === "section") return (
-              <div key={item.id} style={{ ...S.card, background: "#f0f7ff", border: "1px solid #bfdbfe" }}>
-                {item.sectionTitle && <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#1e40af", margin: "0 0 10px" }}>{item.sectionTitle}</h3>}
-                {item.sectionInstruction && <p style={{ fontSize: "14px", color: "#374151", margin: "0 0 12px", fontStyle: "italic" }}>{item.sectionInstruction}</p>}
-                {renderMedia(item)}
-                {item.sectionText && (
-                  <div style={{ fontSize: "15px", lineHeight: 1.7, color: "#1e293b", wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden" }}
-                    dangerouslySetInnerHTML={{ __html: item.sectionText }} />
-                )}
+          <div style={{ maxWidth: "800px", margin: "0 auto", padding: "0 16px" }}>
+            {/* Progress bar */}
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b", marginBottom: "6px" }}>
+                <span>Fortschritt</span>
+                <span>{answeredCount} / {realQuestions.length}</span>
               </div>
-            );
+              <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "6px" }}>
+                <div style={{ height: "6px", borderRadius: "6px", background: "#2563a8", width: `${realQuestions.length > 0 ? (answeredCount / realQuestions.length) * 100 : 0}%`, transition: "width 0.3s" }} />
+              </div>
+            </div>
 
-            const qNum = allItems.slice(0, idx).filter(q => q.type !== "section").length + 1;
-            return (
-              <div key={item.id} style={S.qCard}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
-                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#64748b" }}>Aufgabe {qNum}</span>
-                  <span style={{ fontSize: "12px", background: "#f1f5f9", borderRadius: "6px", padding: "2px 8px", color: "#64748b" }}>{item.points || 1} Pkt.</span>
-                </div>
-                <p style={{ fontSize: "15px", fontWeight: 600, color: "#0f172a", margin: "0 0 16px", lineHeight: 1.5 }}>{item.text || <em style={{ color: "#94a3b8" }}>Kein Aufgabentext</em>}</p>
-
-                {item.type === "multiple_choice" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {(item.options || []).map((opt, i) => (
-                      <button key={i} onClick={() => setAnswers(a => ({ ...a, [item.id]: i }))}
-                        style={{ padding: "12px 16px", border: `2px solid ${answers[item.id] === i ? "#2563a8" : "#e2e8f0"}`, borderRadius: "10px", background: answers[item.id] === i ? "#eff6ff" : "#f8fafc", textAlign: "left", cursor: "pointer", fontSize: "14px", color: answers[item.id] === i ? "#1e40af" : "#374151", fontWeight: answers[item.id] === i ? 600 : 400 }}>
-                        {opt || <em style={{ color: "#94a3b8" }}>Option {i + 1}</em>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {item.type === "true_false" && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    {["Wahr", "Falsch"].map((opt, i) => (
-                      <button key={i} onClick={() => setAnswers(a => ({ ...a, [item.id]: i }))}
-                        style={{ padding: "16px", border: `2px solid ${answers[item.id] === i ? "#2563a8" : "#e2e8f0"}`, borderRadius: "12px", background: answers[item.id] === i ? "#2563a8" : "#f8fafc", cursor: "pointer", fontWeight: 700, fontSize: "16px", color: answers[item.id] === i ? "#fff" : "#374151" }}>
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {item.type === "open" && (
-                  <textarea value={answers[item.id] || ""} onChange={e => setAnswers(a => ({ ...a, [item.id]: e.target.value }))}
-                    placeholder="Deine Antwort..."
-                    rows={4}
-                    style={{ width: "100%", padding: "12px 14px", border: "2px solid #e2e8f0", borderRadius: "10px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
-                )}
-
-                {item.type === "flashcard" && (
-                  <div>
-                    <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "20px", textAlign: "center", marginBottom: "12px", border: "2px solid #e2e8f0" }}>
-                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", marginBottom: "8px" }}>A-SEITE</div>
-                      <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{item.cardFront || <em style={{ color: "#94a3b8" }}>Vorderseite</em>}</div>
-                    </div>
-                    <input value={answers[item.id] || ""} onChange={e => setAnswers(a => ({ ...a, [item.id]: e.target.value }))}
-                      placeholder="B-Seite eingeben..."
-                      style={{ width: "100%", padding: "14px", border: "2px solid #e2e8f0", borderRadius: "10px", fontSize: "16px", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }} />
-                  </div>
-                )}
-
-                {item.type === "fill_blank" && (
-                  <div style={{ fontSize: "15px", lineHeight: 2.5, background: "#f8fafc", borderRadius: "10px", padding: "14px" }}>
-                    {(item.fullText || item.text || "").split("[Lücke]").map((part, i, arr) => (
-                      <span key={i}>
-                        {part}
-                        {i < arr.length - 1 && (
-                          <input style={{ display: "inline-block", width: "100px", padding: "2px 6px", border: "none", borderBottom: "2px solid #2563a8", background: "transparent", fontSize: "15px", textAlign: "center", fontFamily: "inherit" }} placeholder="___" />
+            {/* Questions — same rendering as StudentTestView */}
+            {(() => {
+              let sectionCounter = 0;
+              let globalTaskCounter = 0;
+              return allItems.map((q, index) => {
+                if (q.type === "section") {
+                  sectionCounter++;
+                  const currentSectionNum = sectionCounter;
+                  const taskStartNum = globalTaskCounter + 1;
+                  globalTaskCounter += (q.tasks || []).length;
+                  return (
+                    <div key={q.id} style={{ marginBottom: "12px", marginTop: index > 0 ? "24px" : 0 }}>
+                      <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "16px", padding: "20px 24px", color: "#fff" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+                          <span style={{ background: "rgba(255,255,255,0.2)", borderRadius: "8px", padding: "2px 10px", fontSize: "13px", fontWeight: 800 }}>Abschnitt {currentSectionNum}</span>
+                          {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800 }}>{q.sectionTitle}</div>}
+                        </div>
+                        {q.sectionInstruction && (
+                          <div style={{ fontSize: "14px", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: "8px", padding: "8px 12px", marginBottom: q.sectionText ? "12px" : 0, fontWeight: 500 }}>
+                            {q.sectionInstruction}
+                          </div>
                         )}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                        {q.sectionText && (
+                          <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "12px", padding: "16px", fontSize: "15px", lineHeight: 1.8, marginTop: "8px", wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden", color: "#fff" }}
+                            dangerouslySetInnerHTML={{ __html: q.sectionText }} />
+                        )}
+                        {q.sectionMedia && q.sectionMediaType === "image" && (
+                          <img src={q.sectionMedia} alt="" style={{ maxWidth: "100%", borderRadius: "10px", marginTop: "12px" }} />
+                        )}
+                      </div>
 
-                {item.type === "assignment" && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <div>
-                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", marginBottom: "8px" }}>BEGRIFFE</div>
-                      {(item.pairs || []).map((p, i) => (
-                        <div key={i} style={{ background: "#f8fafc", borderRadius: "8px", padding: "10px 14px", marginBottom: "6px", fontSize: "14px", fontWeight: 600 }}>{p.left || `Begriff ${i + 1}`}</div>
-                      ))}
+                      {(q.tasks || []).map((task, tIdx) => {
+                        const globalTaskNum = taskStartNum + tIdx;
+                        return (
+                          <div key={task.id} style={{ marginBottom: "12px" }}>
+                            {(task.taskTitle || task.taskInstruction) && (
+                              <div style={{ background: "#1e3a5f", borderRadius: "10px", padding: "12px 16px", marginBottom: "8px" }}>
+                                {task.taskTitle && (
+                                  <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff", marginBottom: task.taskInstruction ? "6px" : 0 }}>
+                                    Aufgabe {globalTaskNum}: {task.taskTitle}
+                                  </div>
+                                )}
+                                {task.taskInstruction && (
+                                  <div style={{ fontSize: "13px", color: "#e2e8f0", fontStyle: "italic", lineHeight: 1.5 }}>
+                                    {task.taskInstruction}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {(task.questions || []).map((tq, tqIdx) => {
+                              const isAns = Array.isArray(answers[tq.id]) ? answers[tq.id].length > 0 : answers[tq.id] !== undefined && answers[tq.id] !== "";
+                              return (
+                                <div key={tq.id} style={{ background: "#fff", borderRadius: "12px", padding: "16px 18px", marginBottom: "8px", border: `2px solid ${isAns ? "#bfdbfe" : "#e2e8f0"}` }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                      <span style={{ background: isAns ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{globalTaskNum}.{tqIdx + 1}</span>
+                                      <span style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{tq.text}</span>
+                                    </div>
+                                    <span style={{ fontSize: "11px", color: "#94a3b8", background: "#f1f5f9", borderRadius: "5px", padding: "2px 7px", flexShrink: 0, marginLeft: "8px" }}>{tq.points} Pkt.</span>
+                                  </div>
+                                  {renderQuestionInput(tq)}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div>
-                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", marginBottom: "8px" }}>DEFINITIONEN</div>
-                      {(item.pairs || []).map((p, i) => (
-                        <div key={i} style={{ background: "#eff6ff", borderRadius: "8px", padding: "10px 14px", marginBottom: "6px", fontSize: "14px", color: "#1e40af" }}>{p.right || `Definition ${i + 1}`}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  );
+                }
 
-          {/* Submit button preview */}
-          <div style={{ maxWidth: "720px", margin: "0 auto", paddingBottom: "40px" }}>
-            <button disabled style={{ width: "100%", padding: "16px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "not-allowed", opacity: 0.7 }}>
+                // Reguläre Frage
+                const qIndex = allItems.slice(0, index).filter(x => x.type !== "section").length;
+                const isAnswered = q.type === "fill_blank" && q.blanks?.length > 0
+                  ? Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim())
+                  : q.type === "multiple_choice"
+                  ? Array.isArray(answers[q.id]) ? answers[q.id].length > 0 : answers[q.id] !== undefined && answers[q.id] !== ""
+                  : answers[q.id] !== undefined && answers[q.id] !== "";
+
+                return (
+                  <div key={q.id} style={{ background: COLORS[qIndex % COLORS.length], borderRadius: "16px", padding: "22px", marginBottom: "14px", border: isAnswered ? "2px solid #bfdbfe" : "2px solid #e2e8f0", transition: "border-color 0.2s" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px", gap: "12px" }}>
+                      <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", flex: 1 }}>
+                        <span style={{ background: isAnswered ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "8px", padding: "4px 12px", fontSize: "14px", fontWeight: 700, flexShrink: 0 }}>{qIndex + 1}</span>
+                        <span style={{ fontSize: "16px", fontWeight: 600, color: "#0f172a", lineHeight: 1.5 }}>{q.text || <em style={{ color: "#94a3b8" }}>Kein Aufgabentext</em>}</span>
+                      </div>
+                      <span style={{ fontSize: "13px", color: "#94a3b8", whiteSpace: "nowrap", flexShrink: 0, background: "#f1f5f9", borderRadius: "6px", padding: "3px 8px" }}>{q.points} Pkt.</span>
+                    </div>
+                    {renderQuestionInput(q)}
+                  </div>
+                );
+              });
+            })()}
+
+            <button disabled style={{ width: "100%", padding: "18px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "14px", fontWeight: 800, fontSize: "17px", cursor: "not-allowed", opacity: 0.5, marginTop: "8px" }}>
               Test abgeben (nur im echten Test aktiv)
             </button>
           </div>
