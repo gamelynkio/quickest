@@ -3,7 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 
 const COLORS = ["#fff8e7", "#f0fdf4", "#f0f9ff", "#fdf2f8", "#f5f3ff", "#fff1f2"];
 
-// Flatten nested task questions for autoCorrect and progress tracking
 const flattenQuestions = (qs) => {
   const result = [];
   for (const q of qs) {
@@ -20,99 +19,6 @@ const flattenQuestions = (qs) => {
   return result;
 };
 
-// KI-Korrektur für offene Antworten direkt beim Abgeben
-const aiCorrectOpenAnswers = async (questions, answers, assignment) => {
-  const gradingMode = assignment?.grading_mode || "standard";
-  const gradingModeText = {
-    content: "Bewerte NUR den inhaltlichen Kern. Rechtschreibung, Grammatik und Zeichensetzung sind vollkommen egal.",
-    standard: "Bewerte primär den Inhalt. Grobe Rechtschreib- oder Grammatikfehler können leicht abgezogen werden, spielen aber keine große Rolle.",
-    strict: "Bewerte Inhalt UND Sprachform. Rechtschreibfehler, Grammatikfehler und falsche Zeichensetzung führen zu Punktabzügen.",
-  }[gradingMode] || "Bewerte primär den Inhalt.";
-
-  const openQuestions = questions.filter(q => q.type === "open");
-  const aiResults = {};
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
-  for (const q of openQuestions) {
-    const studentAnswer = answers[q.id] || "";
-    if (!studentAnswer.trim()) {
-      aiResults[q.id] = { points: 0, correct: false, comment: "🤖 Keine Antwort gegeben.", aiReviewed: true, needsReview: false };
-      continue;
-    }
-    const prompt = `Du bist ein Schullehrer und bewertest die folgende Schülerantwort auf Deutsch.
-
-Frage: ${q.text}
-Musterlösung: ${q.solution || "(keine Musterlösung hinterlegt — bewerte inhaltlich nach bestem Ermessen)"}
-Maximale Punktzahl: ${q.points}
-Schülerantwort: ${studentAnswer}
-
-Bewertungsregeln: ${gradingModeText}
-
-WICHTIGE HINWEISE zur Musterlösung:
-- Wörter in runden Klammern () sind OPTIONAL und müssen NICHT genannt werden. Beispiel: "(she's) five" bedeutet, "five" allein ist vollständig richtig. "chocolate (with nuts)" bedeutet, "chocolate" allein reicht für volle Punktzahl.
-- Wenn die Schülerantwort den Kerninhalt der Musterlösung enthält, gilt sie als korrekt — auch wenn sie kürzer formuliert ist.
-- Wenn keine Musterlösung hinterlegt ist, bewerte ob die Antwort inhaltlich sinnvoll und vollständig zur Frage passt.
-
-TEILBEPUNKTUNG:
-${(q.partialPoints || []).length > 0
-  ? `Der Lehrer hat folgende verbindliche Bewertungskriterien festgelegt — halte dich EXAKT daran:
-${(q.partialPoints).map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}
-Vergib nur die Punkte, die der Schüler laut diesen Kriterien verdient hat. Summe darf maximal ${q.points} sein.`
-  : `- Vergib IMMER anteilige Punkte wenn die Antwort teilweise korrekt ist.
-- Nur bei komplett falscher oder komplett richtiger Antwort darfst du 0 oder volle Punktzahl vergeben.
-- Bei ${q.points} Punkt${Number(q.points) !== 1 ? "en" : ""} sind Schritte von 0.5 möglich.
-- Erkläre kurz was richtig war und was gefehlt hat (oder warum volle/keine Punkte).`}
-
-Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
-{"points": <Zahl, max ${q.points}, Vielfaches von 0.5>, "comment": "<was war richtig, was hat gefehlt — max 2 Sätze>"}`;
-
-    try {
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabaseAnonKey}`,
-          "apikey": supabaseAnonKey,
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Edge Function ${response.status}: ${errText.slice(0, 200)}`);
-      }
-      const data = await response.json();
-      const text = data.content?.map(b => b.text || "").join("") || "";
-      const clean = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-      const points = Math.min(Math.max(0, Number(parsed.points) || 0), Number(q.points));
-      aiResults[q.id] = {
-        points,
-        correct: points >= Number(q.points),
-        comment: `🤖 ${parsed.comment}`,
-        aiReviewed: true,
-        needsReview: false,
-        maxPoints: Number(q.points),
-      };
-    } catch (e) {
-      console.error("KI-Korrektur Fehler für Frage", q.id, e.message);
-      aiResults[q.id] = {
-        points: null,
-        correct: null,
-        comment: `⚠️ KI-Fehler: ${e.message?.slice(0, 100) || "Unbekannt"}`,
-        aiReviewed: false,
-        needsReview: true,
-        maxPoints: Number(q.points),
-      };
-    }
-  }
-  return aiResults;
-};
-
 const autoCorrect = (questions, answers) => {
   let score = 0;
   const corrections = {};
@@ -123,9 +29,7 @@ const autoCorrect = (questions, answers) => {
     if (q.type === "multiple_choice") {
       const correctAnswers = q.correctAnswers?.length ? q.correctAnswers : (q.correctAnswer != null ? [q.correctAnswer] : []);
       const studentAnswers = Array.isArray(studentAnswer) ? studentAnswer : (studentAnswer != null ? [studentAnswer] : []);
-      const correct = correctAnswers.length > 0 &&
-        correctAnswers.length === studentAnswers.length &&
-        correctAnswers.every(a => studentAnswers.map(Number).includes(Number(a)));
+      const correct = correctAnswers.length > 0 && correctAnswers.length === studentAnswers.length && correctAnswers.every(a => studentAnswers.map(Number).includes(Number(a)));
       const correctLabels = correctAnswers.map(i => q.options?.[i] ?? String(i)).join(", ");
       const studentLabels = studentAnswers.map(i => q.options?.[i] ?? String(i)).join(", ");
       corrections[q.id] = { points: correct ? maxPoints : 0, maxPoints, correct, studentAnswer: studentLabels || "–", comment: correct ? "Richtig" : `Falsch. Richtige Antwort: ${correctLabels}`, solution: q.solution || null, partialPoints: q.partialPoints || [] };
@@ -160,7 +64,7 @@ const autoCorrect = (questions, answers) => {
         score += earnedPoints;
       }
     } else if (q.type === "open" || q.type === "qa") {
-      corrections[q.id] = { points: null, maxPoints, correct: null, studentAnswer: String(studentAnswer || ""), comment: "⏳ Wartet auf manuelle Bewertung", solution: q.solution || null, partialPoints: q.partialPoints || [], needsReview: true };
+      corrections[q.id] = { points: null, maxPoints, correct: null, studentAnswer: String(studentAnswer || ""), comment: "⏳ Wartet auf Bewertung", solution: q.solution || null, partialPoints: q.partialPoints || [], needsReview: true };
     } else if (q.type === "assignment") {
       const pairs = q.pairs || [];
       const studentPairs = studentAnswer || {};
@@ -182,32 +86,11 @@ const calcGrade = (score, totalPoints, gradingScale) => {
   return "6";
 };
 
-// Safe storage helper — SEB blocks localStorage, so we use sessionStorage with localStorage fallback
 const safeStorage = {
-  getItem: (key) => {
-    try { return sessionStorage.getItem(key); } catch (_) {
-      try { return localStorage.getItem(key); } catch (__) { return null; }
-    }
-  },
-  setItem: (key, value) => {
-    try { sessionStorage.setItem(key, value); } catch (_) {
-      try { localStorage.setItem(key, value); } catch (__) { /* ignore */ }
-    }
-  },
-  removeItem: (key) => {
-    try { sessionStorage.removeItem(key); } catch (_) {
-      try { localStorage.removeItem(key); } catch (__) { /* ignore */ }
-    }
-  },
+  getItem: (key) => { try { return sessionStorage.getItem(key); } catch (_) { try { return localStorage.getItem(key); } catch (__) { return null; } } },
+  setItem: (key, value) => { try { sessionStorage.setItem(key, value); } catch (_) { try { localStorage.setItem(key, value); } catch (__) {} } },
+  removeItem: (key) => { try { sessionStorage.removeItem(key); } catch (_) { try { localStorage.removeItem(key); } catch (__) {} } },
 };
-
-function EndedRedirect({ onFinish }) {
-  useEffect(() => {
-    const t = setTimeout(() => onFinish(), 4000);
-    return () => clearTimeout(t);
-  }, []);
-  return null;
-}
 
 export default function StudentTestView({ currentUser, assignment: assignmentProp, onFinish }) {
   const [assignment, setAssignment] = useState(null);
@@ -223,13 +106,10 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
   const [sebRequired, setSebRequired] = useState(false);
-
-  // Anti-cheat
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showCheatWarning, setShowCheatWarning] = useState(false);
   const cheatLogRef = useRef([]);
   const submissionIdRef = useRef(null);
-  const handleSubmitRef = useRef(null);
 
   useEffect(() => { fetchAssignment(assignmentProp || null); }, []);
 
@@ -237,82 +117,47 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     setLoading(true);
     let data = null;
     if (preloaded) {
-      // Frischen Status aus DB laden — preloaded könnte veraltet sein
       const { data: fresh } = await supabase.from("assignments").select("*").eq("id", preloaded.id).single();
       data = fresh || preloaded;
     } else {
       const { data: aktiv } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
-      if (aktiv) {
-        data = aktiv;
-      } else {
-        // Kein aktiver Test — prüfe ob kürzlich beendeter Test ohne Abgabe
+      if (aktiv) { data = aktiv; }
+      else {
         const { data: beendet } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "beendet").order("created_at", { ascending: false }).limit(1).single();
         data = beendet || null;
       }
     }
     if (data) {
-      // Wenn Test bereits beendet → direkt Ended-Screen zeigen (z.B. nach F5)
       if (data.status === "beendet") {
-        setAssignment(data);
-        setIsEnded(true);
+        const { data: existingSub } = await supabase.from("submissions").select("id").eq("assignment_id", data.id).eq("username", currentUser.username).maybeSingle();
+        if (!existingSub) { setAssignment(data); setIsEnded(true); }
         setLoading(false);
         return;
       }
       const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
-      if (data.require_seb && !isSEB) {
-        setAssignment(data);
-        setSebRequired(true);
-        setLoading(false);
-        return;
-      }
-      const { data: existingSubmission } = await supabase
-        .from("submissions")
-        .select("id")
-        .eq("assignment_id", data.id)
-        .eq("username", currentUser.username)
-        .maybeSingle();
-      if (existingSubmission) {
-        setLoading(false);
-        return;
-      }
-
+      if (data.require_seb && !isSEB) { setAssignment(data); setSebRequired(true); setLoading(false); return; }
+      const { data: existingSubmission } = await supabase.from("submissions").select("id").eq("assignment_id", data.id).eq("username", currentUser.username).maybeSingle();
+      if (existingSubmission) { setLoading(false); return; }
       if (data.parent_assignment_id && data.makeup_usernames?.length) {
-        if (!data.makeup_usernames.includes(currentUser.username)) {
-          setLoading(false);
-          return;
-        }
+        if (!data.makeup_usernames.includes(currentUser.username)) { setLoading(false); return; }
       }
       if (data.timing_mode === "window" && data.window_date && data.window_end) {
         const windowEnd = new Date(`${data.window_date}T${data.window_end}`);
-        if (new Date() > windowEnd) {
-          await supabase.from("assignments").update({ status: "beendet" }).eq("id", data.id);
-          setLoading(false);
-          return;
-        }
-        const remaining = Math.max(0, Math.floor((windowEnd - new Date()) / 1000));
-        data.time_limit = remaining;
+        if (new Date() > windowEnd) { await supabase.from("assignments").update({ status: "beendet" }).eq("id", data.id); setLoading(false); return; }
+        data.time_limit = Math.max(0, Math.floor((windowEnd - new Date()) / 1000));
       }
       setAssignment(data);
-
       const storageKey = `qt_start_${data.id}_${currentUser.id}`;
       const timeLimit = data.time_limit || 1200;
-
       if (data.timing_mode === "lobby" && data.lobby_started_at) {
         const elapsed = Math.floor((Date.now() - new Date(data.lobby_started_at).getTime()) / 1000);
-        const remaining = Math.max(0, timeLimit - elapsed);
-        setTimeLeft(remaining);
-      } else if (data.timing_mode === "window" && data.window_date && data.window_end) {
+        setTimeLeft(Math.max(0, timeLimit - elapsed));
+      } else if (data.timing_mode === "window") {
         setTimeLeft(timeLimit);
       } else {
         const storedStart = safeStorage.getItem(storageKey);
-        if (storedStart) {
-          const elapsed = Math.floor((Date.now() - Number(storedStart)) / 1000);
-          const remaining = Math.max(0, timeLimit - elapsed);
-          setTimeLeft(remaining);
-        } else {
-          safeStorage.setItem(storageKey, String(Date.now()));
-          setTimeLeft(timeLimit);
-        }
+        if (storedStart) { setTimeLeft(Math.max(0, timeLimit - Math.floor((Date.now() - Number(storedStart)) / 1000))); }
+        else { safeStorage.setItem(storageKey, String(Date.now())); setTimeLeft(timeLimit); }
       }
       const qs = data.question_data || [];
       if (data.anti_cheat) {
@@ -320,24 +165,13 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         const shuffled = [...nonSections].sort(() => Math.random() - 0.5);
         let qi = 0;
         setQuestions(qs.map(q => q.type === "section" ? q : shuffled[qi++]));
-      } else {
-        setQuestions(qs);
-      }
+      } else { setQuestions(qs); }
       if (data.timing_mode === "lobby" && !data.lobby_started_at) {
         setLobbyWaiting(true);
         const now = new Date().toISOString();
-        const { data: updated, error: updateError } = await supabase.from("lobby_presence")
-          .update({ last_seen: now })
-          .eq("assignment_id", data.id)
-          .eq("username", currentUser.username)
-          .select();
-        if (!updated || updated.length === 0) {
-          await supabase.from("lobby_presence")
-            .insert({ assignment_id: data.id, username: currentUser.username, last_seen: now });
-        }
-        const { data: presenceData } = await supabase
-          .from("lobby_presence").select("username").eq("assignment_id", data.id)
-          .gte("last_seen", new Date(Date.now() - 15000).toISOString());
+        const { data: updated } = await supabase.from("lobby_presence").update({ last_seen: now }).eq("assignment_id", data.id).eq("username", currentUser.username).select();
+        if (!updated || updated.length === 0) { await supabase.from("lobby_presence").insert({ assignment_id: data.id, username: currentUser.username, last_seen: now }); }
+        const { data: presenceData } = await supabase.from("lobby_presence").select("username").eq("assignment_id", data.id).gte("last_seen", new Date(Date.now() - 15000).toISOString());
         setLobbyPlayerCount(presenceData?.length || 0);
       }
     }
@@ -347,136 +181,98 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   // Heartbeat
   useEffect(() => {
     if (!assignment || submitted) return;
+    const assignmentId = assignment.id;
     const heartbeat = setInterval(async () => {
-      await supabase.from("lobby_presence")
-        .update({ last_seen: new Date().toISOString() })
-        .eq("assignment_id", assignment.id)
-        .eq("username", currentUser.username);
+      await supabase.from("lobby_presence").update({ last_seen: new Date().toISOString() }).eq("assignment_id", assignmentId).eq("username", currentUser.username);
+      const { data: asgn } = await supabase.from("assignments").select("paused_at, status").eq("id", assignmentId).single();
+      if (asgn) { setIsPaused(!!asgn.paused_at); if (asgn.status === "beendet") setIsEnded(true); }
     }, 3000);
-    const cleanup = async () => {
-      await supabase.from("lobby_presence")
-        .delete()
-        .eq("assignment_id", assignment.id)
-        .eq("username", currentUser.username);
-    };
+    const cleanup = async () => { await supabase.from("lobby_presence").delete().eq("assignment_id", assignmentId).eq("username", currentUser.username); };
     window.addEventListener("beforeunload", cleanup);
-    return () => {
-      clearInterval(heartbeat);
-      window.removeEventListener("beforeunload", cleanup);
-    };
-  }, [assignment, submitted]);
+    return () => { clearInterval(heartbeat); window.removeEventListener("beforeunload", cleanup); };
+  }, [assignment?.id, submitted]);
 
-  // Poll for lobby start every 2 seconds
+  // === KERN-FIX: Rekursiver Poll für paused_at + status ===
+  // Verwendet rekursives setTimeout statt setInterval um Closure-Probleme zu vermeiden
+  useEffect(() => {
+    if (!assignment?.id) return;
+    const id = assignment.id;
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const { data } = await supabase
+          .from("assignments")
+          .select("paused_at, status")
+          .eq("id", id)
+          .single();
+        if (!cancelled && data) {
+          setIsPaused(!!data.paused_at);
+          if (data.status === "beendet") {
+            setIsEnded(true);
+            return; // Poll stoppen wenn beendet
+          }
+        }
+      } catch (e) { /* ignorieren */ }
+      if (!cancelled) setTimeout(poll, 2000);
+    };
+    setTimeout(poll, 1000); // Erster Poll nach 1s
+    return () => { cancelled = true; };
+  }, [assignment?.id]);
+
+  // Lobby-Poll (nur während Lobby-Warteraum aktiv)
   useEffect(() => {
     if (!lobbyWaiting || !assignment?.id) return;
     const id = assignment.id;
-    const timeLimit = assignment.time_limit;
+    const timeLimit = assignment.time_limit || 1200;
     const interval = setInterval(async () => {
-      const { data } = await supabase
-        .from("assignments")
-        .select("lobby_started_at")
-        .eq("id", id)
-        .single();
+      const { data } = await supabase.from("assignments").select("lobby_started_at, status").eq("id", id).single();
       if (!data) return;
-      if (data?.lobby_started_at) {
+      if (data.status === "beendet") { setIsEnded(true); return; }
+      if (data.lobby_started_at) {
         setLobbyWaiting(false);
         setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
         const elapsed = Math.floor((Date.now() - new Date(data.lobby_started_at).getTime()) / 1000);
-        const remaining = Math.max(0, timeLimit - elapsed);
-        setTimeLeft(remaining);
+        setTimeLeft(Math.max(0, timeLimit - elapsed));
       }
-      const { data: presenceData } = await supabase
-        .from("lobby_presence").select("username").eq("assignment_id", id);
+      const { data: presenceData } = await supabase.from("lobby_presence").select("username").eq("assignment_id", id);
       setLobbyPlayerCount(presenceData?.length || 0);
     }, 2000);
     return () => clearInterval(interval);
   }, [lobbyWaiting, assignment?.id]);
 
-  // Realtime-Subscription auf assignments — reagiert sofort auf Änderungen
+  // Timer (pausiert wenn isPaused)
   useEffect(() => {
-    if (!assignment?.id) return;
-    const id = assignment.id;
-    const channel = supabase
-      .channel(`assignment-${id}`)
-      .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: "assignments",
-        filter: `id=eq.${id}`,
-      }, (payload) => {
-        const updated = payload.new;
-        setIsPaused(!!updated.paused_at);
-        if (updated.status === "beendet") {
-          setIsEnded(true);
-        }
-      })
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [assignment?.id]);
-
-  useEffect(() => {
-    if (submitted || loading || lobbyWaiting || !assignment) return;
+    if (submitted || loading || lobbyWaiting || !assignment || isPaused) return;
     const timer = setInterval(() => {
-      let remaining;
-      if (assignment.timing_mode === "lobby" && assignment.lobby_started_at) {
-        const elapsed = Math.floor((Date.now() - new Date(assignment.lobby_started_at).getTime()) / 1000);
-        remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
-      } else if (assignment.timing_mode === "countdown") {
-        const storageKey = `qt_start_${assignment.id}_${currentUser.id}`;
-        const storedStart = safeStorage.getItem(storageKey);
-        if (storedStart) {
-          const elapsed = Math.floor((Date.now() - Number(storedStart)) / 1000);
-          remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
-        } else {
-          remaining = (timeLeft || 0) - 1;
-        }
-      } else {
-        remaining = (timeLeft || 0) - 1;
-      }
-      setTimeLeft(remaining);
-      if (remaining <= 0) {
-        clearInterval(timer);
-        handleSubmit();
-      }
+      setTimeLeft(prev => {
+        if (prev === null) return null;
+        if (prev <= 1) { clearInterval(timer); handleSubmit(); return 0; }
+        return prev - 1;
+      });
     }, 1000);
     return () => clearInterval(timer);
-  }, [submitted, loading, lobbyWaiting, assignment]);
+  }, [submitted, loading, lobbyWaiting, assignment, isPaused]);
 
   // Anti-cheat
   useEffect(() => {
     if (submitted || loading || lobbyWaiting || !assignment) return;
-
     const logSwitch = async () => {
       const entry = { time: new Date().toISOString(), event: "tab_switch" };
       cheatLogRef.current = [...cheatLogRef.current, entry];
-      const count = cheatLogRef.current.length;
-      setTabSwitchCount(count);
+      setTabSwitchCount(cheatLogRef.current.length);
       setShowCheatWarning(true);
-      if (submissionIdRef.current) {
-        await supabase.from("submissions")
-          .update({ cheat_log: cheatLogRef.current })
-          .eq("id", submissionIdRef.current);
-      }
+      if (submissionIdRef.current) { await supabase.from("submissions").update({ cheat_log: cheatLogRef.current }).eq("id", submissionIdRef.current); }
     };
-
-    const handleVisibility = () => {
-      if (document.hidden) logSwitch();
-    };
-
+    const handleVisibility = () => { if (document.hidden) logSwitch(); };
     const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && ["c","v","a","t","n","w","r","f","p","u"].includes(e.key.toLowerCase())) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      if ((e.ctrlKey || e.metaKey) && ["c","v","a","t","n","w","r","f","p","u"].includes(e.key.toLowerCase())) { e.preventDefault(); e.stopPropagation(); }
       if (["F5","F12"].includes(e.key)) e.preventDefault();
     };
-
     const handleContextMenu = (e) => e.preventDefault();
-
     document.addEventListener("visibilitychange", handleVisibility);
     document.addEventListener("keydown", handleKeyDown, true);
     document.addEventListener("contextmenu", handleContextMenu);
-
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       document.removeEventListener("keydown", handleKeyDown, true);
@@ -497,36 +293,14 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const { score: initialScore, corrections } = autoCorrect(realQuestions, answers);
     const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
     const grade = hasOpenQuestions ? null : calcGrade(initialScore, totalPoints, assignment.grading_scale);
-
     const { data: newSubmission } = await supabase.from("submissions").insert({
-      assignment_id: assignment.id,
-      student_id: currentUser.id,
-      username: currentUser.username,
+      assignment_id: assignment.id, student_id: currentUser.id, username: currentUser.username,
       answers, score: initialScore, total_points: totalPoints, grade,
-      ai_corrections: corrections,
-      reviewed: !hasOpenQuestions,
-      cheat_log: cheatLogRef.current,
+      ai_corrections: corrections, reviewed: !hasOpenQuestions, cheat_log: cheatLogRef.current,
     }).select("id").single();
     if (newSubmission) submissionIdRef.current = newSubmission.id;
-
-    if (assignment.timing_mode === "lobby" || assignment.timing_mode === "countdown") {
-      const { count: submissionCount } = await supabase
-        .from("submissions").select("*", { count: "exact", head: true })
-        .eq("assignment_id", assignment.id);
-      const { data: group } = await supabase
-        .from("groups").select("count").eq("id", assignment.group_id).single();
-      const groupSize = group?.count || 0;
-      if (groupSize > 0 && submissionCount >= groupSize) {
-        await supabase.from("assignments").update({ status: "beendet" }).eq("id", assignment.id);
-      }
-    }
-
     safeStorage.removeItem(`qt_start_${assignment.id}_${currentUser.id}`);
-    await supabase.from("lobby_presence")
-      .delete()
-      .eq("assignment_id", assignment.id)
-      .eq("username", currentUser.username);
-
+    await supabase.from("lobby_presence").delete().eq("assignment_id", assignment.id).eq("username", currentUser.username);
     setSubmitted(true);
     setShowConfirm(false);
     setSubmitting(false);
@@ -538,42 +312,38 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     card: { textAlign: "center", background: "#fff", borderRadius: "24px", padding: "48px 40px", maxWidth: "440px", width: "100%" },
   };
 
-  if (loading) return (
-    <div style={S.center}>
-      <div style={{ textAlign: "center", color: "#fff" }}>
-        <div style={{ fontSize: "56px", marginBottom: "16px" }}>⚡</div>
-        <div style={{ fontSize: "18px", fontWeight: 600 }}>Test wird geladen...</div>
-      </div>
-    </div>
-  );
+  if (loading) return <div style={S.center}><div style={{ textAlign: "center", color: "#fff" }}><div style={{ fontSize: "56px", marginBottom: "16px" }}>⚡</div><div style={{ fontSize: "18px", fontWeight: 600 }}>Test wird geladen...</div></div></div>;
 
   if (lobbyWaiting) return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f, #4c1d95)", fontFamily: "'Segoe UI', system-ui, sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+      {isPaused && !isEnded && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 500 }}>
+          <div style={{ textAlign: "center", color: "#fff" }}><div style={{ fontSize: "64px" }}>⏸</div><div style={{ fontSize: "24px", fontWeight: 800, marginTop: "16px" }}>Test pausiert</div></div>
+        </div>
+      )}
+      {isEnded && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.95)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 600 }}>
+          <div style={{ textAlign: "center", color: "#fff" }}>
+            <div style={{ fontSize: "64px" }}>🏁</div>
+            <div style={{ fontSize: "24px", fontWeight: 800, marginTop: "16px" }}>Test beendet</div>
+            <button onClick={() => onFinish()} style={{ marginTop: "24px", padding: "12px 28px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer" }}>Zum Dashboard →</button>
+          </div>
+        </div>
+      )}
       <div style={{ textAlign: "center", maxWidth: "420px", width: "100%" }}>
         <div style={{ fontSize: "64px", marginBottom: "16px" }}>🎮</div>
         <h1 style={{ fontSize: "28px", fontWeight: 900, color: "#fff", margin: "0 0 8px" }}>Bereit!</h1>
         <p style={{ color: "rgba(255,255,255,0.8)", fontSize: "16px", marginBottom: "32px" }}>Warte auf den Start durch deine Lehrkraft...</p>
-
         <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "20px", padding: "24px", marginBottom: "24px" }}>
           <div style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.7)", marginBottom: "12px", letterSpacing: "1px" }}>DEIN NAME</div>
           <div style={{ fontSize: "22px", fontWeight: 800, color: "#fff" }}>{currentUser.username}</div>
         </div>
-
         <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "20px", padding: "20px", marginBottom: "24px" }}>
           <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)", marginBottom: "8px" }}>TEST</div>
           <div style={{ fontSize: "17px", fontWeight: 700, color: "#fff" }}>{assignment?.title}</div>
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.7)", fontSize: "14px" }}>
-          <div style={{ display: "flex", gap: "4px" }}>
-            {[0,1,2].map(i => (
-              <div key={i} style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#fff", opacity: 0.6 }} />
-            ))}
-          </div>
-          <span>{lobbyPlayerCount} Schüler/in{lobbyPlayerCount !== 1 ? "nen" : ""} in der Lobby</span>
-        </div>
+        <div style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px" }}>{lobbyPlayerCount} Schüler/in{lobbyPlayerCount !== 1 ? "nen" : ""} in der Lobby</div>
       </div>
-      <style>{`@keyframes pulse { from { opacity: 0.3; transform: scale(0.8); } to { opacity: 1; transform: scale(1.2); } }`}</style>
     </div>
   );
 
@@ -581,47 +351,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     <div style={S.center}>
       <div style={{ ...S.card, maxWidth: "480px" }}>
         <div style={{ fontSize: "64px", marginBottom: "16px" }}>🔒</div>
-        <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Safe Exam Browser erforderlich</h2>
-        <p style={{ color: "#64748b", marginBottom: "24px", fontSize: "14px", lineHeight: 1.6 }}>
-          Dieser Test muss mit dem <strong>Safe Exam Browser (SEB)</strong> geöffnet werden. SEB verhindert Betrug indem andere Apps, Tabs und die Autokorrektur gesperrt werden.
-        </p>
-
-        <div style={{ background: "#f8fafc", borderRadius: "14px", padding: "18px", marginBottom: "20px", textAlign: "left" }}>
-          <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "12px" }}>📱 So geht's:</div>
-          <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#64748b", lineHeight: 2 }}>
-            <li>Installiere die <strong>Safe Exam Browser</strong> App (einmalig)</li>
-            <li>Klicke auf „Safe Exam Browser starten" — SEB öffnet sich automatisch</li>
-            <li>Logge dich in SEB ein und starte den Test</li>
-          </ol>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
-          <a href="https://apps.apple.com/us/app/safeexambrowser/id1155002964" target="_blank" rel="noreferrer"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#000", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
-            🍎 App Store (iOS)
-          </a>
-          <a href="https://play.google.com/store/apps/details?id=org.safeexambrowser" target="_blank" rel="noreferrer"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#16a34a", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
-            🤖 Play Store (Android)
-          </a>
-          <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#0078d4", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
-            🪟 Download (Windows)
-          </a>
-          <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "12px", background: "#6d6d6d", color: "#fff", borderRadius: "10px", textDecoration: "none", fontSize: "13px", fontWeight: 600 }}>
-            🍏 Download (macOS)
-          </a>
-        </div>
-
-        <a href="sebs://quickest.lovable.app/?role=student"
-          style={{ display: "block", width: "100%", padding: "14px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "15px", cursor: "pointer", textAlign: "center", textDecoration: "none", marginBottom: "12px", boxSizing: "border-box" }}>
-          🔒 Safe Exam Browser starten
-        </a>
-
-        <button onClick={() => onFinish()} style={{ width: "100%", padding: "12px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
-          Zurück zum Dashboard
-        </button>
+        <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 16px" }}>Safe Exam Browser erforderlich</h2>
+        <a href="sebs://quickest.lovable.app/?role=student" style={{ display: "block", width: "100%", padding: "14px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "15px", textAlign: "center", textDecoration: "none", marginBottom: "12px", boxSizing: "border-box" }}>🔒 Safe Exam Browser starten</a>
+        <button onClick={() => onFinish()} style={{ width: "100%", padding: "12px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>Zurück zum Dashboard</button>
       </div>
     </div>
   );
@@ -637,19 +369,13 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     </div>
   );
 
-  const handleFinish = () => {
-    onFinish();
-  };
-  // Keep ref in sync so poll closure always calls latest handleSubmit
-  handleSubmitRef.current = handleSubmit;
-
   if (submitted) return (
     <div style={S.center}>
       <div style={S.card}>
         <div style={{ fontSize: "72px", marginBottom: "16px" }}>✅</div>
         <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Test abgegeben!</h2>
-        <p style={{ color: "#64748b", marginBottom: "28px", fontSize: "15px", lineHeight: 1.5 }}>Deine Antworten wurden gespeichert. Deine Lehrkraft wird das Ergebnis bald veröffentlichen.</p>
-        <button onClick={handleFinish} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Fertig</button>
+        <p style={{ color: "#64748b", marginBottom: "28px", fontSize: "15px", lineHeight: 1.5 }}>Deine Antworten wurden gespeichert.</p>
+        <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Fertig</button>
       </div>
     </div>
   );
@@ -657,131 +383,40 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const realQuestions = flattenQuestions(questions).filter(q => q.type !== "section");
   const answeredCount = realQuestions.filter(q => {
     if (q.type === "fill_blank" && q.blanks?.length > 0) return Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim());
-    if (q.type === "qa") return answers[q.id] !== undefined && answers[q.id] !== "";
     return answers[q.id] !== undefined && answers[q.id] !== "";
   }).length;
 
   const renderQuestionInput = (q) => {
     if (q.type === "multiple_choice") {
       const multiCorrect = (q.correctAnswers?.length || 0) > 1;
-      const filledOptions = (q.options || []).filter(o => o.trim() !== "");
+      const filledOptions = (q.options || []).filter(o => o?.trim() !== "");
       const currentAnswers = Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] != null ? [answers[q.id]] : []);
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {multiCorrect && <div style={{ fontSize: "11px", color: "#2563a8", fontWeight: 600, background: "#eff6ff", borderRadius: "5px", padding: "3px 8px", alignSelf: "flex-start" }}>☑ Mehrere Antworten möglich</div>}
           {filledOptions.map((opt, i) => {
             const selected = currentAnswers.map(Number).includes(i);
-            return (
-              <button key={i} onClick={() => {
-                if (multiCorrect) { const next = selected ? currentAnswers.filter(x => Number(x) !== i) : [...currentAnswers, i]; setAnswers(a => ({ ...a, [q.id]: next })); }
-                else { setAnswers(a => ({ ...a, [q.id]: [i] })); }
-              }} style={{ padding: "10px 14px", border: `2px solid ${selected ? "#2563a8" : "#e2e8f0"}`, borderRadius: "8px", background: selected ? "#2563a8" : "#f8fafc", color: selected ? "#fff" : "#374151", cursor: "pointer", fontWeight: selected ? 700 : 500, fontSize: "14px", textAlign: "left", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "8px", touchAction: "manipulation" }}>
-                <span style={{ width: "22px", height: "22px", borderRadius: multiCorrect ? "4px" : "50%", border: `2px solid ${selected ? "rgba(255,255,255,0.5)" : "#d1d5db"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, flexShrink: 0 }}>{selected ? "✓" : String.fromCharCode(65 + i)}</span>
-                {opt}
-              </button>
-            );
+            return <button key={i} onClick={() => { if (multiCorrect) { const next = selected ? currentAnswers.filter(x => Number(x) !== i) : [...currentAnswers, i]; setAnswers(a => ({ ...a, [q.id]: next })); } else { setAnswers(a => ({ ...a, [q.id]: [i] })); } }} style={{ padding: "10px 14px", border: `2px solid ${selected ? "#2563a8" : "#e2e8f0"}`, borderRadius: "8px", background: selected ? "#2563a8" : "#f8fafc", color: selected ? "#fff" : "#374151", cursor: "pointer", fontWeight: selected ? 700 : 500, fontSize: "14px", textAlign: "left", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: "22px", height: "22px", borderRadius: multiCorrect ? "4px" : "50%", border: `2px solid ${selected ? "rgba(255,255,255,0.5)" : "#d1d5db"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, flexShrink: 0 }}>{selected ? "✓" : String.fromCharCode(65 + i)}</span>{opt}</button>;
           })}
         </div>
       );
     }
-    if (q.type === "true_false") {
-      return (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-          {["Wahr", "Falsch"].map((opt, i) => (
-            <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))}
-              style={{ padding: "12px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "#e2e8f0"}`, borderRadius: "8px", background: answers[q.id] === i ? "#2563a8" : "#f8fafc", color: answers[q.id] === i ? "#fff" : "#374151", cursor: "pointer", fontWeight: 700, fontSize: "14px", fontFamily: "inherit", touchAction: "manipulation" }}>
-              {opt}
-            </button>
-          ))}
-        </div>
-      );
-    }
-    if (q.type === "open" || q.type === "qa") {
-      return (
-        <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-          placeholder="Deine Antwort..." rows={3}
-          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-          data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
-          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", color: "#0f172a", background: "#fff" }} />
-      );
-    }
+    if (q.type === "true_false") return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>{["Wahr", "Falsch"].map((opt, i) => <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))} style={{ padding: "12px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "#e2e8f0"}`, borderRadius: "8px", background: answers[q.id] === i ? "#2563a8" : "#f8fafc", color: answers[q.id] === i ? "#fff" : "#374151", cursor: "pointer", fontWeight: 700, fontSize: "14px", fontFamily: "inherit" }}>{opt}</button>)}</div>;
+    if (q.type === "open" || q.type === "qa") return <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={3} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", color: "#0f172a", background: "#fff" }} />;
     if (q.type === "fill_blank") {
       const text = q.fullText || q.text || "";
-      const hasBlanks = (q.blanks || []).length > 0 && text.includes("[Lücke]");
-      if (hasBlanks) {
-        return (
-          <div style={{ fontSize: "15px", lineHeight: 2.5, background: "rgba(255,255,255,0.8)", borderRadius: "10px", padding: "14px", color: "#0f172a" }}>
-            {text.split("[Lücke]").map((part, i, arr) => (
-              <span key={i}>
-                {part}
-                {i < arr.length - 1 && (
-                  <input
-                    value={(answers[q.id] || [])[i] || ""}
-                    onChange={e => {
-                      const cur = Array.isArray(answers[q.id]) ? [...answers[q.id]] : [];
-                      cur[i] = e.target.value;
-                      setAnswers(a => ({ ...a, [q.id]: cur }));
-                    }}
-                    placeholder="___"
-                    autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-                    data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
-                    style={{ display: "inline-block", width: "110px", padding: "4px 8px", border: "none", borderBottom: "3px solid #2563a8", background: "transparent", fontSize: "15px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }}
-                  />
-                )}
-              </span>
-            ))}
-          </div>
-        );
+      if ((q.blanks || []).length > 0 && text.includes("[Lücke]")) {
+        return <div style={{ fontSize: "15px", lineHeight: 2.5, background: "rgba(255,255,255,0.8)", borderRadius: "10px", padding: "14px", color: "#0f172a" }}>{text.split("[Lücke]").map((part, i, arr) => <span key={i}>{part}{i < arr.length - 1 && <input value={(answers[q.id] || [])[i] || ""} onChange={e => { const cur = Array.isArray(answers[q.id]) ? [...answers[q.id]] : []; cur[i] = e.target.value; setAnswers(a => ({ ...a, [q.id]: cur })); }} placeholder="___" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ display: "inline-block", width: "110px", padding: "4px 8px", border: "none", borderBottom: "3px solid #2563a8", background: "transparent", fontSize: "15px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }} />}</span>)}</div>;
       }
-      return (
-        <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-          placeholder="Deine Antwort..." rows={3}
-          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-          data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
-          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
-      );
+      return <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={3} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />;
     }
-    if (q.type === "assignment") {
-      return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {(q.pairs || []).map((pair, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.8)", borderRadius: "8px", padding: "8px 12px" }}>
-              <span style={{ fontWeight: 700, fontSize: "14px", minWidth: "80px" }}>{pair.left}</span>
-              <span style={{ color: "#94a3b8", fontSize: "16px" }}>→</span>
-              <select value={(answers[q.id] || {})[i] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [i]: e.target.value } }))}
-                style={{ flex: 1, padding: "8px 10px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", background: "#fff", fontFamily: "inherit" }}>
-                <option value="">– auswählen –</option>
-                {(q.pairs || []).map((p, j) => <option key={j} value={p.right}>{p.right}</option>)}
-              </select>
-            </div>
-          ))}
-        </div>
-      );
-    }
-    if (q.type === "flashcard") {
-      return (
-        <div>
-          <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "16px", textAlign: "center", marginBottom: "10px", border: "2px solid #e2e8f0" }}>
-            <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", marginBottom: "6px" }}>A-SEITE</div>
-            {q.cardFrontMedia ? (
-              <img src={q.cardFrontMedia} alt="A-Seite" style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", objectFit: "contain" }} />
-            ) : (
-              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>
-            )}
-          </div>
-          <input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-            placeholder="B-Seite eingeben..."
-            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-            style={{ width: "100%", padding: "12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "15px", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }} />
-        </div>
-      );
-    }
+    if (q.type === "assignment") return <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{(q.pairs || []).map((pair, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.8)", borderRadius: "8px", padding: "8px 12px" }}><span style={{ fontWeight: 700, fontSize: "14px", minWidth: "80px" }}>{pair.left}</span><span style={{ color: "#94a3b8", fontSize: "16px" }}>→</span><select value={(answers[q.id] || {})[i] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [i]: e.target.value } }))} style={{ flex: 1, padding: "8px 10px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", background: "#fff", fontFamily: "inherit" }}><option value="">– auswählen –</option>{(q.pairs || []).map((p, j) => <option key={j} value={p.right}>{p.right}</option>)}</select></div>)}</div>;
+    if (q.type === "flashcard") return <div><div style={{ background: "#f8fafc", borderRadius: "10px", padding: "16px", textAlign: "center", marginBottom: "10px", border: "2px solid #e2e8f0" }}><div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", marginBottom: "6px" }}>A-SEITE</div>{q.cardFrontMedia ? <img src={q.cardFrontMedia} alt="A-Seite" style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", objectFit: "contain" }} /> : <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>}</div><input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="B-Seite eingeben..." autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ width: "100%", padding: "12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "15px", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }} /></div>;
     return null;
   };
 
   return (
     <div style={{ ...S.page, background: "#f1f5f9" }}>
-      {/* Sticky header */}
       <div style={{ position: "sticky", top: 0, background: "#fff", borderBottom: "2px solid #e2e8f0", zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
         <div style={{ maxWidth: "800px", margin: "0 auto", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
           <div style={{ minWidth: 0 }}>
@@ -791,296 +426,128 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           {timeLeft !== null && (
             <div style={{ textAlign: "center", flexShrink: 0 }}>
               <div style={{ fontSize: "32px", fontWeight: 900, color: timeColor, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{formatTime(timeLeft)}</div>
-              <div style={{ height: "5px", background: "#e2e8f0", borderRadius: "4px", width: "90px", marginTop: "5px" }}>
-                <div style={{ height: "5px", borderRadius: "4px", background: timeColor, width: `${timePercent}%`, transition: "width 1s linear" }} />
-              </div>
+              <div style={{ height: "5px", background: "#e2e8f0", borderRadius: "4px", width: "90px", marginTop: "5px" }}><div style={{ height: "5px", borderRadius: "4px", background: timeColor, width: `${timePercent}%`, transition: "width 1s linear" }} /></div>
             </div>
           )}
-          <button onClick={() => setShowConfirm(true)}
-            style={{ padding: "12px 20px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", flexShrink: 0, touchAction: "manipulation" }}>
-            Abgeben
-          </button>
+          <button onClick={() => setShowConfirm(true)} style={{ padding: "12px 20px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", flexShrink: 0 }}>Abgeben</button>
         </div>
-        {tabSwitchCount > 0 && (
-          <div style={{ background: "#fef2f2", borderTop: "1px solid #fecaca", padding: "6px 20px", fontSize: "12px", color: "#dc2626", fontWeight: 600, textAlign: "center" }}>
-            ⚠️ {tabSwitchCount}× Tab/App-Wechsel erkannt — wird dem Lehrer gemeldet
-          </div>
-        )}
+        {tabSwitchCount > 0 && <div style={{ background: "#fef2f2", borderTop: "1px solid #fecaca", padding: "6px 20px", fontSize: "12px", color: "#dc2626", fontWeight: 600, textAlign: "center" }}>⚠️ {tabSwitchCount}× Tab/App-Wechsel erkannt — wird dem Lehrer gemeldet</div>}
       </div>
 
       <div style={{ maxWidth: "800px", margin: "0 auto", padding: "20px 16px 40px" }}>
-
-        {/* Progress bar */}
         <div style={{ marginBottom: "20px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b", marginBottom: "6px" }}>
-            <span>Fortschritt</span>
-            <span>{answeredCount} / {realQuestions.length}</span>
-          </div>
-          <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "6px" }}>
-            <div style={{ height: "6px", borderRadius: "6px", background: "#2563a8", width: `${realQuestions.length > 0 ? (answeredCount / realQuestions.length) * 100 : 0}%`, transition: "width 0.3s" }} />
-          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b", marginBottom: "6px" }}><span>Fortschritt</span><span>{answeredCount} / {realQuestions.length}</span></div>
+          <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "6px" }}><div style={{ height: "6px", borderRadius: "6px", background: "#2563a8", width: `${realQuestions.length > 0 ? (answeredCount / realQuestions.length) * 100 : 0}%`, transition: "width 0.3s" }} /></div>
         </div>
 
         {(() => {
           let sectionCounter = 0;
           let globalTaskCounter = 0;
           return questions.map((q, index) => {
-          if (q.type === "section") {
-            sectionCounter++;
-            const currentSectionNum = sectionCounter;
-            const taskStartNum = globalTaskCounter + 1;
-            globalTaskCounter += (q.tasks || []).length;
-            return (
-            <div key={q.id} style={{ marginBottom: "24px", marginTop: index > 0 ? "24px" : 0, background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "18px", padding: "20px 16px 16px", color: "#fff" }}>
-              {/* Abschnitts-Header */}
-              <div style={{ marginBottom: "14px", paddingBottom: "14px", borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-                  <span style={{ background: "rgba(255,255,255,0.2)", borderRadius: "8px", padding: "2px 10px", fontSize: "13px", fontWeight: 800 }}>Abschnitt {currentSectionNum}</span>
-                  {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800 }}>{q.sectionTitle}</div>}
-                </div>
-                {q.sectionInstruction && (
-                  <div style={{ fontSize: "14px", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: "8px", padding: "8px 12px", marginBottom: q.sectionText && q.sectionText.replace(/<[^>]*>/g, "").trim() ? "12px" : 0, fontWeight: 500 }}>
-                    {q.sectionInstruction}
-                  </div>
-                )}
-                {q.sectionText && q.sectionText.replace(/<[^>]*>/g, "").trim() && (
-                  <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "12px", padding: "16px", fontSize: "15px", lineHeight: 1.8, marginTop: "8px", wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden", color: "#fff" }}
-                    dangerouslySetInnerHTML={{ __html: q.sectionText }} />
-                )}
-              </div>
-
-              {(q.tasks || []).map((task, tIdx) => {
-                const globalTaskNum = taskStartNum + tIdx;
-                return (
-                <div key={task.id} style={{ background: "rgba(255,255,255,0.06)", borderRadius: "12px", padding: "12px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.12)" }}>
-                  {/* Aufgaben-Header — immer anzeigen */}
-                  <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: "8px", padding: "10px 14px", marginBottom: "10px" }}>
-                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#fff", marginBottom: task.taskInstruction ? "5px" : 0 }}>
-                      Aufgabe {globalTaskNum}{task.taskTitle ? `: ${task.taskTitle}` : ""}
+            if (q.type === "section") {
+              sectionCounter++;
+              const currentSectionNum = sectionCounter;
+              const taskStartNum = globalTaskCounter + 1;
+              globalTaskCounter += (q.tasks || []).length;
+              return (
+                <div key={q.id} style={{ marginBottom: "24px", marginTop: index > 0 ? "24px" : 0, background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "18px", padding: "20px 16px 16px", color: "#fff" }}>
+                  <div style={{ marginBottom: "14px", paddingBottom: "14px", borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+                      <span style={{ background: "rgba(255,255,255,0.2)", borderRadius: "8px", padding: "2px 10px", fontSize: "13px", fontWeight: 800 }}>Abschnitt {currentSectionNum}</span>
+                      {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800 }}>{q.sectionTitle}</div>}
                     </div>
-                    {task.taskInstruction && (
-                      <div style={{ fontSize: "13px", color: "#e2e8f0", fontStyle: "italic", lineHeight: 1.5 }}>
-                        {task.taskInstruction}
-                      </div>
-                    )}
+                    {q.sectionInstruction && <div style={{ fontSize: "14px", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: "8px", padding: "8px 12px", marginBottom: q.sectionText?.replace(/<[^>]*>/g, "").trim() ? "12px" : 0, fontWeight: 500 }}>{q.sectionInstruction}</div>}
+                    {q.sectionText?.replace(/<[^>]*>/g, "").trim() && <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "12px", padding: "16px", fontSize: "15px", lineHeight: 1.8, marginTop: "8px", wordBreak: "break-word", color: "#fff" }} dangerouslySetInnerHTML={{ __html: q.sectionText }} />}
                   </div>
-                  {task.taskText && task.taskText.replace(/<[^>]*>/g, "").trim() && (
-                    <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "10px", padding: "14px 16px", marginBottom: "10px", fontSize: "14px", lineHeight: 1.8, color: "#fff", wordBreak: "break-word" }}
-                      dangerouslySetInnerHTML={{ __html: task.taskText }} />
-                  )}
-                  {(task.questions || []).map((tq, tqIdx) => {
-                    const isAns = Array.isArray(answers[tq.id]) ? answers[tq.id].length > 0 : answers[tq.id] !== undefined && answers[tq.id] !== "";
+                  {(q.tasks || []).map((task, tIdx) => {
+                    const globalTaskNum = taskStartNum + tIdx;
                     return (
-                      <div key={tq.id} style={{ background: "#fff", borderRadius: "10px", padding: "14px 16px", marginBottom: "6px", border: `2px solid ${isAns ? "#bfdbfe" : "#e2e8f0"}` }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span style={{ background: isAns ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{globalTaskNum}.{tqIdx + 1}</span>
-                            {(tq.type === "qa" || tq.type === "open") && tq.text?.includes("<") ? <div style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a", lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: tq.text }} /> : <span style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{tq.text}</span>}
-                          </div>
-                          <span style={{ fontSize: "11px", color: "#94a3b8", background: "#f1f5f9", borderRadius: "5px", padding: "2px 7px", flexShrink: 0, marginLeft: "8px" }}>{tq.points} Pkt.</span>
+                      <div key={task.id} style={{ background: "rgba(255,255,255,0.06)", borderRadius: "12px", padding: "12px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.12)" }}>
+                        <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: "8px", padding: "10px 14px", marginBottom: "10px" }}>
+                          <div style={{ fontSize: "14px", fontWeight: 700, color: "#fff", marginBottom: task.taskInstruction ? "5px" : 0 }}>Aufgabe {globalTaskNum}{task.taskTitle ? `: ${task.taskTitle}` : ""}</div>
+                          {task.taskInstruction && <div style={{ fontSize: "13px", color: "#e2e8f0", fontStyle: "italic", lineHeight: 1.5 }}>{task.taskInstruction}</div>}
                         </div>
-                        {renderQuestionInput(tq)}
+                        {task.taskText?.replace(/<[^>]*>/g, "").trim() && <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "10px", padding: "14px 16px", marginBottom: "10px", fontSize: "14px", lineHeight: 1.8, color: "#fff", wordBreak: "break-word" }} dangerouslySetInnerHTML={{ __html: task.taskText }} />}
+                        {(task.questions || []).map((tq, tqIdx) => {
+                          const isAns = Array.isArray(answers[tq.id]) ? answers[tq.id].length > 0 : answers[tq.id] !== undefined && answers[tq.id] !== "";
+                          return (
+                            <div key={tq.id} style={{ background: "#fff", borderRadius: "10px", padding: "14px 16px", marginBottom: "6px", border: `2px solid ${isAns ? "#bfdbfe" : "#e2e8f0"}` }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <span style={{ background: isAns ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{globalTaskNum}.{tqIdx + 1}</span>
+                                  {(tq.type === "qa" || tq.type === "open") && tq.text?.includes("<") ? <div style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a", lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: tq.text }} /> : <span style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{tq.text}</span>}
+                                </div>
+                                <span style={{ fontSize: "11px", color: "#94a3b8", background: "#f1f5f9", borderRadius: "5px", padding: "2px 7px", flexShrink: 0, marginLeft: "8px" }}>{tq.points} Pkt.</span>
+                              </div>
+                              {renderQuestionInput(tq)}
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
                 </div>
-                );
-              })}
-            </div>
-          );}
-
-          // QUESTION
-          const qIndex = questions.slice(0, index).filter(x => x.type !== "section").length;
-          const isAnswered = q.type === "fill_blank" && q.blanks?.length > 0
-            ? Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim())
-            : q.type === "multiple_choice"
-            ? Array.isArray(answers[q.id]) ? answers[q.id].length > 0 : answers[q.id] !== undefined && answers[q.id] !== ""
-            : answers[q.id] !== undefined && answers[q.id] !== "";
-
-          return (
-            <div key={q.id} style={{
-              background: assignment.anti_cheat ? COLORS[qIndex % COLORS.length] : "#fff",
-              borderRadius: "16px", padding: "22px", marginBottom: "14px",
-              border: isAnswered ? "2px solid #bfdbfe" : "2px solid #e2e8f0",
-              transition: "border-color 0.2s"
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px", gap: "12px" }}>
-                <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", flex: 1 }}>
-                  <span style={{ background: isAnswered ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "8px", padding: "4px 12px", fontSize: "14px", fontWeight: 700, flexShrink: 0 }}>{qIndex + 1}</span>
-                  <span style={{ fontSize: "16px", fontWeight: 600, color: "#0f172a", lineHeight: 1.5 }}>{q.text}</span>
+              );
+            }
+            const qIndex = questions.slice(0, index).filter(x => x.type !== "section").length;
+            const isAnswered = q.type === "fill_blank" && q.blanks?.length > 0 ? Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim()) : q.type === "multiple_choice" ? (Array.isArray(answers[q.id]) ? answers[q.id].length > 0 : answers[q.id] !== undefined && answers[q.id] !== "") : answers[q.id] !== undefined && answers[q.id] !== "";
+            return (
+              <div key={q.id} style={{ background: assignment.anti_cheat ? COLORS[qIndex % COLORS.length] : "#fff", borderRadius: "16px", padding: "22px", marginBottom: "14px", border: isAnswered ? "2px solid #bfdbfe" : "2px solid #e2e8f0", transition: "border-color 0.2s" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px", gap: "12px" }}>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", flex: 1 }}>
+                    <span style={{ background: isAnswered ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "8px", padding: "4px 12px", fontSize: "14px", fontWeight: 700, flexShrink: 0 }}>{qIndex + 1}</span>
+                    <span style={{ fontSize: "16px", fontWeight: 600, color: "#0f172a", lineHeight: 1.5 }}>{q.text}</span>
+                  </div>
+                  <span style={{ fontSize: "13px", color: "#94a3b8", whiteSpace: "nowrap", flexShrink: 0, background: "#f1f5f9", borderRadius: "6px", padding: "3px 8px" }}>{q.points} Pkt.</span>
                 </div>
-                <span style={{ fontSize: "13px", color: "#94a3b8", whiteSpace: "nowrap", flexShrink: 0, background: "#f1f5f9", borderRadius: "6px", padding: "3px 8px" }}>{q.points} Pkt.</span>
+                {(q.type === "open" || q.type === "qa") && <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={5} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", lineHeight: 1.6, color: "#0f172a" }} />}
+                {q.type === "multiple_choice" && (() => {
+                  const multiCorrect = (q.correctAnswers?.length || 0) > 1;
+                  const filledOptions = q.options.filter(o => o.trim() !== "");
+                  const currentAnswers = Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] != null ? [answers[q.id]] : []);
+                  return <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>{multiCorrect && <div style={{ fontSize: "12px", color: "#2563a8", fontWeight: 600, background: "#eff6ff", borderRadius: "6px", padding: "4px 10px", alignSelf: "flex-start" }}>☑ Mehrere Antworten möglich</div>}{filledOptions.map((opt, i) => { const selected = currentAnswers.map(Number).includes(i); return <button key={i} onClick={() => { if (multiCorrect) { const next = selected ? currentAnswers.filter(x => Number(x) !== i) : [...currentAnswers, i]; setAnswers(a => ({ ...a, [q.id]: next })); } else { setAnswers(a => ({ ...a, [q.id]: [i] })); } }} style={{ padding: "16px 18px", border: `2px solid ${selected ? "#2563a8" : "rgba(0,0,0,0.1)"}`, borderRadius: "12px", background: selected ? "#2563a8" : "rgba(255,255,255,0.8)", color: selected ? "#fff" : "#374151", cursor: "pointer", fontWeight: selected ? 700 : 500, fontSize: "15px", textAlign: "left", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "12px" }}><span style={{ width: "28px", height: "28px", borderRadius: multiCorrect ? "4px" : "50%", border: `2px solid ${selected ? "rgba(255,255,255,0.5)" : "#d1d5db"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, flexShrink: 0 }}>{selected ? "✓" : String.fromCharCode(65 + i)}</span>{opt}</button>; })}</div>;
+                })()}
+                {q.type === "true_false" && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>{["Wahr", "Falsch"].map((opt, i) => <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))} style={{ padding: "18px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "rgba(0,0,0,0.1)"}`, borderRadius: "12px", background: answers[q.id] === i ? "#2563a8" : "rgba(255,255,255,0.8)", color: answers[q.id] === i ? "#fff" : "#374151", cursor: "pointer", fontWeight: 700, fontSize: "17px", fontFamily: "inherit" }}>{opt}</button>)}</div>}
+                {q.type === "flashcard" && <div><div style={{ background: "rgba(255,255,255,0.9)", borderRadius: "14px", padding: "24px", marginBottom: "14px", border: "2px solid rgba(0,0,0,0.08)", textAlign: "center" }}><div style={{ fontSize: "12px", fontWeight: 700, color: "#94a3b8", letterSpacing: "1px", marginBottom: "10px" }}>A-SEITE</div>{q.cardFrontMedia ? <img src={q.cardFrontMedia} alt="A-Seite" style={{ maxWidth: "100%", maxHeight: "220px", borderRadius: "10px", objectFit: "contain" }} /> : <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>}</div><input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="B-Seite eingeben..." autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ width: "100%", padding: "16px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "18px", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }} /></div>}
+                {q.type === "fill_blank" && <div>{(q.blanks || []).length > 0 ? <div style={{ fontSize: "16px", lineHeight: 2.5, background: "rgba(255,255,255,0.8)", borderRadius: "12px", padding: "16px", color: "#0f172a" }}>{(q.fullText || q.text || "").split("[Lücke]").map((part, i, arr) => <span key={i}>{part}{i < arr.length - 1 && <input value={(answers[q.id] || [])[i] || ""} onChange={e => { const cur = Array.isArray(answers[q.id]) ? [...answers[q.id]] : []; cur[i] = e.target.value; setAnswers(a => ({ ...a, [q.id]: cur })); }} placeholder="___" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ display: "inline-block", width: "110px", padding: "4px 8px", border: "none", borderBottom: "3px solid #2563a8", background: "transparent", fontSize: "16px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }} />}</span>)}</div> : <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={3} style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box" }} />}</div>}
+                {q.type === "assignment" && <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>{(q.pairs || []).map((pair, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", background: "rgba(255,255,255,0.8)", borderRadius: "10px", padding: "10px 14px" }}><span style={{ fontWeight: 700, fontSize: "15px", minWidth: "80px" }}>{pair.left}</span><span style={{ color: "#94a3b8", fontSize: "18px" }}>→</span><select value={(answers[q.id] || {})[i] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [i]: e.target.value } }))} style={{ flex: 1, padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "15px", background: "#fff", fontFamily: "inherit" }}><option value="">– auswählen –</option>{(q.pairs || []).map((p, j) => <option key={j} value={p.right}>{p.right}</option>)}</select></div>)}</div>}
               </div>
-
-              {q.type === "multiple_choice" && (() => {
-                const multiCorrect = (q.correctAnswers?.length || 0) > 1;
-                const filledOptions = q.options.filter(o => o.trim() !== "");
-                const currentAnswers = Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] != null ? [answers[q.id]] : []);
-                return (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                    {multiCorrect && <div style={{ fontSize: "12px", color: "#2563a8", fontWeight: 600, background: "#eff6ff", borderRadius: "6px", padding: "4px 10px", alignSelf: "flex-start" }}>☑ Mehrere Antworten möglich</div>}
-                    {filledOptions.map((opt, i) => {
-                      const selected = currentAnswers.map(Number).includes(i);
-                      return (
-                        <button key={i} onClick={() => {
-                          if (multiCorrect) {
-                            const next = selected ? currentAnswers.filter(x => Number(x) !== i) : [...currentAnswers, i];
-                            setAnswers(a => ({ ...a, [q.id]: next }));
-                          } else {
-                            setAnswers(a => ({ ...a, [q.id]: [i] }));
-                          }
-                        }}
-                          style={{
-                            padding: "16px 18px", border: `2px solid ${selected ? "#2563a8" : "rgba(0,0,0,0.1)"}`,
-                            borderRadius: "12px", background: selected ? "#2563a8" : "rgba(255,255,255,0.8)",
-                            color: selected ? "#fff" : "#374151",
-                            cursor: "pointer", fontWeight: selected ? 700 : 500,
-                            fontSize: "15px", textAlign: "left", fontFamily: "inherit",
-                            display: "flex", alignItems: "center", gap: "12px",
-                            touchAction: "manipulation", transition: "all 0.15s"
-                          }}>
-                          <span style={{ width: "28px", height: "28px", borderRadius: multiCorrect ? "4px" : "50%", border: `2px solid ${selected ? "rgba(255,255,255,0.5)" : "#d1d5db"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, flexShrink: 0, background: selected ? "rgba(255,255,255,0.2)" : "transparent" }}>
-                            {selected ? "✓" : String.fromCharCode(65 + i)}
-                          </span>
-                          {opt}
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-
-              {q.type === "true_false" && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  {["Wahr", "Falsch"].map((opt, i) => (
-                    <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))}
-                      style={{
-                        padding: "18px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "rgba(0,0,0,0.1)"}`,
-                        borderRadius: "12px", background: answers[q.id] === i ? "#2563a8" : "rgba(255,255,255,0.8)",
-                        color: answers[q.id] === i ? "#fff" : "#374151",
-                        cursor: "pointer", fontWeight: 700, fontSize: "17px", fontFamily: "inherit",
-                        touchAction: "manipulation", transition: "all 0.15s"
-                      }}>{opt}</button>
-                  ))}
-                </div>
-              )}
-
-              {q.type === "flashcard" && (
-                <div>
-                  <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: "14px", padding: "24px", marginBottom: "14px", border: "2px solid rgba(0,0,0,0.08)", textAlign: "center" }}>
-                    <div style={{ fontSize: "12px", fontWeight: 700, color: "#94a3b8", letterSpacing: "1px", marginBottom: "10px" }}>A-SEITE</div>
-                    {q.cardFrontMedia ? (
-                      <img src={q.cardFrontMedia} alt="A-Seite" style={{ maxWidth: "100%", maxHeight: "220px", borderRadius: "10px", objectFit: "contain" }} />
-                    ) : (
-                      <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>
-                    )}
-                  </div>
-                  <input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-                    placeholder="B-Seite eingeben..." autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
-                    style={{ width: "100%", padding: "16px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "18px", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }} />
-                </div>
-              )}
-
-              {(q.type === "open" || q.type === "qa") && (
-                <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-                  placeholder="Deine Antwort..."
-                  rows={5}
-                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-                  data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
-                  style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", lineHeight: 1.6, color: "#0f172a" }} />
-              )}
-
-              {q.type === "fill_blank" && (
-                <div>
-                  {(q.blanks || []).length > 0 ? (
-                    <div style={{ fontSize: "16px", lineHeight: 2.5, background: "rgba(255,255,255,0.8)", borderRadius: "12px", padding: "16px", color: "#0f172a" }}>
-                      {(q.fullText || q.text || "").split("[Lücke]").map((part, i, arr) => (
-                        <span key={i}>
-                          {part}
-                          {i < arr.length - 1 && (
-                            <input
-                              value={(answers[q.id] || [])[i] || ""}
-                              onChange={e => {
-                                const cur = Array.isArray(answers[q.id]) ? [...answers[q.id]] : [];
-                                cur[i] = e.target.value;
-                                setAnswers(a => ({ ...a, [q.id]: cur }));
-                              }}
-                              placeholder="___"
-                              autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-                              data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
-                              style={{ display: "inline-block", width: "110px", padding: "4px 8px", border: "none", borderBottom: "3px solid #2563a8", background: "transparent", fontSize: "16px", textAlign: "center", fontFamily: "inherit", margin: "0 4px", outline: "none" }}
-                            />
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={3}
-                      autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-                      data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
-                      style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box" }} />
-                  )}
-                </div>
-              )}
-
-              {q.type === "assignment" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {(q.pairs || []).map((pair, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", background: "rgba(255,255,255,0.8)", borderRadius: "10px", padding: "10px 14px" }}>
-                      <span style={{ fontWeight: 700, fontSize: "15px", minWidth: "80px" }}>{pair.left}</span>
-                      <span style={{ color: "#94a3b8", fontSize: "18px" }}>→</span>
-                      <select value={(answers[q.id] || {})[i] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [i]: e.target.value } }))}
-                        style={{ flex: 1, padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "15px", background: "#fff", fontFamily: "inherit" }}>
-                        <option value="">– auswählen –</option>
-                        {(q.pairs || []).map((p, j) => <option key={j} value={p.right}>{p.right}</option>)}
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        });
+            );
+          });
         })()}
 
-        <button onClick={() => setShowConfirm(true)}
-          style={{ width: "100%", padding: "18px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "14px", fontWeight: 800, fontSize: "17px", cursor: "pointer", marginTop: "8px", touchAction: "manipulation" }}>
-          Test abgeben
-        </button>
+        <button onClick={() => setShowConfirm(true)} style={{ width: "100%", padding: "18px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "14px", fontWeight: 800, fontSize: "17px", cursor: "pointer", marginTop: "8px" }}>Test abgeben</button>
       </div>
 
       {/* PAUSE OVERLAY */}
-      {isPaused && !submitted && !isEnded && (
+      {isPaused && !isEnded && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.88)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 500, backdropFilter: "blur(4px)" }}>
           <div style={{ textAlign: "center", color: "#fff", padding: "40px" }}>
             <div style={{ fontSize: "64px", marginBottom: "20px" }}>⏸</div>
             <div style={{ fontSize: "28px", fontWeight: 800, marginBottom: "10px" }}>Test pausiert</div>
-            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.65)", maxWidth: "320px", lineHeight: 1.6 }}>
-              Deine Lehrkraft hat den Test kurz angehalten. Bitte warte — er wird gleich fortgesetzt.
-            </div>
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.65)", maxWidth: "320px", lineHeight: 1.6 }}>Deine Lehrkraft hat den Test kurz angehalten. Bitte warte — er wird gleich fortgesetzt.</div>
             <div style={{ marginTop: "28px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
-              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#60a5fa", animation: "qtpulse 1.5s ease-in-out infinite" }} />
-              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#60a5fa", animation: "qtpulse 1.5s ease-in-out 0.3s infinite" }} />
-              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#60a5fa", animation: "qtpulse 1.5s ease-in-out 0.6s infinite" }} />
+              {[0, 0.3, 0.6].map((delay, i) => <div key={i} style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#60a5fa", animation: `qtpulse 1.5s ease-in-out ${delay}s infinite` }} />)}
             </div>
           </div>
           <style>{`@keyframes qtpulse { 0%,100%{opacity:0.3;transform:scale(0.8)} 50%{opacity:1;transform:scale(1.3)} }`}</style>
         </div>
       )}
 
-      {/* ENDED OVERLAY — zeigt nach automatischer Abgabe */}
+      {/* ENDED OVERLAY */}
       {isEnded && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.95)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 600, backdropFilter: "blur(4px)" }}>
           <div style={{ textAlign: "center", color: "#fff", padding: "40px", maxWidth: "400px" }}>
             <div style={{ fontSize: "64px", marginBottom: "20px" }}>🏁</div>
             <div style={{ fontSize: "28px", fontWeight: 800, marginBottom: "10px" }}>Test beendet</div>
-            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.7)", lineHeight: 1.6, marginBottom: "12px" }}>
-              Deine Lehrkraft hat den Test beendet. Deine Antworten wurden automatisch abgegeben.
-            </div>
-            <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)" }}>
-              Du wirst gleich zu deinem Dashboard weitergeleitet...
-            </div>
-            <EndedRedirect onFinish={onFinish} />
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.7)", lineHeight: 1.6, marginBottom: "24px" }}>Deine Lehrkraft hat den Test beendet.</div>
+            {!submitted ? (
+              <button onClick={handleSubmit} disabled={submitting} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer" }}>
+                {submitting ? "Wird gespeichert..." : "Antworten abgeben →"}
+              </button>
+            ) : (
+              <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer" }}>Zum Dashboard →</button>
+            )}
           </div>
         </div>
       )}
@@ -1090,16 +557,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center" }}>
             <div style={{ fontSize: "52px", marginBottom: "12px" }}>⚠️</div>
             <h3 style={{ fontSize: "20px", fontWeight: 800, color: "#dc2626", margin: "0 0 10px" }}>Tab-Wechsel erkannt!</h3>
-            <p style={{ color: "#374151", fontSize: "14px", marginBottom: "8px", lineHeight: 1.5 }}>
-              Du hast den Test-Tab verlassen. Dies wurde protokolliert und wird deiner Lehrkraft gemeldet.
-            </p>
-            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "24px" }}>
-              Bisher: <strong style={{ color: "#dc2626" }}>{tabSwitchCount}×</strong> erkannt
-            </p>
-            <button onClick={() => setShowCheatWarning(false)}
-              style={{ width: "100%", padding: "14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer" }}>
-              Verstanden — zurück zum Test
-            </button>
+            <p style={{ color: "#374151", fontSize: "14px", marginBottom: "8px", lineHeight: 1.5 }}>Du hast den Test-Tab verlassen. Dies wurde protokolliert.</p>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "24px" }}>Bisher: <strong style={{ color: "#dc2626" }}>{tabSwitchCount}×</strong> erkannt</p>
+            <button onClick={() => setShowCheatWarning(false)} style={{ width: "100%", padding: "14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer" }}>Verstanden — zurück zum Test</button>
           </div>
         </div>
       )}
@@ -1109,19 +569,11 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           <div style={{ background: "#fff", borderRadius: "24px", padding: "36px 32px", maxWidth: "420px", width: "100%", textAlign: "center" }}>
             <div style={{ fontSize: "56px", marginBottom: "16px" }}>🤔</div>
             <h3 style={{ fontSize: "22px", fontWeight: 800, margin: "0 0 10px", color: "#0f172a" }}>Schon fertig?</h3>
-            <p style={{ color: "#64748b", marginBottom: "10px", fontSize: "15px", lineHeight: 1.5 }}>
-              Du hast <strong>{answeredCount} von {realQuestions.length}</strong> Fragen beantwortet.
-            </p>
+            <p style={{ color: "#64748b", marginBottom: "10px", fontSize: "15px", lineHeight: 1.5 }}>Du hast <strong>{answeredCount} von {realQuestions.length}</strong> Fragen beantwortet.</p>
             <p style={{ color: "#94a3b8", marginBottom: "28px", fontSize: "14px" }}>Nach dem Abgeben kannst du keine Antworten mehr ändern.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <button onClick={handleSubmit} disabled={submitting}
-                style={{ padding: "16px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 800, fontSize: "16px", cursor: submitting ? "not-allowed" : "pointer", touchAction: "manipulation" }}>
-                {submitting ? "Wird gespeichert..." : "Ja, jetzt abgeben"}
-              </button>
-              <button onClick={() => setShowConfirm(false)}
-                style={{ padding: "16px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "16px", cursor: "pointer", touchAction: "manipulation" }}>
-                Zurück zum Test
-              </button>
+              <button onClick={handleSubmit} disabled={submitting} style={{ padding: "16px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 800, fontSize: "16px", cursor: submitting ? "not-allowed" : "pointer" }}>{submitting ? "Wird gespeichert..." : "Ja, jetzt abgeben"}</button>
+              <button onClick={() => setShowConfirm(false)} style={{ padding: "16px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "16px", cursor: "pointer" }}>Zurück zum Test</button>
             </div>
           </div>
         </div>
