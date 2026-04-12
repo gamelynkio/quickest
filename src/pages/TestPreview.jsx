@@ -93,7 +93,7 @@ export default function TestPreview({ navigate, onLogout, currentUser, editingTe
       const hasBlanks = (q.blanks || []).length > 0 && text.includes("[Lücke]");
       if (hasBlanks) {
         return (
-          <div style={{ fontSize: "15px", lineHeight: 2.5, background: "rgba(255,255,255,0.8)", borderRadius: "10px", padding: "14px" }}>
+          <div style={{ fontSize: "15px", lineHeight: 2.5, background: "rgba(255,255,255,0.8)", borderRadius: "10px", padding: "14px", color: "#0f172a" }}>
             {text.split("[Lücke]").map((part, i, arr) => (
               <span key={i}>
                 {part}
@@ -208,11 +208,11 @@ export default function TestPreview({ navigate, onLogout, currentUser, editingTe
                           {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800 }}>{q.sectionTitle}</div>}
                         </div>
                         {q.sectionInstruction && (
-                          <div style={{ fontSize: "14px", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: "8px", padding: "8px 12px", marginBottom: q.sectionText ? "12px" : 0, fontWeight: 500 }}>
+                          <div style={{ fontSize: "14px", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: "8px", padding: "8px 12px", marginBottom: q.sectionText?.trim() ? "12px" : 0, fontWeight: 500 }}>
                             {q.sectionInstruction}
                           </div>
                         )}
-                        {q.sectionText && (
+                        {q.sectionText?.trim() && (
                           <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "12px", padding: "16px", fontSize: "15px", lineHeight: 1.8, marginTop: "8px", wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden", color: "#fff" }}
                             dangerouslySetInnerHTML={{ __html: q.sectionText }} />
                         )}
