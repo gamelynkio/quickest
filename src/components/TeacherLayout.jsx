@@ -19,13 +19,6 @@ export default function TeacherLayout({ children, navigate, onLogout, currentUse
             <span style={{ fontSize: "22px" }}>⚡</span>
             <span style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px" }}>QuickTest</span>
           </div>
-          <div style={{
-            marginTop: "8px", background: "rgba(255,255,255,0.1)",
-            borderRadius: "6px", padding: "4px 8px", fontSize: "11px",
-            color: "rgba(255,255,255,0.7)", display: "inline-block"
-          }}>
-            Free-Version · 30 Tests/Monat
-          </div>
         </div>
 
         <nav style={{ flex: 1, padding: "12px 0" }}>
@@ -47,17 +40,20 @@ export default function TeacherLayout({ children, navigate, onLogout, currentUse
         </nav>
 
         <div style={{ padding: "16px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-          <div style={{
-            background: "linear-gradient(135deg, #2563a8, #7c3aed)",
-            borderRadius: "10px", padding: "12px", marginBottom: "12px"
-          }}>
-            <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px" }}>⭐ Premium freischalten</div>
-            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.8)" }}>Unbegrenzte Tests, KI-Generator & Marktplatz</div>
-            <button style={{
-              marginTop: "8px", width: "100%", padding: "6px",
-              background: "#fff", color: "#1e3a5f", border: "none",
-              borderRadius: "6px", fontSize: "12px", fontWeight: 700, cursor: "pointer"
-            }}>Jetzt upgraden</button>
+          {/* Premium-Box — versteckt für Demo-Zwecke, bleibt im Code */}
+          <div style={{ display: "none" }}>
+            <div style={{
+              background: "linear-gradient(135deg, #2563a8, #7c3aed)",
+              borderRadius: "10px", padding: "12px", marginBottom: "12px"
+            }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px" }}>⭐ Premium freischalten</div>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.8)" }}>Unbegrenzte Tests, KI-Generator & Marktplatz</div>
+              <button style={{
+                marginTop: "8px", width: "100%", padding: "6px",
+                background: "#fff", color: "#1e3a5f", border: "none",
+                borderRadius: "6px", fontSize: "12px", fontWeight: 700, cursor: "pointer"
+              }}>Jetzt upgraden</button>
+            </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{
