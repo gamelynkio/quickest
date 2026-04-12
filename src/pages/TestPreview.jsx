@@ -64,11 +64,11 @@ export default function TestPreview({ navigate, onLogout, currentUser, editingTe
         </div>
       );
     }
-    if (q.type === "open") {
+    if (q.type === "open" || q.type === "qa") {
       return (
         <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
           placeholder="Deine Antwort..." rows={3}
-          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", color: "#0f172a" }} />
       );
     }
     if (q.type === "flashcard") {
