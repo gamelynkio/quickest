@@ -47,39 +47,46 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
 
     // Für alle Schüler ohne Abgabe eine leere Submission erstellen
     const assignment = assignments.find(a => a.id === id);
-    if (assignment?.groups?.usernames?.length) {
-      const { data: existing } = await supabase
-        .from("submissions").select("username").eq("assignment_id", id);
-      const submittedNames = new Set((existing || []).map(s => s.username));
-      const missing = assignment.groups.usernames.filter(u => !submittedNames.has(u));
-      if (missing.length > 0) {
-        const { data: studentData } = await supabase
-          .from("students").select("id, username").in("username", missing)
-          .eq("group_id", assignment.group_id);
-        const inserts = (studentData || []).map(s => {
-          const totalPoints = assignment.question_data
-            ? assignment.question_data.reduce((sum, q) => {
-                if (q.type === "section") return sum + (q.tasks || []).reduce((ts, t) => ts + (t.questions || []).reduce((qs, tq) => qs + Number(tq.points || 0), 0), 0);
-                return sum + Number(q.points || 0);
-              }, 0)
-            : 0;
-          const gs = [...(assignment.grading_scale || [])].sort((a, b) => a.minPercent - b.minPercent);
-          const grade = gs.length > 0 ? gs[0].grade : "6";
-          return {
-            assignment_id: id,
-            student_id: s.id,
-            username: s.username,
-            answers: {},
-            score: 0,
-            total_points: totalPoints,
-            grade,
-            ai_corrections: {},
-            reviewed: true,
-            cheat_log: [],
-          };
-        });
-        if (inserts.length > 0) {
-          await supabase.from("submissions").insert(inserts);
+    if (assignment?.groups) {
+      // usernames kann als jsonb-Array oder String ankommen
+      let usernames = assignment.groups.usernames || [];
+      if (typeof usernames === "string") {
+        try { usernames = JSON.parse(usernames); } catch { usernames = []; }
+      }
+      if (usernames.length > 0) {
+        const { data: existing } = await supabase
+          .from("submissions").select("username").eq("assignment_id", id);
+        const submittedNames = new Set((existing || []).map(s => s.username));
+        const missing = usernames.filter(u => !submittedNames.has(u));
+        if (missing.length > 0) {
+          const { data: studentData } = await supabase
+            .from("students").select("id, username").in("username", missing)
+            .eq("group_id", assignment.group_id);
+          const inserts = (studentData || []).map(s => {
+            const totalPoints = assignment.question_data
+              ? assignment.question_data.reduce((sum, q) => {
+                  if (q.type === "section") return sum + (q.tasks || []).reduce((ts, t) => ts + (t.questions || []).reduce((qs, tq) => qs + Number(tq.points || 0), 0), 0);
+                  return sum + Number(q.points || 0);
+                }, 0)
+              : 0;
+            const gs = [...(assignment.grading_scale || [])].sort((a, b) => a.minPercent - b.minPercent);
+            const grade = gs.length > 0 ? gs[0].grade : "6";
+            return {
+              assignment_id: id,
+              student_id: s.id,
+              username: s.username,
+              answers: {},
+              score: 0,
+              total_points: totalPoints,
+              grade,
+              ai_corrections: {},
+              reviewed: true,
+              cheat_log: [],
+            };
+          });
+          if (inserts.length > 0) {
+            await supabase.from("submissions").insert(inserts);
+          }
         }
       }
     }
