@@ -6,8 +6,7 @@ const QUESTION_TYPES = [
   { id: "multiple_choice", label: "Multiple Choice", icon: "☑️" },
   { id: "true_false", label: "Wahr / Falsch", icon: "⚖️" },
   { id: "fill_blank", label: "Lückentext", icon: "✍️" },
-  { id: "flashcard", label: "Karteikarte (A→B)", icon: "🃏" },
-  { id: "open", label: "Offene Antwort (KI-Bewertung)", icon: "🤖" },
+  { id: "qa", label: "Frage – Antwort (KI-Bewertung)", icon: "💬" },
   { id: "assignment", label: "Zuordnungsaufgabe", icon: "🔗" },
 ];
 
@@ -16,7 +15,6 @@ const newQuestion = (type) => ({
   type, text: "", points: 1,
   options: type === "multiple_choice" ? ["", ""] : [],
   correctAnswer: null, correctAnswers: [],
-  cardFront: "", cardBack: "",
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
   solution: "", partialPoints: [], attachment: null,
 });
@@ -28,7 +26,6 @@ const newTaskQuestion = (type) => ({
   type, text: "", points: 1,
   options: type === "multiple_choice" ? ["", ""] : [],
   correctAnswer: null, correctAnswers: [],
-  cardFront: "", cardBack: "",
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
   solution: "", partialPoints: [], blanks: [], fullText: "",
 });
@@ -39,7 +36,6 @@ const newSection = () => ({
   sectionMedia: null, sectionMediaType: null, tasks: [],
 });
 
-// KI-Maßstab für eine offene Frage vorschlagen
 const suggestRubric = async (questionText, points, solution, supabaseUrl) => {
   const prompt = `Du bist ein erfahrener Schullehrer und erstellst einen Bewertungsmaßstab für die folgende offene Aufgabe.
 
@@ -101,12 +97,10 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
             style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
         </div>
       </div>
-      {/* Beispieltext / Aufgabentext */}
       <div style={{ marginBottom: "10px" }}>
         <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>📝 Beispieltext / Aufgabentext (optional)</label>
         <RichTextEditor value={localTaskText} onChange={val => { setLocalTaskText(val); onUpdate("taskText", val); }} placeholder="z.B. Beispielsatz, Erklärung oder Hinweis für diese Aufgabe..." />
       </div>
-
       {(task.questions || []).map((tq, tqIdx) => (
         <TaskQuestionEditor key={tq.id} tq={tq} tIdx={tIdx} tqIdx={tqIdx}
           onUpdate={(field, val) => onUpdateQuestion(tq.id, field, val)}
@@ -133,36 +127,27 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [localFullText, setLocalFullText] = useState(tq.fullText || "");
   const [localBlanks, setLocalBlanks] = useState(tq.blanks || []);
   const [localPoints, setLocalPoints] = useState(tq.points || 1);
-  const [localCardFront, setLocalCardFront] = useState(tq.cardFront || "");
-  const [localCardBack, setLocalCardBack] = useState(tq.cardBack || "");
-  const [localCardAlts, setLocalCardAlts] = useState(tq.cardBackAlternatives || []);
-  const [localCardFrontMedia, setLocalCardFrontMedia] = useState(tq.cardFrontMedia || null);
-  const [localCardBackMedia, setLocalCardBackMedia] = useState(tq.cardBackMedia || null);
   const [localPairs, setLocalPairs] = useState(tq.pairs?.length ? tq.pairs : [{ left: "", right: "" }]);
   const [localPartialPoints, setLocalPartialPoints] = useState(tq.partialPoints || []);
   const [suggestingRubric, setSuggestingRubric] = useState(false);
   const rubricDebounceRef = useRef(null);
 
   const localRef = useRef({});
-  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localCardFront, localCardBack, localCardAlts, localPairs, localPartialPoints, localCardFrontMedia, localCardBackMedia };
+  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localPairs, localPartialPoints };
   useEffect(() => {
     return () => {
       const s = localRef.current;
       onUpdate("text", s.localText); onUpdate("solution", s.localSolution); onUpdate("options", s.localOptions);
       onUpdate("fullText", s.localFullText); onUpdate("blanks", s.localBlanks); onUpdate("points", s.localPoints);
-      onUpdate("cardFront", s.localCardFront); onUpdate("cardBack", s.localCardBack);
-      onUpdate("cardBackAlternatives", s.localCardAlts); onUpdate("pairs", s.localPairs);
-      onUpdate("partialPoints", s.localPartialPoints);
-      onUpdate("cardFrontMedia", s.localCardFrontMedia);
-      onUpdate("cardBackMedia", s.localCardBackMedia);
+      onUpdate("pairs", s.localPairs); onUpdate("partialPoints", s.localPartialPoints);
     };
   }, []);
 
-  // Automatisch KI-Maßstab vorschlagen sobald Musterlösung eingetragen (mit Debounce)
+  // KI-Maßstab automatisch vorschlagen sobald Musterlösung eingetragen
   useEffect(() => {
-    if (tq.type !== "open") return;
+    if (tq.type !== "qa" && tq.type !== "open") return;
     if (!localSolution.trim()) return;
-    if (localPartialPoints.length > 0) return; // Bereits Kriterien vorhanden — nicht überschreiben
+    if (localPartialPoints.length > 0) return;
     clearTimeout(rubricDebounceRef.current);
     rubricDebounceRef.current = setTimeout(async () => {
       setSuggestingRubric(true);
@@ -171,16 +156,18 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
         if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); }
         if (result.solution && !localSolution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
-      } catch (e) { /* still */ }
+      } catch (e) {}
       setSuggestingRubric(false);
     }, 1500);
     return () => clearTimeout(rubricDebounceRef.current);
   }, [localSolution]);
 
+  const isQaType = tq.type === "qa" || tq.type === "open";
+
   return (
     <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: "8px", padding: "12px 14px", marginBottom: "6px", color: "#1e293b" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-        <span style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>{tIdx + 1}.{tqIdx + 1} — {QUESTION_TYPES.find(t => t.id === tq.type)?.icon} {QUESTION_TYPES.find(t => t.id === tq.type)?.label}</span>
+        <span style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>{tIdx + 1}.{tqIdx + 1} — {QUESTION_TYPES.find(t => t.id === tq.type)?.icon || "💬"} {QUESTION_TYPES.find(t => t.id === tq.type)?.label || "Frage – Antwort"}</span>
         <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
           <input type="number" min={0.5} step={0.5} value={localPoints}
             onChange={e => { setLocalPoints(Number(e.target.value)); onUpdate("points", Number(e.target.value)); }}
@@ -190,7 +177,7 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         </div>
       </div>
       <input value={localText} onChange={e => setLocalText(e.target.value)} onBlur={() => onUpdate("text", localText)}
-        placeholder="Unteraufgabe / Frage eingeben..."
+        placeholder={isQaType ? "Frage eingeben..." : "Unteraufgabe / Frage eingeben..."}
         style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
 
       {tq.type === "multiple_choice" && (
@@ -211,66 +198,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
             <button key={oi} onClick={() => { setCorrectAnswer(oi); onUpdate("correctAnswer", oi); }}
               style={{ padding: "5px 14px", border: `2px solid ${correctAnswer === oi ? "#2563a8" : "#e2e8f0"}`, borderRadius: "7px", background: correctAnswer === oi ? "#2563a8" : "#fff", color: correctAnswer === oi ? "#fff" : "#374151", fontWeight: 600, fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>
           ))}
-        </div>
-      )}
-      {tq.type === "open" && (
-        <input value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
-          placeholder="Musterlösung (optional)"
-          style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", background: "#f8fafc" }} />
-      )}
-      {tq.type === "flashcard" && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
-            <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>🃏 A-Seite</label>
-              <input value={localCardFront} onChange={e => setLocalCardFront(e.target.value)} onBlur={() => onUpdate("cardFront", localCardFront)} placeholder="z.B. der Hund" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "4px" }} />
-              {localCardFrontMedia ? (
-                <div style={{ position: "relative", display: "inline-block" }}>
-                  <img src={localCardFrontMedia} alt="" style={{ maxHeight: "60px", borderRadius: "5px", border: "1px solid #e2e8f0" }} />
-                  <button onClick={() => { setLocalCardFrontMedia(null); onUpdate("cardFrontMedia", null); }} style={{ position: "absolute", top: "-5px", right: "-5px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "16px", height: "16px", fontSize: "10px", cursor: "pointer" }}>✕</button>
-                </div>
-              ) : (
-                <label style={{ fontSize: "10px", color: "#2563a8", cursor: "pointer" }}>
-                  <span style={{ background: "#f0f7ff", border: "1px dashed #bfdbfe", borderRadius: "4px", padding: "2px 6px" }}>🖼 Bild</span>
-                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
-                    const file = e.target.files[0]; if (!file) return;
-                    const ext = file.name.split(".").pop();
-                    const path = `flashcard/${Date.now()}.${ext}`;
-                    await supabase.storage.from("test-media").upload(path, file, { upsert: true });
-                    const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
-                    setLocalCardFrontMedia(urlData.publicUrl);
-                    onUpdate("cardFrontMedia", urlData.publicUrl);
-                  }} />
-                </label>
-              )}
-            </div>
-            <div><label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "3px" }}>✅ B-Seite</label>
-              <input value={localCardBack} onChange={e => setLocalCardBack(e.target.value)} onBlur={() => onUpdate("cardBack", localCardBack)} placeholder="z.B. the dog" style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "4px" }} />
-              {localCardBackMedia ? (
-                <div style={{ position: "relative", display: "inline-block" }}>
-                  <img src={localCardBackMedia} alt="" style={{ maxHeight: "60px", borderRadius: "5px", border: "1px solid #e2e8f0" }} />
-                  <button onClick={() => { setLocalCardBackMedia(null); onUpdate("cardBackMedia", null); }} style={{ position: "absolute", top: "-5px", right: "-5px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "16px", height: "16px", fontSize: "10px", cursor: "pointer" }}>✕</button>
-                </div>
-              ) : (
-                <label style={{ fontSize: "10px", color: "#2563a8", cursor: "pointer" }}>
-                  <span style={{ background: "#f0f7ff", border: "1px dashed #bfdbfe", borderRadius: "4px", padding: "2px 6px" }}>🖼 Bild</span>
-                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
-                    const file = e.target.files[0]; if (!file) return;
-                    const ext = file.name.split(".").pop();
-                    const path = `flashcard/${Date.now()}.${ext}`;
-                    await supabase.storage.from("test-media").upload(path, file, { upsert: true });
-                    const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
-                    setLocalCardBackMedia(urlData.publicUrl);
-                    onUpdate("cardBackMedia", urlData.publicUrl);
-                  }} />
-                </label>
-              )}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Auch akzeptiert:</span>
-            {localCardAlts.map((alt, ai) => (<span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}>{alt}<button onClick={() => { const a = localCardAlts.filter((_, i) => i !== ai); setLocalCardAlts(a); onUpdate("cardBackAlternatives", a); }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "11px", padding: 0 }}>✕</button></span>))}
-            <button onClick={() => { const alt = prompt("Alternative Lösung:"); if (!alt?.trim()) return; const a = [...localCardAlts, alt.trim()]; setLocalCardAlts(a); onUpdate("cardBackAlternatives", a); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
-          </div>
         </div>
       )}
       {tq.type === "assignment" && (
@@ -306,13 +233,13 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         </div>
       )}
 
-      {/* Musterlösung & Teilbepunktung — mit KI-Maßstab Button für offene Fragen */}
-      <details style={{ marginTop: "10px" }} open={tq.type === "open"}>
-        <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: tq.type === "open" ? "#2563a8" : "#64748b", userSelect: "none", padding: "4px 0" }}>
-          📝 Musterlösung & Teilbepunktung {tq.type === "open" ? "(KI-Bewertungsmaßstab)" : ""}
+      {/* Musterlösung & Teilbepunktung */}
+      <details style={{ marginTop: "10px" }} open={isQaType}>
+        <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: isQaType ? "#2563a8" : "#64748b", userSelect: "none", padding: "4px 0" }}>
+          📝 Musterlösung & Teilbepunktung {isQaType ? "(KI-Bewertungsmaßstab)" : ""}
         </summary>
-        <div style={{ marginTop: "8px", background: tq.type === "open" ? "#f0f7ff" : "#f8fafc", borderRadius: "8px", padding: "10px", border: `1px solid ${tq.type === "open" ? "#bfdbfe" : "#e2e8f0"}` }}>
-          {tq.type === "open" && (
+        <div style={{ marginTop: "8px", background: isQaType ? "#f0f7ff" : "#f8fafc", borderRadius: "8px", padding: "10px", border: `1px solid ${isQaType ? "#bfdbfe" : "#e2e8f0"}` }}>
+          {isQaType && (
             <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: "11px", color: "#2563a8", fontWeight: 600 }}>
                 {suggestingRubric ? "⏳ KI erstellt Maßstab..." : localPartialPoints.length > 0 ? "✓ Bewertungsmaßstab hinterlegt" : "Musterlösung eingeben → KI erstellt Maßstab automatisch"}
@@ -327,15 +254,14 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
                     if (result.solution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
                   } catch (e) {}
                   setSuggestingRubric(false);
-                }}
-                  style={{ padding: "4px 10px", background: "none", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
+                }} style={{ padding: "4px 10px", background: "none", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
                   🔄 Neu vorschlagen
                 </button>
               )}
             </div>
           )}
           <textarea value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
-            placeholder={tq.type === "open" ? "Musterlösung / Erwartungshorizont (wird von KI für Bewertung genutzt)..." : "Musterlösung / Erwartungshorizont..."} rows={2}
+            placeholder={isQaType ? "Musterlösung / Erwartungshorizont (wird von KI für Bewertung genutzt)..." : "Musterlösung / Erwartungshorizont..."} rows={2}
             style={{ width: "100%", padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
           {localPartialPoints.map((p, i) => (
             <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "5px" }}>
@@ -398,7 +324,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   };
 
   const triggerAutoRubric = (q) => {
-    if (q.type !== "open") return;
+    if (q.type !== "open" && q.type !== "qa") return;
     if (!q.solution?.trim()) return;
     if ((q.partialPoints || []).length > 0) return;
     clearTimeout(rubricDebounceRef.current[q.id]);
@@ -425,10 +351,13 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const removeTaskQuestion = (sectionId, taskId, qId) => setQuestions(prev => prev.map(q => q.id === sectionId ? { ...q, tasks: (q.tasks || []).map(t => t.id === taskId ? { ...t, questions: t.questions.filter(tq => tq.id !== qId) } : t) } : q));
   const moveQuestion = (index, dir) => { const next = [...questions]; const swap = index + dir; if (swap < 0 || swap >= next.length) return; [next[index], next[swap]] = [next[swap], next[index]]; setQuestions(next); };
 
-  const totalPoints = questions.filter(q => q.type !== "section").reduce((sum, q) => sum + Number(q.points || 0), 0);
-  const getSectionPoints = (sectionIndex) => { let sum = 0; for (let i = sectionIndex + 1; i < questions.length; i++) { if (questions[i].type === "section") break; sum += Number(questions[i].points || 0); } return sum; };
-  const getQuestionNumber = (index) => questions.slice(0, index).filter(q => q.type !== "section").length + 1;
-  const hasOpenQuestions = questions.some(q => { if (q.type === "open") return true; if (q.type === "section") return (q.tasks || []).some(t => (t.questions || []).some(tq => tq.type === "open")); return false; });
+  const getSectionPoints = (sectionIndex) => {
+    const section = questions[sectionIndex];
+    if (section?.type !== "section") return 0;
+    return (section.tasks || []).reduce((sum, t) => sum + (t.questions || []).reduce((s, tq) => s + Number(tq.points || 0), 0), 0);
+  };
+  const totalPoints = questions.filter(q => q.type === "section").reduce((sum, q) => sum + getSectionPoints(questions.indexOf(q)), 0);
+  const hasOpenQuestions = questions.some(q => q.type === "section" && (q.tasks || []).some(t => (t.questions || []).some(tq => tq.type === "open" || tq.type === "qa")));
 
   const handleImport = async (e) => {
     const file = e.target.files[0]; if (!file) return;
@@ -436,7 +365,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     try {
       const ext = file.name.split(".").pop().toLowerCase();
       let contentBlocks = [];
-      const PROMPT = `Analysiere diesen Test/diese Prüfungsarbeit und extrahiere alle Aufgaben. Gib das Ergebnis als reines JSON-Array zurück (keine Markdown-Backticks, kein Text drumherum). Jede Aufgabe hat folgende Felder: type, text, points, options, correctAnswer, pairs, cardFront, cardBack, solution, partialPoints:[]. Erkenne den Typ automatisch.`;
+      const PROMPT = `Analysiere diesen Test/diese Prüfungsarbeit und extrahiere alle Aufgaben. Gib das Ergebnis als reines JSON-Array zurück (keine Markdown-Backticks, kein Text drumherum). Jede Aufgabe hat folgende Felder: type, text, points, options, correctAnswer, pairs, solution, partialPoints:[]. Erkenne den Typ automatisch. Verwende 'qa' statt 'open' für offene Antworten.`;
       if (ext === "docx") {
         const arrayBuffer = await file.arrayBuffer();
         const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
@@ -455,7 +384,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
       const rawText = await response.text(); if (!response.ok) throw new Error(`Edge Function Fehler ${response.status}`);
       const data = JSON.parse(rawText); const text = data.content?.find(b => b.type === "text")?.text || "";
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); if (!Array.isArray(parsed)) throw new Error("Kein Array erhalten");
-      setQuestions(prev => [...prev, ...parsed.map(q => ({ id: Date.now() + Math.random(), type: q.type || "open", text: q.text || "", points: Number(q.points) || 1, options: q.options || [], correctAnswer: q.correctAnswer ?? null, pairs: q.pairs || [], cardFront: q.cardFront || "", cardBack: q.cardBack || "", solution: q.solution || "", partialPoints: [], attachment: null }))]);
+      setQuestions(prev => [...prev, ...parsed.map(q => ({ id: Date.now() + Math.random(), type: q.type || "qa", text: q.text || "", points: Number(q.points) || 1, options: q.options || [], correctAnswer: q.correctAnswer ?? null, pairs: q.pairs || [], solution: q.solution || "", partialPoints: [], attachment: null }))]);
       if (!title) setTitle(file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
     } catch (err) { setImportError(`Fehler beim Importieren: ${err.message}`); }
     finally { setImporting(false); e.target.value = ""; }
@@ -483,7 +412,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
           <div>
             <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: 0 }}>{editingTest ? "Vorlage bearbeiten" : "Neue Vorlage erstellen"}</h1>
-            <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}><strong>{totalPoints} Punkte</strong> · {questions.filter(q => q.type !== "section").length} Aufgaben</p>
+            <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}><strong>{totalPoints} Punkte</strong></p>
           </div>
           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
             <label style={{ padding: "10px 16px", background: importing ? "#f1f5f9" : "#f0f7ff", color: importing ? "#94a3b8" : "#2563a8", border: "1px solid #bfdbfe", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: importing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
@@ -516,7 +445,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
             🛡️ Anti-Cheat als Standard aktivieren
           </label>
 
-          {/* KI-Bewertungsmodus */}
           {hasOpenQuestions && (
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #e2e8f0" }}>
               <label style={{ fontSize: "13px", fontWeight: 700, color: "#374151", display: "block", marginBottom: "10px" }}>🤖 KI-Bewertungsmodus für offene Antworten</label>
@@ -544,233 +472,47 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
           </details>
         </div>
 
-        {/* Questions */}
+        {/* Sections */}
         {questions.map((q, index) => {
-          if (q.type === "section") {
-            const pts = getSectionPoints(index);
-            return (
-              <div key={q.id} style={{ marginBottom: "16px" }}>
-                <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "14px", padding: "20px 24px", color: "#fff" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                        <button onClick={() => moveQuestion(index, -1)} disabled={index === 0} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", color: index === 0 ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.7)", fontSize: "12px", padding: 0 }}>▲</button>
-                        <button onClick={() => moveQuestion(index, 1)} disabled={index === questions.length - 1} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.7)", fontSize: "12px", padding: 0 }}>▼</button>
-                      </div>
-                      <span style={{ fontSize: "16px" }}>📂</span>
-                      <span style={{ fontSize: "13px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "0.5px" }}>ABSCHNITT</span>
-                      {pts > 0 && <span style={{ fontSize: "12px", background: "rgba(255,255,255,0.15)", borderRadius: "6px", padding: "2px 8px" }}>{pts} Pkt.</span>}
-                    </div>
-                    <button onClick={() => removeQuestion(q.id)} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "7px", padding: "5px 12px", cursor: "pointer", fontSize: "13px" }}>✕ Entfernen</button>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Abschnittstitel</label><input value={q.sectionTitle || ""} onChange={e => updateQuestion(q.id, "sectionTitle", e.target.value)} placeholder="z.B. Teil A – Leseverstehen" style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} /></div>
-                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Anweisung (optional)</label><input value={q.sectionInstruction || ""} onChange={e => updateQuestion(q.id, "sectionInstruction", e.target.value)} placeholder="z.B. Lies den Text und beantworte die Fragen." style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} /></div>
-                  </div>
-                  <div style={{ marginBottom: "12px" }}>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>📝 Text / Lesetext (optional)</label>
-                    <RichTextEditor value={q.sectionText || ""} onChange={val => updateQuestion(q.id, "sectionText", val)} placeholder="Füge hier einen Lesetext, Gedicht, Dialog o.ä. ein..." />
-                  </div>
-                  <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", marginBottom: "16px" }}>
-                    <span style={{ background: "rgba(255,255,255,0.15)", border: "1px dashed rgba(255,255,255,0.4)", borderRadius: "6px", padding: "5px 10px" }}>🎬 Bild / Audio / Video anhängen</span>
-                    <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }} onChange={e => { const file = e.target.files[0]; if (!file) return; const t = file.type.startsWith("image") ? "image" : file.type.startsWith("audio") ? "audio" : "video"; updateQuestion(q.id, "sectionMedia", file.name); updateQuestion(q.id, "sectionMediaType", t); }} />
-                    {q.sectionMedia && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)" }}>✓ {q.sectionMedia}</span>}
-                  </label>
-                  {(q.tasks || []).map((task, tIdx) => (
-                    <TaskEditor key={task.id} task={task} tIdx={tIdx} sectionId={q.id}
-                      onUpdate={(field, val) => updateTask(q.id, task.id, field, val)}
-                      onRemove={() => removeTask(q.id, task.id)}
-                      onAddQuestion={(type) => addTaskQuestion(q.id, task.id, type)}
-                      onUpdateQuestion={(qId, field, val) => updateTaskQuestion(q.id, task.id, qId, field, val)}
-                      onRemoveQuestion={(qId) => removeTaskQuestion(q.id, task.id, qId)} />
-                  ))}
-                  <button onClick={() => addTask(q.id)} style={{ width: "100%", padding: "10px", background: "rgba(255,255,255,0.1)", border: "2px dashed rgba(255,255,255,0.3)", borderRadius: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600, fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>+ Aufgabe zum Abschnitt hinzufügen</button>
-                </div>
-              </div>
-            );
-          }
-
+          if (q.type !== "section") return null;
+          const pts = getSectionPoints(index);
           return (
-            <div key={q.id} style={{ background: "#fff", borderRadius: "16px", padding: "22px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                    <button onClick={() => moveQuestion(index, -1)} disabled={index === 0} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", color: index === 0 ? "#e2e8f0" : "#94a3b8", fontSize: "12px", padding: 0 }}>▲</button>
-                    <button onClick={() => moveQuestion(index, 1)} disabled={index === questions.length - 1} style={{ background: "none", border: "none", cursor: index === questions.length - 1 ? "default" : "pointer", color: index === questions.length - 1 ? "#e2e8f0" : "#94a3b8", fontSize: "12px", padding: 0 }}>▼</button>
-                  </div>
-                  <span style={{ background: "#2563a8", color: "#fff", borderRadius: "8px", padding: "3px 10px", fontSize: "13px", fontWeight: 700 }}>{getQuestionNumber(index)}</span>
-                  <span style={{ fontSize: "13px", color: "#64748b" }}>{QUESTION_TYPES.find(t => t.id === q.type)?.icon} {QUESTION_TYPES.find(t => t.id === q.type)?.label}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <label style={{ fontSize: "13px", color: "#64748b" }}>Punkte:</label>
-                  <input type="number" value={q.points} min={0.5} step={0.5} onChange={e => updateQuestion(q.id, "points", e.target.value)} style={{ width: "56px", padding: "5px 8px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", fontWeight: 700, textAlign: "center" }} />
-                  <button onClick={() => removeQuestion(q.id)} style={{ background: "#fef2f2", border: "none", color: "#dc2626", borderRadius: "7px", padding: "5px 10px", cursor: "pointer" }}>✕</button>
-                </div>
-              </div>
-
-              <textarea value={q.text} onChange={e => updateQuestion(q.id, "text", e.target.value)} placeholder="Aufgabenstellung eingeben..." rows={2}
-                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} />
-
-              {q.type === "multiple_choice" && (
-                <div style={{ marginTop: "12px" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "8px" }}>
-                    {q.options.map((opt, i) => { const correctAnswers = q.correctAnswers || (q.correctAnswer != null ? [q.correctAnswer] : []); const isCorrect = correctAnswers.includes(i); return (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <input type="checkbox" checked={isCorrect} onChange={() => { const cur = q.correctAnswers || (q.correctAnswer != null ? [q.correctAnswer] : []); const next = isCorrect ? cur.filter(x => x !== i) : [...cur, i]; updateQuestion(q.id, "correctAnswers", next); }} style={{ accentColor: "#2563a8", width: "16px", height: "16px", flexShrink: 0 }} />
-                        <input value={opt} onChange={e => { const opts = [...q.options]; opts[i] = e.target.value; updateQuestion(q.id, "options", opts); }} placeholder={`Antwort ${String.fromCharCode(65 + i)}`} style={{ flex: 1, padding: "7px 10px", border: `1px solid ${isCorrect ? "#2563a8" : "#e5e7eb"}`, borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", background: isCorrect ? "#eff6ff" : "#fff" }} />
-                        {q.options.length > 2 && <button onClick={() => { const opts = q.options.filter((_, j) => j !== i); const cur = (q.correctAnswers || []).filter(x => x !== i).map(x => x > i ? x - 1 : x); updateQuestion(q.id, "options", opts); updateQuestion(q.id, "correctAnswers", cur); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px", padding: "0 4px", flexShrink: 0 }}>×</button>}
-                      </div>
-                    ); })}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <p style={{ fontSize: "11px", color: "#94a3b8", margin: 0 }}>☑ Richtige Antwort(en) ankreuzen — mehrere möglich</p>
-                    <button onClick={() => updateQuestion(q.id, "options", [...q.options, ""])} style={{ padding: "5px 12px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>+ Antwort hinzufügen</button>
-                  </div>
-                </div>
-              )}
-              {q.type === "true_false" && (
-                <div style={{ marginTop: "12px", display: "flex", gap: "10px" }}>
-                  {["Wahr", "Falsch"].map((opt, i) => (<button key={i} onClick={() => updateQuestion(q.id, "correctAnswer", i)} style={{ padding: "9px 24px", border: `2px solid ${q.correctAnswer === i ? "#2563a8" : "#e5e7eb"}`, borderRadius: "9px", background: q.correctAnswer === i ? "#2563a8" : "#fff", color: q.correctAnswer === i ? "#fff" : "#374151", fontWeight: 600, fontSize: "14px", cursor: "pointer", fontFamily: "inherit" }}>{opt}</button>))}
-                </div>
-              )}
-              {q.type === "flashcard" && (
-                <div style={{ marginTop: "12px" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
-                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>🃏 A-Seite (Vorgabe)</label>
-                      <input value={q.cardFront || ""} onChange={e => updateQuestion(q.id, "cardFront", e.target.value)} placeholder="z.B. der Hund" style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", marginBottom: "6px" }} />
-                      {q.cardFrontMedia ? (
-                        <div style={{ position: "relative", display: "inline-block" }}>
-                          <img src={q.cardFrontMedia} alt="" style={{ maxHeight: "80px", borderRadius: "6px", border: "1px solid #e2e8f0" }} />
-                          <button onClick={() => updateQuestion(q.id, "cardFrontMedia", null)} style={{ position: "absolute", top: "-6px", right: "-6px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "18px", height: "18px", fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-                        </div>
-                      ) : (
-                        <label style={{ fontSize: "11px", color: "#2563a8", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
-                          <span style={{ background: "#f0f7ff", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "3px 8px" }}>🖼 Bild hochladen</span>
-                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
-                            const file = e.target.files[0]; if (!file) return;
-                            const ext = file.name.split(".").pop();
-                            const path = `flashcard/${Date.now()}.${ext}`;
-                            await supabase.storage.from("test-media").upload(path, file, { upsert: true });
-                            const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
-                            updateQuestion(q.id, "cardFrontMedia", urlData.publicUrl);
-                          }} />
-                        </label>
-                      )}
+            <div key={q.id} style={{ marginBottom: "16px" }}>
+              <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "14px", padding: "20px 24px", color: "#fff" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                      <button onClick={() => moveQuestion(index, -1)} disabled={index === 0} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", color: index === 0 ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.7)", fontSize: "12px", padding: 0 }}>▲</button>
+                      <button onClick={() => moveQuestion(index, 1)} disabled={index === questions.length - 1} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.7)", fontSize: "12px", padding: 0 }}>▼</button>
                     </div>
-                    <div><label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>✅ B-Seite (Hauptantwort)</label>
-                      <input value={q.cardBack || ""} onChange={e => updateQuestion(q.id, "cardBack", e.target.value)} placeholder="z.B. the dog" style={{ width: "100%", padding: "9px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", marginBottom: "6px" }} />
-                      {q.cardBackMedia ? (
-                        <div style={{ position: "relative", display: "inline-block" }}>
-                          <img src={q.cardBackMedia} alt="" style={{ maxHeight: "80px", borderRadius: "6px", border: "1px solid #e2e8f0" }} />
-                          <button onClick={() => updateQuestion(q.id, "cardBackMedia", null)} style={{ position: "absolute", top: "-6px", right: "-6px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: "18px", height: "18px", fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-                        </div>
-                      ) : (
-                        <label style={{ fontSize: "11px", color: "#2563a8", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
-                          <span style={{ background: "#f0f7ff", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "3px 8px" }}>🖼 Bild hochladen</span>
-                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
-                            const file = e.target.files[0]; if (!file) return;
-                            const ext = file.name.split(".").pop();
-                            const path = `flashcard/${Date.now()}.${ext}`;
-                            await supabase.storage.from("test-media").upload(path, file, { upsert: true });
-                            const { data: urlData } = supabase.storage.from("test-media").getPublicUrl(path);
-                            updateQuestion(q.id, "cardBackMedia", urlData.publicUrl);
-                          }} />
-                        </label>
-                      )}
-                    </div>
+                    <span style={{ fontSize: "16px" }}>📂</span>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "0.5px" }}>ABSCHNITT</span>
+                    {pts > 0 && <span style={{ fontSize: "12px", background: "rgba(255,255,255,0.15)", borderRadius: "6px", padding: "2px 8px" }}>{pts} Pkt.</span>}
                   </div>
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-                    <span style={{ fontSize: "12px", color: "#94a3b8" }}>Auch akzeptiert:</span>
-                    {(q.cardBackAlternatives || []).map((alt, ai) => (<span key={ai} style={{ background: "#e0f2fe", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>{alt}<button onClick={() => updateQuestion(q.id, "cardBackAlternatives", (q.cardBackAlternatives || []).filter((_, i) => i !== ai))} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "12px", padding: 0 }}>✕</button></span>))}
-                    <button onClick={() => { const alt = prompt("Alternative Lösung eingeben:"); if (!alt?.trim()) return; updateQuestion(q.id, "cardBackAlternatives", [...(q.cardBackAlternatives || []), alt.trim()]); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "5px", padding: "2px 8px", cursor: "pointer" }}>+ Alternative</button>
-                  </div>
+                  <button onClick={() => removeQuestion(q.id)} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "7px", padding: "5px 12px", cursor: "pointer", fontSize: "13px" }}>✕ Entfernen</button>
                 </div>
-              )}
-              {q.type === "assignment" && (
-                <div style={{ marginTop: "12px" }}>
-                  {q.pairs.map((pair, i) => (
-                    <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
-                      <input value={pair.left} placeholder={`Begriff ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], left: e.target.value }; updateQuestion(q.id, "pairs", p); }} style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
-                      <span style={{ color: "#94a3b8" }}>→</span>
-                      <input value={pair.right} placeholder={`Definition ${i + 1}`} onChange={e => { const p = [...q.pairs]; p[i] = { ...p[i], right: e.target.value }; updateQuestion(q.id, "pairs", p); }} style={{ flex: 1, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit" }} />
-                      {q.pairs.length > 1 && <button onClick={() => updateQuestion(q.id, "pairs", q.pairs.filter((_, pi) => pi !== i))} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>}
-                    </div>
-                  ))}
-                  <button onClick={() => updateQuestion(q.id, "pairs", [...q.pairs, { left: "", right: "" }])} style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer" }}>+ Paar hinzufügen</button>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                  <div><label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Abschnittstitel</label><input value={q.sectionTitle || ""} onChange={e => updateQuestion(q.id, "sectionTitle", e.target.value)} placeholder="z.B. Teil A – Leseverstehen" style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} /></div>
+                  <div><label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Anweisung (optional)</label><input value={q.sectionInstruction || ""} onChange={e => updateQuestion(q.id, "sectionInstruction", e.target.value)} placeholder="z.B. Lies den Text und beantworte die Fragen." style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} /></div>
                 </div>
-              )}
-              {q.type === "fill_blank" && (
-                <div style={{ marginTop: "12px" }}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Vollständiger Text — markiere Wörter um Lücken zu erstellen</label>
-                  <textarea value={q.fullText || ""} onChange={e => updateQuestion(q.id, "fullText", e.target.value)}
-                    onMouseUp={e => { const sel = window.getSelection(); const selected = sel?.toString().trim(); if (!selected || !q.fullText) return; const text = q.fullText; const start = text.indexOf(selected); if (start === -1) return; const newText = text.slice(0, start) + "[Lücke]" + text.slice(start + selected.length); const newBlanks = [...(q.blanks || []), { solution: selected, alternatives: [] }]; updateQuestion(q.id, "fullText", newText); updateQuestion(q.id, "blanks", newBlanks); updateQuestion(q.id, "text", newText); sel.removeAllRanges(); }}
-                    placeholder="z.B. Tom _____ to school every day." rows={4}
-                    style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} />
-                  <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>💡 Text eingeben → Wort mit Maus markieren → Lücke wird automatisch erstellt</div>
-                  {(q.fullText || "").includes("[Lücke]") && (
-                    <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px 14px", marginTop: "8px", marginBottom: "10px", fontSize: "13px", color: "#1e3a5f", lineHeight: 1.8 }}>
-                      <strong style={{ fontSize: "11px", color: "#64748b", display: "block", marginBottom: "4px" }}>VORSCHAU:</strong>
-                      {(q.fullText || "").split("[Lücke]").map((part, i, arr) => (<span key={i}>{part}{i < arr.length - 1 && <span style={{ display: "inline-block", minWidth: "80px", borderBottom: "2px solid #2563a8", margin: "0 4px" }}>&nbsp;</span>}</span>))}
-                    </div>
-                  )}
-                  {(q.blanks || []).map((blank, bi) => (
-                    <div key={bi} style={{ background: "#f8fafc", borderRadius: "8px", padding: "10px 14px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span style={{ background: "#2563a8", color: "#fff", borderRadius: "5px", padding: "2px 8px", fontSize: "12px", fontWeight: 700 }}>Lücke {bi + 1}</span>
-                        <input value={blank.solution} onChange={e => { const nb = [...(q.blanks || [])]; nb[bi] = { ...nb[bi], solution: e.target.value }; updateQuestion(q.id, "blanks", nb); }} placeholder="Hauptlösung" style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }} />
-                        <button onClick={() => { const nb = (q.blanks || []).filter((_, i) => i !== bi); let count = 0; const newText = (q.fullText || "").replace(/\[Lücke\]/g, match => { count++; return count - 1 === bi ? blank.solution : match; }); updateQuestion(q.id, "blanks", nb); updateQuestion(q.id, "fullText", newText); updateQuestion(q.id, "text", newText); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>📝 Text / Lesetext (optional)</label>
+                  <RichTextEditor value={q.sectionText || ""} onChange={val => updateQuestion(q.id, "sectionText", val)} placeholder="Füge hier einen Lesetext, Gedicht, Dialog o.ä. ein..." />
                 </div>
-              )}
-
-              {/* Musterlösung & Teilbepunktung — mit KI-Maßstab Button für offene Fragen */}
-              <details style={{ marginTop: "12px" }} open={q.type === "open"}>
-                <summary style={{ cursor: "pointer", fontSize: "12px", fontWeight: 600, color: q.type === "open" ? "#2563a8" : "#64748b", userSelect: "none", padding: "6px 0" }}>
-                  📝 {q.type === "open" ? "Musterlösung & Teilbepunktung (KI-Bewertungsmaßstab)" : "Lösung / Erwartungshorizont & Teilbepunktung"}
-                </summary>
-                <div style={{ marginTop: "10px", background: q.type === "open" ? "#f0f7ff" : "#f8fafc", borderRadius: "10px", padding: "14px", border: `1px solid ${q.type === "open" ? "#bfdbfe" : "#e2e8f0"}` }}>
-                  {q.type === "open" && (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                      <span style={{ fontSize: "12px", color: "#2563a8", fontWeight: 600 }}>
-                        {suggestingRubricId === q.id ? "⏳ KI erstellt Maßstab..." : (q.partialPoints || []).length > 0 ? "✓ Bewertungsmaßstab hinterlegt — KI folgt diesen Kriterien" : "Musterlösung eingeben → KI erstellt Maßstab automatisch"}
-                      </span>
-                      {(q.partialPoints || []).length > 0 && suggestingRubricId !== q.id && (
-                        <button onClick={() => handleSuggestRubricForQuestion(q)}
-                          style={{ padding: "5px 12px", background: "none", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "7px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
-                          🔄 Neu vorschlagen
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  <div style={{ marginBottom: "10px" }}>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>Musterlösung</label>
-                    <textarea value={q.solution || ""} onChange={e => updateQuestion(q.id, "solution", e.target.value)}
-                      placeholder={q.type === "open" ? "Musterlösung / Erwartungshorizont (wird von KI für Bewertung genutzt)..." : "z.B. Der Schüler soll erklären, dass..."} rows={3}
-                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: "7px", fontSize: "13px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Teilbepunktung</label>
-                    {(q.partialPoints || []).map((p, i) => (
-                      <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
-                        <input type="number" value={p.points} min={0} max={q.points} step={0.5} onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], points: Number(e.target.value) }; updateQuestion(q.id, "partialPoints", pp); }} style={{ width: "60px", padding: "6px 8px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", textAlign: "center" }} />
-                        <span style={{ fontSize: "12px", color: "#94a3b8" }}>Pkt. für:</span>
-                        <input value={p.description} placeholder="z.B. Nennung des Begriffs" onChange={e => { const pp = [...(q.partialPoints || [])]; pp[i] = { ...pp[i], description: e.target.value }; updateQuestion(q.id, "partialPoints", pp); }} style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }} />
-                        <button onClick={() => updateQuestion(q.id, "partialPoints", (q.partialPoints || []).filter((_, pi) => pi !== i))} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>✕</button>
-                      </div>
-                    ))}
-                    <button onClick={() => updateQuestion(q.id, "partialPoints", [...(q.partialPoints || []), { points: 0.5, description: "" }])} style={{ fontSize: "12px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>+ Teilpunkt hinzufügen</button>
-                  </div>
-                </div>
-              </details>
-
-              <div style={{ marginTop: "12px" }}>
-                <label style={{ fontSize: "12px", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "6px", padding: "5px 10px" }}>📎 Datei anhängen</span>
-                  <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }} onChange={e => updateQuestion(q.id, "attachment", e.target.files[0]?.name)} />
-                  {q.attachment && <span style={{ fontSize: "12px", color: "#16a34a" }}>✓ {q.attachment}</span>}
+                <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", marginBottom: "16px" }}>
+                  <span style={{ background: "rgba(255,255,255,0.15)", border: "1px dashed rgba(255,255,255,0.4)", borderRadius: "6px", padding: "5px 10px" }}>🎬 Bild / Audio / Video anhängen</span>
+                  <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }} onChange={e => { const file = e.target.files[0]; if (!file) return; const t = file.type.startsWith("image") ? "image" : file.type.startsWith("audio") ? "audio" : "video"; updateQuestion(q.id, "sectionMedia", file.name); updateQuestion(q.id, "sectionMediaType", t); }} />
+                  {q.sectionMedia && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)" }}>✓ {q.sectionMedia}</span>}
                 </label>
+                {(q.tasks || []).map((task, tIdx) => (
+                  <TaskEditor key={task.id} task={task} tIdx={tIdx} sectionId={q.id}
+                    onUpdate={(field, val) => updateTask(q.id, task.id, field, val)}
+                    onRemove={() => removeTask(q.id, task.id)}
+                    onAddQuestion={(type) => addTaskQuestion(q.id, task.id, type)}
+                    onUpdateQuestion={(qId, field, val) => updateTaskQuestion(q.id, task.id, qId, field, val)}
+                    onRemoveQuestion={(qId) => removeTaskQuestion(q.id, task.id, qId)} />
+                ))}
+                <button onClick={() => addTask(q.id)} style={{ width: "100%", padding: "10px", background: "rgba(255,255,255,0.1)", border: "2px dashed rgba(255,255,255,0.3)", borderRadius: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600, fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>+ Aufgabe zum Abschnitt hinzufügen</button>
               </div>
             </div>
           );
