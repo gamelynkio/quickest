@@ -201,11 +201,9 @@ const safeStorage = {
   },
 };
 
-function EndedRedirect({ onFinish, onSubmit, submitted }) {
+function EndedRedirect({ onFinish }) {
   useEffect(() => {
-    // Abgeben falls noch nicht geschehen
-    if (!submitted && onSubmit) onSubmit();
-    const t = setTimeout(() => onFinish(), 3500);
+    const t = setTimeout(() => onFinish(), 4000);
     return () => clearTimeout(t);
   }, []);
   return null;
@@ -255,11 +253,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     if (data) {
       // Wenn Test bereits beendet → direkt Ended-Screen zeigen (z.B. nach F5)
       if (data.status === "beendet") {
-        const { data: existingSub } = await supabase.from("submissions").select("id").eq("assignment_id", data.id).eq("username", currentUser.username).maybeSingle();
-        if (!existingSub) {
-          setAssignment(data);
-          setIsEnded(true);
-        }
+        setAssignment(data);
+        setIsEnded(true);
         setLoading(false);
         return;
       }
@@ -385,7 +380,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (data.status === "beendet") {
         clearInterval(interval);
         setIsEnded(true);
-        if (handleSubmitRef.current) handleSubmitRef.current();
         return;
       }
       setIsPaused(!!data.paused_at);
@@ -414,7 +408,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (data.status === "beendet") {
         clearInterval(poll);
         setIsEnded(true);
-        if (handleSubmitRef.current && !submitted) handleSubmitRef.current();
       }
     }, 2000);
     return () => clearInterval(poll);
@@ -1086,7 +1079,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
             <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)" }}>
               Du wirst gleich zu deinem Dashboard weitergeleitet...
             </div>
-            <EndedRedirect onFinish={onFinish} onSubmit={handleSubmitRef.current} submitted={submitted} />
+            <EndedRedirect onFinish={onFinish} />
           </div>
         </div>
       )}
