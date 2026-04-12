@@ -212,6 +212,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [submitting, setSubmitting] = useState(false);
   const [lobbyWaiting, setLobbyWaiting] = useState(false);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
   const [sebRequired, setSebRequired] = useState(false);
 
   // Anti-cheat
@@ -343,7 +344,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const interval = setInterval(async () => {
       const { data } = await supabase
         .from("assignments")
-        .select("lobby_started_at")
+        .select("lobby_started_at, paused_at")
         .eq("id", assignment.id)
         .single();
       if (data?.lobby_started_at) {
@@ -353,12 +354,24 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         const remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
         setTimeLeft(remaining);
       }
+      setIsPaused(!!data?.paused_at);
       const { data: presenceData } = await supabase
         .from("lobby_presence").select("username").eq("assignment_id", assignment.id);
       setLobbyPlayerCount(presenceData?.length || 0);
     }, 2000);
     return () => clearInterval(interval);
   }, [lobbyWaiting, assignment]);
+
+  // Poll paused_at during active test
+  useEffect(() => {
+    if (submitted || loading || lobbyWaiting || !assignment) return;
+    const poll = setInterval(async () => {
+      const { data } = await supabase
+        .from("assignments").select("paused_at").eq("id", assignment.id).single();
+      setIsPaused(!!data?.paused_at);
+    }, 3000);
+    return () => clearInterval(poll);
+  }, [submitted, loading, lobbyWaiting, assignment]);
 
   useEffect(() => {
     if (submitted || loading || lobbyWaiting || !assignment) return;
@@ -992,6 +1005,25 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           Test abgeben
         </button>
       </div>
+
+      {/* PAUSE OVERLAY */}
+      {isPaused && !submitted && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.88)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 500, backdropFilter: "blur(4px)" }}>
+          <div style={{ textAlign: "center", color: "#fff", padding: "40px" }}>
+            <div style={{ fontSize: "64px", marginBottom: "20px" }}>⏸</div>
+            <div style={{ fontSize: "28px", fontWeight: 800, marginBottom: "10px" }}>Test pausiert</div>
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.65)", maxWidth: "320px", lineHeight: 1.6 }}>
+              Deine Lehrkraft hat den Test kurz angehalten. Bitte warte — er wird gleich fortgesetzt.
+            </div>
+            <div style={{ marginTop: "28px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#60a5fa", animation: "qtpulse 1.5s ease-in-out infinite" }} />
+              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#60a5fa", animation: "qtpulse 1.5s ease-in-out 0.3s infinite" }} />
+              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#60a5fa", animation: "qtpulse 1.5s ease-in-out 0.6s infinite" }} />
+            </div>
+          </div>
+          <style>{`@keyframes qtpulse { 0%,100%{opacity:0.3;transform:scale(0.8)} 50%{opacity:1;transform:scale(1.3)} }`}</style>
+        </div>
+      )}
 
       {showCheatWarning && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: "20px" }}>
