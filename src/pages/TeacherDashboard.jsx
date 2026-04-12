@@ -42,7 +42,43 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   };
 
   const endAssignment = async (id) => {
+    // Status auf beendet setzen
     await supabase.from("assignments").update({ status: "beendet" }).eq("id", id);
+
+    // Für alle Schüler ohne Abgabe eine leere Submission erstellen
+    const assignment = assignments.find(a => a.id === id);
+    if (assignment?.groups?.usernames?.length) {
+      const { data: existing } = await supabase
+        .from("submissions").select("username").eq("assignment_id", id);
+      const submittedNames = new Set((existing || []).map(s => s.username));
+      const missing = assignment.groups.usernames.filter(u => !submittedNames.has(u));
+      if (missing.length > 0) {
+        const { data: studentData } = await supabase
+          .from("students").select("id, username").in("username", missing)
+          .eq("group_id", assignment.group_id);
+        const inserts = (studentData || []).map(s => ({
+          assignment_id: id,
+          student_id: s.id,
+          username: s.username,
+          answers: {},
+          score: 0,
+          total_points: assignment.question_data
+            ? assignment.question_data.reduce((sum, q) => {
+                if (q.type === "section") return sum + (q.tasks || []).reduce((ts, t) => ts + (t.questions || []).reduce((qs, tq) => qs + Number(tq.points || 0), 0), 0);
+                return sum + Number(q.points || 0);
+              }, 0)
+            : 0,
+          grade: null,
+          ai_corrections: {},
+          reviewed: false,
+          cheat_log: [],
+        }));
+        if (inserts.length > 0) {
+          await supabase.from("submissions").insert(inserts);
+        }
+      }
+    }
+
     setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "beendet" } : a));
     setEndConfirm(null);
   };
