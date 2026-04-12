@@ -233,47 +233,66 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         </div>
       )}
 
-      {/* Musterlösung & Teilbepunktung */}
-      <details style={{ marginTop: "10px" }} open={isQaType}>
-        <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: isQaType ? "#2563a8" : "#64748b", userSelect: "none", padding: "4px 0" }}>
-          📝 Musterlösung & Teilbepunktung {isQaType ? "(KI-Bewertungsmaßstab)" : ""}
-        </summary>
-        <div style={{ marginTop: "8px", background: isQaType ? "#f0f7ff" : "#f8fafc", borderRadius: "8px", padding: "10px", border: `1px solid ${isQaType ? "#bfdbfe" : "#e2e8f0"}` }}>
-          {isQaType && (
-            <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "11px", color: "#2563a8", fontWeight: 600 }}>
-                {suggestingRubric ? "⏳ KI erstellt Maßstab..." : localPartialPoints.length > 0 ? "✓ Bewertungsmaßstab hinterlegt" : "Musterlösung eingeben → KI erstellt Maßstab automatisch"}
-              </span>
-              {localPartialPoints.length > 0 && !suggestingRubric && (
-                <button onClick={async () => {
-                  setSuggestingRubric(true);
-                  try {
-                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-                    const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
-                    if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); }
-                    if (result.solution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
-                  } catch (e) {}
-                  setSuggestingRubric(false);
-                }} style={{ padding: "4px 10px", background: "none", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
-                  🔄 Neu vorschlagen
-                </button>
-              )}
-            </div>
-          )}
+      {/* Musterlösung & Teilbepunktung — nur für qa/open */}
+      {isQaType && (
+        <div style={{ marginTop: "10px", background: "#f0f7ff", borderRadius: "8px", padding: "10px", border: "1px solid #bfdbfe" }}>
+          <div style={{ marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: "11px", color: "#2563a8", fontWeight: 600 }}>
+              📝 {suggestingRubric ? "⏳ KI erstellt Maßstab..." : localPartialPoints.length > 0 ? "✓ Bewertungsmaßstab hinterlegt" : "Musterlösung & Bewertungsmaßstab (KI-Bewertung)"}
+            </span>
+            {localPartialPoints.length > 0 && !suggestingRubric && (
+              <button onClick={async () => {
+                setSuggestingRubric(true);
+                try {
+                  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                  const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
+                  if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); }
+                  if (result.solution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
+                } catch (e) {}
+                setSuggestingRubric(false);
+              }} style={{ padding: "3px 8px", background: "none", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "10px", fontWeight: 600, cursor: "pointer" }}>
+                🔄 Neu vorschlagen
+              </button>
+            )}
+          </div>
           <textarea value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
-            placeholder={isQaType ? "Musterlösung / Erwartungshorizont (wird von KI für Bewertung genutzt)..." : "Musterlösung / Erwartungshorizont..."} rows={2}
-            style={{ width: "100%", padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
+            placeholder="Musterlösung / Erwartungshorizont (wird von KI für Bewertung genutzt)..." rows={2}
+            style={{ width: "100%", padding: "6px 10px", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
           {localPartialPoints.map((p, i) => (
             <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "5px" }}>
-              <input type="number" value={p.points} min={0} step={0.5} onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ width: "50px", padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
+              <input type="number" value={p.points} min={0} step={0.5} onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ width: "50px", padding: "4px 6px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
               <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt. für:</span>
-              <input value={p.description} placeholder="z.B. Nennung des Begriffs" onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], description: e.target.value }; setLocalPartialPoints(pp); }} onBlur={() => onUpdate("partialPoints", localPartialPoints)} style={{ flex: 1, padding: "4px 8px", border: "1px solid #e5e7eb", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
+              <input value={p.description} placeholder="z.B. Nennung des Begriffs" onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], description: e.target.value }; setLocalPartialPoints(pp); }} onBlur={() => onUpdate("partialPoints", localPartialPoints)} style={{ flex: 1, padding: "4px 8px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
               <button onClick={() => { const pp = localPartialPoints.filter((_, pi) => pi !== i); setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
             </div>
           ))}
           <button onClick={() => { const pp = [...localPartialPoints, { points: 0.5, description: "" }]; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>+ Teilpunkt</button>
         </div>
-      </details>
+      )}
+
+      {/* Lückentext: alternative Lösungen pro Lücke (ersetzt globale Musterlösung) */}
+      {tq.type === "fill_blank" && localBlanks.length > 0 && (
+        <div style={{ marginTop: "10px", background: "#f8fafc", borderRadius: "8px", padding: "10px", border: "1px solid #e2e8f0" }}>
+          <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "8px" }}>✏️ Alternative Lösungen pro Lücke</div>
+          {localBlanks.map((blank, bi) => (
+            <div key={bi} style={{ marginBottom: "8px" }}>
+              <div style={{ fontSize: "11px", color: "#374151", marginBottom: "3px" }}>
+                <span style={{ background: "#2563a8", color: "#fff", borderRadius: "4px", padding: "1px 6px", fontSize: "10px", fontWeight: 700, marginRight: "6px" }}>Lücke {bi + 1}</span>
+                Hauptlösung: <strong>{blank.solution || "–"}</strong>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
+                {(blank.alternatives || []).map((alt, ai) => (
+                  <span key={ai} style={{ background: "#e0f2fe", borderRadius: "4px", padding: "2px 7px", fontSize: "11px", display: "flex", alignItems: "center", gap: "3px" }}>
+                    {alt}
+                    <button onClick={() => { const nb = [...localBlanks]; nb[bi] = { ...nb[bi], alternatives: (nb[bi].alternatives || []).filter((_, i) => i !== ai) }; setLocalBlanks(nb); onUpdate("blanks", nb); }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "10px", padding: 0 }}>✕</button>
+                  </span>
+                ))}
+                <button onClick={() => { const alt = prompt(`Alternative für Lücke ${bi + 1}:`); if (!alt?.trim()) return; const nb = [...localBlanks]; nb[bi] = { ...nb[bi], alternatives: [...(nb[bi].alternatives || []), alt.trim()] }; setLocalBlanks(nb); onUpdate("blanks", nb); }} style={{ fontSize: "10px", color: "#2563a8", background: "none", border: "1px dashed #bfdbfe", borderRadius: "4px", padding: "2px 6px", cursor: "pointer" }}>+ Alternative</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
