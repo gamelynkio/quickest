@@ -774,8 +774,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
             const taskStartNum = globalTaskCounter + 1;
             globalTaskCounter += (q.tasks || []).length;
             return (
-            <div key={q.id} style={{ marginBottom: "12px", marginTop: index > 0 ? "24px" : 0 }}>
-              <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "16px", padding: "20px 24px", color: "#fff" }}>
+            <div key={q.id} style={{ marginBottom: "24px", marginTop: index > 0 ? "24px" : 0, background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "18px", padding: "20px 16px 16px", color: "#fff" }}>
+              {/* Abschnitts-Header */}
+              <div style={{ marginBottom: "14px", paddingBottom: "14px", borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
                   <span style={{ background: "rgba(255,255,255,0.2)", borderRadius: "8px", padding: "2px 10px", fontSize: "13px", fontWeight: 800 }}>Abschnitt {currentSectionNum}</span>
                   {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800 }}>{q.sectionTitle}</div>}
