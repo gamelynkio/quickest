@@ -782,11 +782,11 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                   {q.sectionTitle && <div style={{ fontSize: "19px", fontWeight: 800 }}>{q.sectionTitle}</div>}
                 </div>
                 {q.sectionInstruction && (
-                  <div style={{ fontSize: "14px", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: "8px", padding: "8px 12px", marginBottom: q.sectionText?.trim() ? "12px" : 0, fontWeight: 500 }}>
+                  <div style={{ fontSize: "14px", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: "8px", padding: "8px 12px", marginBottom: q.sectionText && q.sectionText.replace(/<[^>]*>/g, "").trim() ? "12px" : 0, fontWeight: 500 }}>
                     {q.sectionInstruction}
                   </div>
                 )}
-                {q.sectionText?.trim() && (
+                {q.sectionText && q.sectionText.replace(/<[^>]*>/g, "").trim() && (
                   <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "12px", padding: "16px", fontSize: "15px", lineHeight: 1.8, marginTop: "8px", wordBreak: "break-word", overflowWrap: "break-word", overflow: "hidden", color: "#fff" }}
                     dangerouslySetInnerHTML={{ __html: q.sectionText }} />
                 )}
