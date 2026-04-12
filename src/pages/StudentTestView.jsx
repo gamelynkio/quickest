@@ -646,7 +646,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           placeholder="Deine Antwort..." rows={3}
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
           data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
-          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+          style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", color: "#0f172a", background: "#fff" }} />
       );
     }
     if (q.type === "fill_blank") {
@@ -931,7 +931,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                   rows={5}
                   autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                   data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
-                  style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", lineHeight: 1.6 }} />
+                  style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", lineHeight: 1.6, color: "#0f172a" }} />
               )}
 
               {q.type === "fill_blank" && (
