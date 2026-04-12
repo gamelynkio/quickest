@@ -56,23 +56,28 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
         const { data: studentData } = await supabase
           .from("students").select("id, username").in("username", missing)
           .eq("group_id", assignment.group_id);
-        const inserts = (studentData || []).map(s => ({
-          assignment_id: id,
-          student_id: s.id,
-          username: s.username,
-          answers: {},
-          score: 0,
-          total_points: assignment.question_data
+        const inserts = (studentData || []).map(s => {
+          const totalPoints = assignment.question_data
             ? assignment.question_data.reduce((sum, q) => {
                 if (q.type === "section") return sum + (q.tasks || []).reduce((ts, t) => ts + (t.questions || []).reduce((qs, tq) => qs + Number(tq.points || 0), 0), 0);
                 return sum + Number(q.points || 0);
               }, 0)
-            : 0,
-          grade: null,
-          ai_corrections: {},
-          reviewed: false,
-          cheat_log: [],
-        }));
+            : 0;
+          const gs = [...(assignment.grading_scale || [])].sort((a, b) => a.minPercent - b.minPercent);
+          const grade = gs.length > 0 ? gs[0].grade : "6";
+          return {
+            assignment_id: id,
+            student_id: s.id,
+            username: s.username,
+            answers: {},
+            score: 0,
+            total_points: totalPoints,
+            grade,
+            ai_corrections: {},
+            reviewed: true,
+            cheat_log: [],
+          };
+        });
         if (inserts.length > 0) {
           await supabase.from("submissions").insert(inserts);
         }
