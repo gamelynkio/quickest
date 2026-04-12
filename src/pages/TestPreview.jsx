@@ -246,7 +246,7 @@ export default function TestPreview({ navigate, onLogout, currentUser, editingTe
                                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                       <span style={{ background: isAns ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{globalTaskNum}.{tqIdx + 1}</span>
-                                      <span style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{tq.text}</span>
+                                      {(tq.type === "qa" || tq.type === "open") && tq.text?.includes("<") ? <div style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a", lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: tq.text }} /> : <span style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{tq.text}</span>}
                                     </div>
                                     <span style={{ fontSize: "11px", color: "#94a3b8", background: "#f1f5f9", borderRadius: "5px", padding: "2px 7px", flexShrink: 0, marginLeft: "8px" }}>{tq.points} Pkt.</span>
                                   </div>
