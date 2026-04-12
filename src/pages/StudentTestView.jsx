@@ -540,14 +540,12 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           <div style={{ textAlign: "center", color: "#fff", padding: "40px", maxWidth: "400px" }}>
             <div style={{ fontSize: "64px", marginBottom: "20px" }}>🏁</div>
             <div style={{ fontSize: "28px", fontWeight: 800, marginBottom: "10px" }}>Test beendet</div>
-            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.7)", lineHeight: 1.6, marginBottom: "24px" }}>Deine Lehrkraft hat den Test beendet.</div>
-            {!submitted ? (
-              <button onClick={handleSubmit} disabled={submitting} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer" }}>
-                {submitting ? "Wird gespeichert..." : "Antworten abgeben →"}
-              </button>
-            ) : (
-              <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer" }}>Zum Dashboard →</button>
-            )}
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.7)", lineHeight: 1.6, marginBottom: "24px" }}>
+              Deine Lehrkraft hat den Test beendet. Deine Antworten wurden gespeichert.
+            </div>
+            <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer" }}>
+              Zum Dashboard →
+            </button>
           </div>
         </div>
       )}
