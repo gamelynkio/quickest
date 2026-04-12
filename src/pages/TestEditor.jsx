@@ -360,7 +360,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const [timeLimit, setTimeLimit] = useState(editingTest?.time_limit ? Math.round(editingTest.time_limit / 60) : 20);
   const [antiCheat, setAntiCheat] = useState(editingTest?.anti_cheat || false);
   const [gradingMode, setGradingMode] = useState(editingTest?.grading_mode || "standard");
-  const [questions, setQuestions] = useState(editingTest?.question_data || [newSection()]);
+  const [questions, setQuestions] = useState(editingTest?.question_data || []);
   const [gradingScale, setGradingScale] = useState(editingTest?.grading_scale?.length ? editingTest.grading_scale : [
     { grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
     { grade: "3", minPercent: 59 }, { grade: "4", minPercent: 45 },
