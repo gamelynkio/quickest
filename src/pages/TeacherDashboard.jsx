@@ -161,11 +161,11 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
       "Lobby zurücksetzen?\n\nDadurch werden alle Abgaben dieses Tests gelöscht, sodass Schüler ihn erneut machen können.\n\nFortfahren?"
     );
     if (!confirmed) return;
-    await supabase.from("assignments").update({ lobby_started_at: null }).eq("id", lobbyModal.id);
+    await supabase.from("assignments").update({ lobby_started_at: null, status: "aktiv", paused_at: null }).eq("id", lobbyModal.id);
     await supabase.from("lobby_presence").delete().eq("assignment_id", lobbyModal.id);
     await supabase.from("submissions").delete().eq("assignment_id", lobbyModal.id);
-    setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: null } : a));
-    setLobbyModal(prev => ({ ...prev, lobby_started_at: null }));
+    setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: null, status: "aktiv", paused_at: null } : a));
+    setLobbyModal(prev => ({ ...prev, lobby_started_at: null, status: "aktiv", paused_at: null }));
     setLobbyStudents([]);
     setLobbySubmissions([]);
     setLobbyTimeLeft(null);
