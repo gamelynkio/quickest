@@ -237,14 +237,21 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
 
   const fetchAssignment = async (preloaded = null) => {
     setLoading(true);
-    const data = preloaded || await (async () => {
-      // Erst aktive Tests suchen, dann beendete (für Auto-Submit nach Reload)
+    let data = null;
+    if (preloaded) {
+      // Frischen Status aus DB laden — preloaded könnte veraltet sein
+      const { data: fresh } = await supabase.from("assignments").select("*").eq("id", preloaded.id).single();
+      data = fresh || preloaded;
+    } else {
       const { data: aktiv } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
-      if (aktiv) return aktiv;
-      // Kein aktiver Test — prüfe ob kürzlich beendeter Test ohne Abgabe
-      const { data: beendet } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "beendet").order("created_at", { ascending: false }).limit(1).single();
-      return beendet || null;
-    })();
+      if (aktiv) {
+        data = aktiv;
+      } else {
+        // Kein aktiver Test — prüfe ob kürzlich beendeter Test ohne Abgabe
+        const { data: beendet } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "beendet").order("created_at", { ascending: false }).limit(1).single();
+        data = beendet || null;
+      }
+    }
     if (data) {
       // Wenn Test bereits beendet → direkt Ended-Screen zeigen (z.B. nach F5)
       if (data.status === "beendet") {
@@ -370,9 +377,18 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const interval = setInterval(async () => {
       const { data } = await supabase
         .from("assignments")
-        .select("lobby_started_at, paused_at")
+        .select("lobby_started_at, paused_at, status")
         .eq("id", assignment.id)
         .single();
+      if (!data) return;
+      // Test vom Lehrer beendet
+      if (data.status === "beendet") {
+        clearInterval(interval);
+        setIsEnded(true);
+        if (handleSubmitRef.current) handleSubmitRef.current();
+        return;
+      }
+      setIsPaused(!!data.paused_at);
       if (data?.lobby_started_at) {
         setLobbyWaiting(false);
         setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
@@ -380,7 +396,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         const remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
         setTimeLeft(remaining);
       }
-      setIsPaused(!!data?.paused_at);
       const { data: presenceData } = await supabase
         .from("lobby_presence").select("username").eq("assignment_id", assignment.id);
       setLobbyPlayerCount(presenceData?.length || 0);
@@ -388,9 +403,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => clearInterval(interval);
   }, [lobbyWaiting, assignment]);
 
-  // Poll assignment status + paused_at — läuft sobald assignment geladen ist
+  // Status poll for non-lobby tests
   useEffect(() => {
-    if (!assignment?.id || submitted) return;
+    if (!assignment?.id || submitted || lobbyWaiting) return;
     const poll = setInterval(async () => {
       const { data } = await supabase
         .from("assignments").select("paused_at, status").eq("id", assignment.id).single();
@@ -399,12 +414,11 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (data.status === "beendet") {
         clearInterval(poll);
         setIsEnded(true);
-        // Automatisch abgeben via ref (stabile Referenz)
-        if (handleSubmitRef.current) handleSubmitRef.current();
+        if (handleSubmitRef.current && !submitted) handleSubmitRef.current();
       }
     }, 2000);
     return () => clearInterval(poll);
-  }, [assignment?.id, submitted]);
+  }, [assignment?.id, submitted, lobbyWaiting]);
 
   useEffect(() => {
     if (submitted || loading || lobbyWaiting || !assignment) return;
