@@ -159,7 +159,7 @@ const autoCorrect = (questions, answers) => {
         corrections[q.id] = { points: earnedPoints, maxPoints, correct: correctCount === blanks.length, studentAnswer: studentAnswers.join(", "), comment: `${correctCount} von ${blanks.length} Lücken richtig`, blankResults, solution: blanks.map((b, i) => `Lücke ${i+1}: ${b.solution}`).join(" | "), partialPoints: q.partialPoints || [] };
         score += earnedPoints;
       }
-    } else if (q.type === "open") {
+    } else if (q.type === "open" || q.type === "qa") {
       corrections[q.id] = { points: null, maxPoints, correct: null, studentAnswer: String(studentAnswer || ""), comment: "⏳ Wartet auf manuelle Bewertung", solution: q.solution || null, partialPoints: q.partialPoints || [], needsReview: true };
     } else if (q.type === "assignment") {
       const pairs = q.pairs || [];
@@ -601,6 +601,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const realQuestions = flattenQuestions(questions).filter(q => q.type !== "section");
   const answeredCount = realQuestions.filter(q => {
     if (q.type === "fill_blank" && q.blanks?.length > 0) return Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim());
+    if (q.type === "qa") return answers[q.id] !== undefined && answers[q.id] !== "";
     return answers[q.id] !== undefined && answers[q.id] !== "";
   }).length;
 
@@ -639,7 +640,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         </div>
       );
     }
-    if (q.type === "open") {
+    if (q.type === "open" || q.type === "qa") {
       return (
         <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
           placeholder="Deine Antwort..." rows={3}
@@ -924,7 +925,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 </div>
               )}
 
-              {q.type === "open" && (
+              {(q.type === "open" || q.type === "qa") && (
                 <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
                   placeholder="Deine Antwort..."
                   rows={5}
