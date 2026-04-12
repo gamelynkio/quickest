@@ -353,7 +353,8 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
           <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "14px", padding: "20px", textAlign: "center", opacity: 0.7 }}>
             <div style={{ fontSize: "28px", marginBottom: "8px" }}>🤖</div>
             <div style={{ fontWeight: 600, color: "#fff" }}>KI-Test-Generator</div>
-            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", marginTop: "4px" }}>Nur Premium · Bald verfügbar</div>
+            {/* "Nur Premium" — versteckt für Demo */}
+            <div style={{ display: "none", fontSize: "12px", color: "rgba(255,255,255,0.7)", marginTop: "4px" }}>Nur Premium · Bald verfügbar</div>
           </div>
         </div>
       </div>
