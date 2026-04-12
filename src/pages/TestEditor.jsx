@@ -154,7 +154,7 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
-        if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); }
+        if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); const sum = result.partialPoints.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }
         if (result.solution && !localSolution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
       } catch (e) {}
       setSuggestingRubric(false);
@@ -169,10 +169,21 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
         <span style={{ fontSize: "12px", fontWeight: 700, color: "#374151" }}>{tIdx + 1}.{tqIdx + 1} — {QUESTION_TYPES.find(t => t.id === tq.type)?.icon || "💬"} {QUESTION_TYPES.find(t => t.id === tq.type)?.label || "Frage – Antwort"}</span>
         <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-          <input type="number" min={0.5} step={0.5} value={localPoints}
-            onChange={e => { setLocalPoints(Number(e.target.value)); onUpdate("points", Number(e.target.value)); }}
-            style={{ width: "50px", padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
-          <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt.</span>
+          {localPartialPoints.length > 0 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <span style={{ width: "50px", padding: "3px 6px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", textAlign: "center", background: "#eff6ff", color: "#2563a8", fontWeight: 700, display: "inline-block" }}>
+                {localPartialPoints.reduce((s, p) => s + Number(p.points || 0), 0)}
+              </span>
+              <span style={{ fontSize: "11px", color: "#2563a8" }}>Pkt. (∑)</span>
+            </div>
+          ) : (
+            <>
+              <input type="number" min={0.5} step={0.5} value={localPoints}
+                onChange={e => { setLocalPoints(Number(e.target.value)); onUpdate("points", Number(e.target.value)); }}
+                style={{ width: "50px", padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
+              <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt.</span>
+            </>
+          )}
           <button onClick={onRemove} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }}>×</button>
         </div>
       </div>
@@ -267,13 +278,13 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
             style={{ width: "100%", padding: "6px 10px", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
           {localPartialPoints.map((p, i) => (
             <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "5px" }}>
-              <input type="number" value={p.points} min={0} step={0.5} onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ width: "50px", padding: "4px 6px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
+              <input type="number" value={p.points} min={0} step={0.5} onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }} style={{ width: "50px", padding: "4px 6px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
               <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt. für:</span>
               <input value={p.description} placeholder="z.B. Nennung des Begriffs" onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], description: e.target.value }; setLocalPartialPoints(pp); }} onBlur={() => onUpdate("partialPoints", localPartialPoints)} style={{ flex: 1, padding: "4px 8px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
-              <button onClick={() => { const pp = localPartialPoints.filter((_, pi) => pi !== i); setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
+              <button onClick={() => { const pp = localPartialPoints.filter((_, pi) => pi !== i); setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); if (pp.length > 0) { setLocalPoints(sum); onUpdate("points", sum); } }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
             </div>
           ))}
-          <button onClick={() => { const pp = [...localPartialPoints, { points: 0.5, description: "" }]; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>+ Teilpunkt</button>
+          <button onClick={() => { const pp = [...localPartialPoints, { points: 0.5, description: "" }]; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>+ Teilpunkt</button>
         </div>
       )}
 
