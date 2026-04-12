@@ -363,21 +363,18 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => clearInterval(interval);
   }, [lobbyWaiting, assignment]);
 
-  // Poll assignment status + paused_at during active test
+  // Poll assignment status + paused_at — läuft sobald assignment geladen ist
   useEffect(() => {
-    if (submitted || loading || lobbyWaiting || !assignment?.id) return;
+    if (!assignment?.id || submitted) return;
     const poll = setInterval(async () => {
       const { data } = await supabase
         .from("assignments").select("paused_at, status").eq("id", assignment.id).single();
-        if (data) {
-        setIsPaused(!!data.paused_at);
-        if (data.status === "beendet" && !submitted) {
-          setIsEnded(true);
-        }
-      }
+      if (!data) return;
+      setIsPaused(!!data.paused_at);
+      if (data.status === "beendet") setIsEnded(true);
     }, 2000);
     return () => clearInterval(poll);
-  }, [submitted, loading, lobbyWaiting, assignment?.id]);
+  }, [assignment?.id, submitted]);
 
   useEffect(() => {
     if (submitted || loading || lobbyWaiting || !assignment) return;
