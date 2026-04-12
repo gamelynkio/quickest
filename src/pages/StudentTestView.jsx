@@ -374,16 +374,10 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const interval = setInterval(async () => {
       const { data } = await supabase
         .from("assignments")
-        .select("lobby_started_at, paused_at, status")
+        .select("lobby_started_at")
         .eq("id", id)
         .single();
       if (!data) return;
-      if (data.status === "beendet") {
-        clearInterval(interval);
-        setIsEnded(true);
-        return;
-      }
-      setIsPaused(!!data.paused_at);
       if (data?.lobby_started_at) {
         setLobbyWaiting(false);
         setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
@@ -398,23 +392,26 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => clearInterval(interval);
   }, [lobbyWaiting, assignment?.id]);
 
-  // Status poll — läuft durchgehend sobald assignment.id bekannt ist
-  const statusPollRef = useRef(null);
+  // Realtime-Subscription auf assignments — reagiert sofort auf Änderungen
   useEffect(() => {
     if (!assignment?.id) return;
-    if (statusPollRef.current) clearInterval(statusPollRef.current);
     const id = assignment.id;
-    statusPollRef.current = setInterval(async () => {
-      const { data } = await supabase
-        .from("assignments").select("paused_at, status").eq("id", id).single();
-      if (!data) return;
-      setIsPaused(!!data.paused_at);
-      if (data.status === "beendet") {
-        clearInterval(statusPollRef.current);
-        setIsEnded(true);
-      }
-    }, 2000);
-    return () => clearInterval(statusPollRef.current);
+    const channel = supabase
+      .channel(`assignment-${id}`)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "assignments",
+        filter: `id=eq.${id}`,
+      }, (payload) => {
+        const updated = payload.new;
+        setIsPaused(!!updated.paused_at);
+        if (updated.status === "beendet") {
+          setIsEnded(true);
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, [assignment?.id]);
 
   useEffect(() => {
