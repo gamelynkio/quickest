@@ -176,9 +176,16 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
           <button onClick={onRemove} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }}>×</button>
         </div>
       </div>
-      <input value={localText} onChange={e => setLocalText(e.target.value)} onBlur={() => onUpdate("text", localText)}
-        placeholder={isQaType ? "Frage eingeben..." : "Unteraufgabe / Frage eingeben..."}
-        style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
+      {isQaType ? (
+        <div style={{ marginBottom: "8px" }}>
+          <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>Frage / Aufgabenstellung</label>
+          <RichTextEditor value={localText} onChange={val => { setLocalText(val); onUpdate("text", val); }} placeholder="Frage eingeben — Text formatieren, Bild oder Video einfügen..." />
+        </div>
+      ) : (
+        <input value={localText} onChange={e => setLocalText(e.target.value)} onBlur={() => onUpdate("text", localText)}
+          placeholder="Unteraufgabe / Frage eingeben..."
+          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
+      )}
 
       {tq.type === "multiple_choice" && (
         <div>
