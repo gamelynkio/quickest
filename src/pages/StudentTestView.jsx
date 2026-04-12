@@ -368,15 +368,16 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
 
   // Poll for lobby start every 2 seconds
   useEffect(() => {
-    if (!lobbyWaiting || !assignment) return;
+    if (!lobbyWaiting || !assignment?.id) return;
+    const id = assignment.id;
+    const timeLimit = assignment.time_limit;
     const interval = setInterval(async () => {
       const { data } = await supabase
         .from("assignments")
         .select("lobby_started_at, paused_at, status")
-        .eq("id", assignment.id)
+        .eq("id", id)
         .single();
       if (!data) return;
-      // Test vom Lehrer beendet
       if (data.status === "beendet") {
         clearInterval(interval);
         setIsEnded(true);
@@ -387,31 +388,34 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         setLobbyWaiting(false);
         setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
         const elapsed = Math.floor((Date.now() - new Date(data.lobby_started_at).getTime()) / 1000);
-        const remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
+        const remaining = Math.max(0, timeLimit - elapsed);
         setTimeLeft(remaining);
       }
       const { data: presenceData } = await supabase
-        .from("lobby_presence").select("username").eq("assignment_id", assignment.id);
+        .from("lobby_presence").select("username").eq("assignment_id", id);
       setLobbyPlayerCount(presenceData?.length || 0);
     }, 2000);
     return () => clearInterval(interval);
-  }, [lobbyWaiting, assignment]);
+  }, [lobbyWaiting, assignment?.id]);
 
-  // Status poll for non-lobby tests
+  // Status poll — läuft durchgehend sobald assignment.id bekannt ist
+  const statusPollRef = useRef(null);
   useEffect(() => {
-    if (!assignment?.id || submitted || lobbyWaiting) return;
-    const poll = setInterval(async () => {
+    if (!assignment?.id) return;
+    if (statusPollRef.current) clearInterval(statusPollRef.current);
+    const id = assignment.id;
+    statusPollRef.current = setInterval(async () => {
       const { data } = await supabase
-        .from("assignments").select("paused_at, status").eq("id", assignment.id).single();
+        .from("assignments").select("paused_at, status").eq("id", id).single();
       if (!data) return;
       setIsPaused(!!data.paused_at);
       if (data.status === "beendet") {
-        clearInterval(poll);
+        clearInterval(statusPollRef.current);
         setIsEnded(true);
       }
     }, 2000);
-    return () => clearInterval(poll);
-  }, [assignment?.id, submitted, lobbyWaiting]);
+    return () => clearInterval(statusPollRef.current);
+  }, [assignment?.id]);
 
   useEffect(() => {
     if (submitted || loading || lobbyWaiting || !assignment) return;
