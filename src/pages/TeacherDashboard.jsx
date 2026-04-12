@@ -52,6 +52,17 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
     setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "aktiv" } : a));
   };
 
+  const pauseAssignment = async (id) => {
+    const now = new Date().toISOString();
+    await supabase.from("assignments").update({ paused_at: now }).eq("id", id);
+    setAssignments(prev => prev.map(a => a.id === id ? { ...a, paused_at: now } : a));
+  };
+
+  const resumeAssignment = async (id) => {
+    await supabase.from("assignments").update({ paused_at: null }).eq("id", id);
+    setAssignments(prev => prev.map(a => a.id === id ? { ...a, paused_at: null } : a));
+  };
+
   const deleteAssignment = async (id) => {
     await supabase.from("assignments").delete().eq("id", id);
     setAssignments(prev => prev.filter(a => a.id !== id));
@@ -241,6 +252,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                       </td>
                       <td style={{ padding: "14px 20px" }}>
                         <span style={{ background: s.bg, color: s.color, borderRadius: "6px", padding: "3px 10px", fontSize: "12px", fontWeight: 600 }}>{s.label}</span>
+                        {a.paused_at && <span style={{ marginLeft: "6px", fontSize: "11px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>⏸ Pause</span>}
                         {a.anti_cheat && <span style={{ marginLeft: "6px", fontSize: "11px", color: "#7c3aed" }}>🛡️</span>}
                       </td>
                       <td style={{ padding: "14px 20px" }}>
@@ -257,7 +269,16 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                             <button onClick={() => reactivateAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #bbf7d0", borderRadius: "7px", background: "#f0fdf4", fontSize: "12px", cursor: "pointer", color: "#16a34a", fontWeight: 600 }}>
                               ▶ Reaktivieren
                             </button>
+                          ) : a.paused_at ? (
+                            <button onClick={() => resumeAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #bbf7d0", borderRadius: "7px", background: "#f0fdf4", fontSize: "12px", cursor: "pointer", color: "#16a34a", fontWeight: 600 }}>
+                              ▶ Fortsetzen
+                            </button>
                           ) : (
+                            <button onClick={() => pauseAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #bfdbfe", borderRadius: "7px", background: "#eff6ff", fontSize: "12px", cursor: "pointer", color: "#2563a8", fontWeight: 600 }}>
+                              ⏸ Pausieren
+                            </button>
+                          )}
+                          {!isEnded && (
                             <button onClick={() => setEndConfirm(a)} style={{ padding: "5px 10px", border: "1px solid #fde68a", borderRadius: "7px", background: "#fefce8", fontSize: "12px", cursor: "pointer", color: "#92400e", fontWeight: 600 }}>
                               ✓ Beenden
                             </button>
