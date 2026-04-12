@@ -26,7 +26,7 @@ const aiCorrectOpenQuestions = async (submission, assignmentData) => {
   };
 
   const allQuestions = flattenQuestions(questions);
-  const openQuestions = allQuestions.filter(q => q.type === "open");
+  const openQuestions = allQuestions.filter(q => (q.type === "open" || q.type === "qa") || q.type === "qa");
 
   if (openQuestions.length === 0) return { corrections, changed: false };
 
