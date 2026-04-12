@@ -807,6 +807,10 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                       </div>
                     )}
                   </div>
+                  {task.taskText && task.taskText.replace(/<[^>]*>/g, "").trim() && (
+                    <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "10px", padding: "14px 16px", marginBottom: "10px", fontSize: "14px", lineHeight: 1.8, color: "#fff", wordBreak: "break-word" }}
+                      dangerouslySetInnerHTML={{ __html: task.taskText }} />
+                  )}
                   {(task.questions || []).map((tq, tqIdx) => {
                     const isAns = Array.isArray(answers[tq.id]) ? answers[tq.id].length > 0 : answers[tq.id] !== undefined && answers[tq.id] !== "";
                     return (
