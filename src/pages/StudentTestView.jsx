@@ -201,9 +201,11 @@ const safeStorage = {
   },
 };
 
-function EndedRedirect({ onFinish }) {
+function EndedRedirect({ onFinish, onSubmit, submitted }) {
   useEffect(() => {
-    const t = setTimeout(() => onFinish(), 3000);
+    // Abgeben falls noch nicht geschehen
+    if (!submitted && onSubmit) onSubmit();
+    const t = setTimeout(() => onFinish(), 3500);
     return () => clearTimeout(t);
   }, []);
   return null;
@@ -229,16 +231,31 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [showCheatWarning, setShowCheatWarning] = useState(false);
   const cheatLogRef = useRef([]);
   const submissionIdRef = useRef(null);
+  const handleSubmitRef = useRef(null);
 
   useEffect(() => { fetchAssignment(assignmentProp || null); }, []);
 
   const fetchAssignment = async (preloaded = null) => {
     setLoading(true);
     const data = preloaded || await (async () => {
-      const { data } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
-      return data;
+      // Erst aktive Tests suchen, dann beendete (für Auto-Submit nach Reload)
+      const { data: aktiv } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
+      if (aktiv) return aktiv;
+      // Kein aktiver Test — prüfe ob kürzlich beendeter Test ohne Abgabe
+      const { data: beendet } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "beendet").order("created_at", { ascending: false }).limit(1).single();
+      return beendet || null;
     })();
     if (data) {
+      // Wenn Test bereits beendet → direkt Ended-Screen zeigen (z.B. nach F5)
+      if (data.status === "beendet") {
+        const { data: existingSub } = await supabase.from("submissions").select("id").eq("assignment_id", data.id).eq("username", currentUser.username).maybeSingle();
+        if (!existingSub) {
+          setAssignment(data);
+          setIsEnded(true);
+        }
+        setLoading(false);
+        return;
+      }
       const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
       if (data.require_seb && !isSEB) {
         setAssignment(data);
@@ -382,8 +399,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (data.status === "beendet") {
         clearInterval(poll);
         setIsEnded(true);
-        // Automatisch abgeben
-        handleSubmit();
+        // Automatisch abgeben via ref (stabile Referenz)
+        if (handleSubmitRef.current) handleSubmitRef.current();
       }
     }, 2000);
     return () => clearInterval(poll);
@@ -615,6 +632,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const handleFinish = () => {
     onFinish();
   };
+  // Keep ref in sync so poll closure always calls latest handleSubmit
+  handleSubmitRef.current = handleSubmit;
 
   if (submitted) return (
     <div style={S.center}>
@@ -1053,7 +1072,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
             <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)" }}>
               Du wirst gleich zu deinem Dashboard weitergeleitet...
             </div>
-            <EndedRedirect onFinish={onFinish} />
+            <EndedRedirect onFinish={onFinish} onSubmit={handleSubmitRef.current} submitted={submitted} />
           </div>
         </div>
       )}
