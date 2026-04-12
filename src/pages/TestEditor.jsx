@@ -360,13 +360,12 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const [timeLimit, setTimeLimit] = useState(editingTest?.time_limit ? Math.round(editingTest.time_limit / 60) : 20);
   const [antiCheat, setAntiCheat] = useState(editingTest?.anti_cheat || false);
   const [gradingMode, setGradingMode] = useState(editingTest?.grading_mode || "standard");
-  const [questions, setQuestions] = useState(editingTest?.question_data || []);
+  const [questions, setQuestions] = useState(editingTest?.question_data || [newSection()]);
   const [gradingScale, setGradingScale] = useState(editingTest?.grading_scale?.length ? editingTest.grading_scale : [
     { grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
     { grade: "3", minPercent: 59 }, { grade: "4", minPercent: 45 },
     { grade: "5", minPercent: 18 }, { grade: "6", minPercent: 0 },
   ]);
-  const [showTypeMenu, setShowTypeMenu] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -385,7 +384,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     setShowLeaveModal(true);
   };
 
-  const addQuestion = (type) => { setQuestions(prev => [...prev, newQuestion(type)]); setShowTypeMenu(false); };
   const addSection = () => setQuestions(prev => [...prev, newSection()]);
   const rubricDebounceRef = useRef({});
 
@@ -778,17 +776,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
           );
         })}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-          <button onClick={addSection} style={{ padding: "14px", border: "2px dashed #c7d2fe", borderRadius: "14px", background: "#fff", color: "#4f46e5", fontSize: "14px", fontWeight: 600, cursor: "pointer" }} onMouseOver={e => e.currentTarget.style.borderColor = "#4f46e5"} onMouseOut={e => e.currentTarget.style.borderColor = "#c7d2fe"}>+ Abschnitt hinzufügen</button>
-          <div style={{ position: "relative" }}>
-            <button onClick={() => setShowTypeMenu(m => !m)} style={{ width: "100%", padding: "14px", border: "2px dashed #cbd5e1", borderRadius: "14px", background: "#fff", color: "#2563a8", fontSize: "14px", fontWeight: 600, cursor: "pointer" }} onMouseOver={e => e.currentTarget.style.borderColor = "#2563a8"} onMouseOut={e => e.currentTarget.style.borderColor = "#cbd5e1"}>+ Aufgabe hinzufügen</button>
-            {showTypeMenu && (
-              <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0, background: "#fff", borderRadius: "14px", border: "1px solid #e2e8f0", boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 10 }}>
-                {QUESTION_TYPES.map(t => (<button key={t.id} onClick={() => addQuestion(t.id)} style={{ width: "100%", padding: "13px 20px", border: "none", background: "#fff", textAlign: "left", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid #f8fafc", fontFamily: "inherit" }} onMouseOver={e => e.currentTarget.style.background = "#f0f7ff"} onMouseOut={e => e.currentTarget.style.background = "#fff"}><span style={{ fontSize: "20px" }}>{t.icon}</span><div style={{ fontWeight: 600, color: "#0f172a" }}>{t.label}</div></button>))}
-              </div>
-            )}
-          </div>
-        </div>
+        <button onClick={addSection} style={{ width: "100%", padding: "14px", border: "2px dashed #c7d2fe", borderRadius: "14px", background: "#fff", color: "#4f46e5", fontSize: "14px", fontWeight: 600, cursor: "pointer", marginBottom: "12px" }} onMouseOver={e => e.currentTarget.style.borderColor = "#4f46e5"} onMouseOut={e => e.currentTarget.style.borderColor = "#c7d2fe"}>+ Abschnitt hinzufügen</button>
       </div>
 
       {showLeaveModal && (
