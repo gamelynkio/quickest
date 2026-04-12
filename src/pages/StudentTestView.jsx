@@ -201,6 +201,14 @@ const safeStorage = {
   },
 };
 
+function EndedRedirect({ onFinish }) {
+  useEffect(() => {
+    const t = setTimeout(() => onFinish(), 3000);
+    return () => clearTimeout(t);
+  }, []);
+  return null;
+}
+
 export default function StudentTestView({ currentUser, assignment: assignmentProp, onFinish }) {
   const [assignment, setAssignment] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -371,7 +379,12 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         .from("assignments").select("paused_at, status").eq("id", assignment.id).single();
       if (!data) return;
       setIsPaused(!!data.paused_at);
-      if (data.status === "beendet") setIsEnded(true);
+      if (data.status === "beendet") {
+        clearInterval(poll);
+        setIsEnded(true);
+        // Automatisch abgeben
+        handleSubmit();
+      }
     }, 2000);
     return () => clearInterval(poll);
   }, [assignment?.id, submitted]);
@@ -1028,18 +1041,19 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         </div>
       )}
 
-      {/* ENDED OVERLAY */}
-      {isEnded && !submitted && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 500, backdropFilter: "blur(4px)" }}>
+      {/* ENDED OVERLAY — zeigt nach automatischer Abgabe */}
+      {isEnded && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.95)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 600, backdropFilter: "blur(4px)" }}>
           <div style={{ textAlign: "center", color: "#fff", padding: "40px", maxWidth: "400px" }}>
             <div style={{ fontSize: "64px", marginBottom: "20px" }}>🏁</div>
             <div style={{ fontSize: "28px", fontWeight: 800, marginBottom: "10px" }}>Test beendet</div>
-            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.65)", lineHeight: 1.6, marginBottom: "28px" }}>
-              Deine Lehrkraft hat den Test beendet. Deine bisherigen Antworten werden gespeichert.
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.7)", lineHeight: 1.6, marginBottom: "12px" }}>
+              Deine Lehrkraft hat den Test beendet. Deine Antworten wurden automatisch abgegeben.
             </div>
-            <button onClick={handleSubmit} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer" }}>
-              Antworten abgeben →
-            </button>
+            <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)" }}>
+              Du wirst gleich zu deinem Dashboard weitergeleitet...
+            </div>
+            <EndedRedirect onFinish={onFinish} />
           </div>
         </div>
       )}
