@@ -794,25 +794,22 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
               {(q.tasks || []).map((task, tIdx) => {
                 const globalTaskNum = taskStartNum + tIdx;
                 return (
-                <div key={task.id} style={{ marginBottom: "12px" }}>
-                  {(task.taskTitle || task.taskInstruction) && (
-                    <div style={{ background: "#1e3a5f", borderRadius: "10px", padding: "12px 16px", marginBottom: "8px" }}>
-                      {task.taskTitle && (
-                        <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff", marginBottom: task.taskInstruction ? "6px" : 0 }}>
-                          Aufgabe {globalTaskNum}: {task.taskTitle}
-                        </div>
-                      )}
-                      {task.taskInstruction && (
-                        <div style={{ fontSize: "13px", color: "#e2e8f0", fontStyle: "italic", lineHeight: 1.5 }}>
-                          {task.taskInstruction}
-                        </div>
-                      )}
+                <div key={task.id} style={{ background: "rgba(255,255,255,0.06)", borderRadius: "12px", padding: "12px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.12)" }}>
+                  {/* Aufgaben-Header — immer anzeigen */}
+                  <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: "8px", padding: "10px 14px", marginBottom: "10px" }}>
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#fff", marginBottom: task.taskInstruction ? "5px" : 0 }}>
+                      Aufgabe {globalTaskNum}{task.taskTitle ? `: ${task.taskTitle}` : ""}
                     </div>
-                  )}
+                    {task.taskInstruction && (
+                      <div style={{ fontSize: "13px", color: "#e2e8f0", fontStyle: "italic", lineHeight: 1.5 }}>
+                        {task.taskInstruction}
+                      </div>
+                    )}
+                  </div>
                   {(task.questions || []).map((tq, tqIdx) => {
                     const isAns = Array.isArray(answers[tq.id]) ? answers[tq.id].length > 0 : answers[tq.id] !== undefined && answers[tq.id] !== "";
                     return (
-                      <div key={tq.id} style={{ background: "#fff", borderRadius: "12px", padding: "16px 18px", marginBottom: "8px", border: `2px solid ${isAns ? "#bfdbfe" : "#e2e8f0"}` }}>
+                      <div key={tq.id} style={{ background: "#fff", borderRadius: "10px", padding: "14px 16px", marginBottom: "6px", border: `2px solid ${isAns ? "#bfdbfe" : "#e2e8f0"}` }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                             <span style={{ background: isAns ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{globalTaskNum}.{tqIdx + 1}</span>
