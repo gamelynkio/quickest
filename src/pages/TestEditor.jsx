@@ -21,7 +21,7 @@ const newQuestion = (type) => ({
   solution: "", partialPoints: [], attachment: null,
 });
 
-const newTask = () => ({ id: Date.now() + Math.random(), taskTitle: "", taskInstruction: "", questions: [] });
+const newTask = () => ({ id: Date.now() + Math.random(), taskTitle: "", taskInstruction: "", taskText: "", questions: [] });
 
 const newTaskQuestion = (type) => ({
   id: Date.now() + Math.random(),
@@ -78,9 +78,10 @@ Die Summe der partialPoints muss exakt ${points} ergeben.`;
 function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, onUpdateQuestion, onRemoveQuestion }) {
   const [localTitle, setLocalTitle] = useState(task.taskTitle || "");
   const [localInstruction, setLocalInstruction] = useState(task.taskInstruction || "");
+  const [localTaskText, setLocalTaskText] = useState(task.taskText || "");
   const localRef = useRef({});
-  localRef.current = { localTitle, localInstruction };
-  useEffect(() => { return () => { onUpdate("taskTitle", localRef.current.localTitle); onUpdate("taskInstruction", localRef.current.localInstruction); }; }, []);
+  localRef.current = { localTitle, localInstruction, localTaskText };
+  useEffect(() => { return () => { onUpdate("taskTitle", localRef.current.localTitle); onUpdate("taskInstruction", localRef.current.localInstruction); onUpdate("taskText", localRef.current.localTaskText); }; }, []);
 
   return (
     <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.15)" }}>
@@ -100,6 +101,12 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
             style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
         </div>
       </div>
+      {/* Beispieltext / Aufgabentext */}
+      <div style={{ marginBottom: "10px" }}>
+        <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>📝 Beispieltext / Aufgabentext (optional)</label>
+        <RichTextEditor value={localTaskText} onChange={val => { setLocalTaskText(val); onUpdate("taskText", val); }} placeholder="z.B. Beispielsatz, Erklärung oder Hinweis für diese Aufgabe..." />
+      </div>
+
       {(task.questions || []).map((tq, tqIdx) => (
         <TaskQuestionEditor key={tq.id} tq={tq} tIdx={tIdx} tqIdx={tqIdx}
           onUpdate={(field, val) => onUpdateQuestion(tq.id, field, val)}
