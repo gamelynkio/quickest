@@ -111,6 +111,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const cheatLogRef = useRef([]);
   const submissionIdRef = useRef(null);
   const handleSubmitRef = useRef(null);
+  const isEndedRef = useRef(false); // verhindert Doppel-Submit
 
   useEffect(() => { fetchAssignment(assignmentProp || null); }, []);
 
@@ -186,7 +187,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const heartbeat = setInterval(async () => {
       await supabase.from("lobby_presence").update({ last_seen: new Date().toISOString() }).eq("assignment_id", assignmentId).eq("username", currentUser.username);
       const { data: asgn } = await supabase.from("assignments").select("paused_at, status").eq("id", assignmentId).single();
-      if (asgn) { setIsPaused(!!asgn.paused_at); if (asgn.status === "beendet" && !submitted) { setIsEnded(true); handleSubmitRef.current?.(); } }
+      if (asgn) { setIsPaused(!!asgn.paused_at); if (asgn.status === "beendet" && !isEndedRef.current) { isEndedRef.current = true; setIsEnded(true); handleSubmitRef.current?.(); } }
     }, 3000);
     const cleanup = async () => { await supabase.from("lobby_presence").delete().eq("assignment_id", assignmentId).eq("username", currentUser.username); };
     window.addEventListener("beforeunload", cleanup);
@@ -210,8 +211,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         if (!cancelled && data) {
           setIsPaused(!!data.paused_at);
           if (data.status === "beendet") {
-            setIsEnded(true);
-            if (!submitted) handleSubmitRef.current?.();
+            if (!isEndedRef.current) { isEndedRef.current = true; setIsEnded(true); handleSubmitRef.current?.(); }
             return;
           }
         }
@@ -289,7 +289,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const handleSubmit = async () => {
     if (submitting || !assignment) return;
     setSubmitting(true);
-    handleSubmitRef.current = null; // verhindert Doppelaufruf
     const allQuestions = assignment.question_data || [];
     const realQuestions = flattenQuestions(allQuestions).filter(q => q.type !== "section");
     const totalPoints = realQuestions.reduce((sum, q) => sum + Number(q.points || 0), 0);
