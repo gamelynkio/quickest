@@ -110,6 +110,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [showCheatWarning, setShowCheatWarning] = useState(false);
   const cheatLogRef = useRef([]);
   const submissionIdRef = useRef(null);
+  const handleSubmitRef = useRef(null);
 
   useEffect(() => { fetchAssignment(assignmentProp || null); }, []);
 
@@ -185,7 +186,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const heartbeat = setInterval(async () => {
       await supabase.from("lobby_presence").update({ last_seen: new Date().toISOString() }).eq("assignment_id", assignmentId).eq("username", currentUser.username);
       const { data: asgn } = await supabase.from("assignments").select("paused_at, status").eq("id", assignmentId).single();
-      if (asgn) { setIsPaused(!!asgn.paused_at); if (asgn.status === "beendet") setIsEnded(true); }
+      if (asgn) { setIsPaused(!!asgn.paused_at); if (asgn.status === "beendet" && !submitted) { setIsEnded(true); handleSubmitRef.current?.(); } }
     }, 3000);
     const cleanup = async () => { await supabase.from("lobby_presence").delete().eq("assignment_id", assignmentId).eq("username", currentUser.username); };
     window.addEventListener("beforeunload", cleanup);
@@ -210,7 +211,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           setIsPaused(!!data.paused_at);
           if (data.status === "beendet") {
             setIsEnded(true);
-            return; // Poll stoppen wenn beendet
+            if (!submitted) handleSubmitRef.current?.();
+            return;
           }
         }
       } catch (e) { /* ignorieren */ }
@@ -287,6 +289,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const handleSubmit = async () => {
     if (submitting || !assignment) return;
     setSubmitting(true);
+    handleSubmitRef.current = null; // verhindert Doppelaufruf
     const allQuestions = assignment.question_data || [];
     const realQuestions = flattenQuestions(allQuestions).filter(q => q.type !== "section");
     const totalPoints = realQuestions.reduce((sum, q) => sum + Number(q.points || 0), 0);
@@ -305,6 +308,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     setShowConfirm(false);
     setSubmitting(false);
   };
+  // Ref immer aktuell halten
+  handleSubmitRef.current = handleSubmit;
 
   const S = {
     page: { minHeight: "100vh", fontFamily: "'Segoe UI', system-ui, sans-serif" },
