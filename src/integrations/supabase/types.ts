@@ -229,6 +229,7 @@ export type Database = {
           grade: string | null
           id: number
           manual_overrides: Json | null
+          released: boolean | null
           reviewed: boolean | null
           score: number | null
           student_id: number | null
@@ -244,6 +245,7 @@ export type Database = {
           grade?: string | null
           id?: number
           manual_overrides?: Json | null
+          released?: boolean | null
           reviewed?: boolean | null
           score?: number | null
           student_id?: number | null
@@ -259,6 +261,7 @@ export type Database = {
           grade?: string | null
           id?: number
           manual_overrides?: Json | null
+          released?: boolean | null
           reviewed?: boolean | null
           score?: number | null
           student_id?: number | null
