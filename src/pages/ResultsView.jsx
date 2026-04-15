@@ -143,6 +143,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [makeupRequireSeb, setMakeupRequireSeb] = useState(true);
   const [creatingMakeup, setCreatingMakeup] = useState(false);
   const [assignmentData, setAssignmentData] = useState(null);
+  const [releaseModal, setReleaseModal] = useState(false); // nach KI-Korrektur: Freigabe-Frage
 
   useEffect(() => {
     if (!assignment?.id) return;
@@ -193,7 +194,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         }
       }
       setAiProgress("✅ KI-Korrektur abgeschlossen!");
-      setTimeout(() => { setAiProgress(""); setAiRunning(false); }, 3000);
+      setTimeout(() => { setAiProgress(""); setAiRunning(false); setReleaseModal(true); }, 3000);
     })();
   }, [assignmentData, submissions.length]);
 
@@ -340,6 +341,19 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setSaving(false);
   };
 
+  // Freigabe-Funktionen
+  const releaseSubmissions = async (ids) => {
+    await Promise.all(ids.map(id =>
+      supabase.from("submissions").update({ released: true }).eq("id", id)
+    ));
+    setSubmissions(prev => prev.map(s => ids.includes(s.id) ? { ...s, released: true } : s));
+    if (selectedSubmission && ids.includes(selectedSubmission.id)) {
+      setSelectedSubmission(prev => ({ ...prev, released: true }));
+    }
+  };
+
+  const releaseAll = () => releaseSubmissions(submissions.map(s => s.id));
+
   const createMakeupTest = async () => {
     if (!makeupTemplateId || makeupSelected.size === 0) return;
     setCreatingMakeup(true);
@@ -389,6 +403,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>
             {submissions.length} Abgaben{avg ? ` · Ø ${avg}%` : ""}
             <button onClick={fetchSubmissions} style={{ marginLeft: "12px", background: "none", border: "none", color: "#2563a8", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>🔄 Aktualisieren</button>
+            {submissions.some(s => !s.released) && (
+              <button onClick={releaseAll} style={{ marginLeft: "12px", padding: "4px 12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>✓ Alle freigeben</button>
+            )}
           </p>
         </div>
 
@@ -437,7 +454,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ background: "#f8fafc" }}>
-                        {["Schüler/in", "Punkte", "Note", "Status", ""].map(h => (
+                        {["Schüler/in", "Punkte", "Note", "Status", "Freigabe", ""].map(h => (
                           <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
                         ))}
                       </tr>
@@ -469,6 +486,13 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                                 : hasAiPending
                                 ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }} onClick={() => runAiCorrection(s)}>🤖 KI wiederholen</span>
                                 : <span style={{ background: "#fef9c3", color: "#ca8a04", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>Offen</span>}
+                            </td>
+                            <td style={{ padding: "13px 16px" }}>
+                              {s.released ? (
+                                <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>✓ Freigegeben</span>
+                              ) : (
+                                <button onClick={() => releaseSubmissions([s.id])} style={{ padding: "4px 10px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Freigeben</button>
+                              )}
                             </td>
                             <td style={{ padding: "13px 16px" }}>
                               <button onClick={() => { setSelectedSubmission(s); setOverrides({}); }} style={{ padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer" }}>Details</button>
@@ -631,6 +655,27 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           </>
         )}
       </div>
+
+      {/* FREIGABE-MODAL nach KI-Korrektur */}
+      {releaseModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "400px", width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: "48px", marginBottom: "12px" }}>🤖✅</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" }}>KI-Korrektur abgeschlossen</h3>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.6 }}>
+              Möchtest du die Korrekturen jetzt für alle Schüler freigeben? Sie können dann ihre Bewertung einsehen.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <button onClick={() => { releaseAll(); setReleaseModal(false); }} style={{ padding: "12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
+                ✓ Ja, alle Korrekturen freigeben
+              </button>
+              <button onClick={() => setReleaseModal(false)} style={{ padding: "12px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+                Nein, ich schaue zuerst drüber
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MAKEUP TEST MODAL */}
       {makeupModal && (
