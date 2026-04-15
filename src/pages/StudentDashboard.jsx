@@ -154,7 +154,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
   // Automatisch aktualisieren solange Abgaben ohne Note vorhanden
   useEffect(() => {
-    const hasUngraded = submissions.some(s => !s.grade);
+    const hasUngraded = submissions.some(s => !s.grade || (s.grade && !s.released));
     if (!hasUngraded) return;
     const poll = setInterval(fetchData, 5000);
     return () => clearInterval(poll);
@@ -294,7 +294,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     </div>
   );
 
-  const hasUngraded = submissions.some(s => !s.grade);
+  const hasUngraded = submissions.some(s => !s.grade || (s.grade && !s.released));
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 50%, #1e3a5f 100%)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px 16px 40px" }}>
@@ -383,15 +383,15 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                 {submissions.map(s => {
                   const percent = s.total_points > 0 ? Math.round((s.score / s.total_points) * 100) : 0;
                   return (
-                    <div key={s.id} onClick={() => s.reviewed && handleOpenSubmission(s)}
-                      style={{ background: "rgba(255,255,255,0.07)", borderRadius: "14px", padding: "14px 18px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)", cursor: s.reviewed ? "pointer" : "default", transition: "background 0.15s" }}
-                      onMouseOver={e => s.reviewed && (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
+                    <div key={s.id} onClick={() => s.released && handleOpenSubmission(s)}
+                      style={{ background: "rgba(255,255,255,0.07)", borderRadius: "14px", padding: "14px 18px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)", cursor: s.released ? "pointer" : "default", transition: "background 0.15s" }}
+                      onMouseOver={e => s.released && (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
                       onMouseOut={e => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: "15px", color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.assignments?.title || "Test"}</div>
                         <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)", marginTop: "3px" }}>
                           {new Date(s.submitted_at).toLocaleDateString("de-DE")} · {s.score ?? "–"}/{s.total_points} Pkt. · {percent}%
-                          {s.reviewed && <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.4)" }}>· Tippen für Details</span>}
+                          {s.released ? <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.4)" }}>· Tippen für Details</span> : s.grade ? <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.3)", fontSize: "11px" }}>· Korrektur ausstehend</span> : null}
                         </div>
                       </div>
                       <div style={{ textAlign: "center", flexShrink: 0, marginLeft: "14px" }}>
