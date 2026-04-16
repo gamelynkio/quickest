@@ -154,7 +154,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
   // Automatisch aktualisieren solange Abgaben ohne Note vorhanden
   useEffect(() => {
-    const hasUngraded = submissions.some(s => !s.grade || (s.grade && !s.released));
+    const hasUngraded = submissions.some(s => !s.released);
     if (!hasUngraded) return;
     const poll = setInterval(fetchData, 5000);
     return () => clearInterval(poll);
@@ -294,7 +294,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     </div>
   );
 
-  const hasUngraded = submissions.some(s => !s.grade || (s.grade && !s.released));
+  const hasUngraded = submissions.some(s => !s.released);
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 50%, #1e3a5f 100%)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px 16px 40px" }}>
@@ -318,7 +318,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
           <div style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "12px", padding: "12px 16px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid #fff", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
             <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>
-              Deine Note wird gerade berechnet — diese Seite aktualisiert sich automatisch.
+              Deine Korrektur steht noch aus — diese Seite aktualisiert sich automatisch.
             </span>
           </div>
         )}
@@ -390,15 +390,17 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: "15px", color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.assignments?.title || "Test"}</div>
                         <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)", marginTop: "3px" }}>
-                          {new Date(s.submitted_at).toLocaleDateString("de-DE")} · {s.score ?? "–"}/{s.total_points} Pkt. · {percent}%
+                          {new Date(s.submitted_at).toLocaleDateString("de-DE")}{s.released ? ` · ${s.score ?? "–"}/${s.total_points} Pkt. · ${percent}%` : ""}
                           {s.released ? <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.4)" }}>· Tippen für Details</span> : s.grade ? <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.3)", fontSize: "11px" }}>· Korrektur ausstehend</span> : null}
                         </div>
                       </div>
                       <div style={{ textAlign: "center", flexShrink: 0, marginLeft: "14px" }}>
-                        {s.grade ? (
+                        {s.released && s.grade ? (
                           <div style={{ fontSize: "30px", fontWeight: 900, color: GRADE_COLOR[s.grade] || "#fff", lineHeight: 1 }}>{s.grade}</div>
-                        ) : (
+                        ) : s.released ? (
                           <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>wird<br/>bewertet</div>
+                        ) : (
+                          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}>⏳ ausstehend</div>
                         )}
                       </div>
                     </div>
