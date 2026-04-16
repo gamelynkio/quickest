@@ -390,6 +390,17 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                   <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px" }}>
                     {lobbyModal.require_seb ? "Schüler ohne SEB werden zur Installation weitergeleitet" : "Schüler scannen → einloggen → warten"}
                   </div>
+                  {/* Kopierbarer Link */}
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(appUrl); }}
+                    style={{ marginTop: "10px", width: "100%", padding: "7px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "11px", color: "#2563a8", cursor: "pointer", fontFamily: "monospace", textAlign: "center", wordBreak: "break-all", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                    title="Klicken zum Kopieren"
+                    onMouseOver={e => e.currentTarget.style.background = "#f0f7ff"}
+                    onMouseOut={e => e.currentTarget.style.background = "#fff"}
+                    onMouseDown={e => { e.currentTarget.textContent = "✓ Kopiert!"; setTimeout(() => { e.currentTarget.innerHTML = "📋 " + appUrl; }, 1500); }}
+                  >
+                    📋 {appUrl}
+                  </button>
                   {lobbyModal.require_seb && (
                     <div style={{ marginTop: "8px", background: "#f5f3ff", borderRadius: "8px", padding: "6px 10px", fontSize: "11px", color: "#6d28d9", fontWeight: 600 }}>🔒 SEB erforderlich</div>
                   )}
