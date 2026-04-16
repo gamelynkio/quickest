@@ -527,6 +527,13 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                       Abgegeben: {new Date(selectedSubmission.submitted_at).toLocaleString("de-DE")}
                     </p>
 
+                    {/* Meta-Infos für Ausdruck */}
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px 16px", marginBottom: "18px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", fontSize: "13px" }}>
+                      <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>SCHÜLER/IN</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{selectedSubmission.username}</span></div>
+                      <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>DATUM</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{new Date(selectedSubmission.submitted_at).toLocaleDateString("de-DE")}</span></div>
+                      <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>LEHRKRAFT</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{currentUser?.name || "–"}</span></div>
+                    </div>
+
                     {selectedSubmission.cheat_log?.length > 0 && (
                       <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 14px", marginBottom: "16px" }}>
                         <div style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626", marginBottom: "6px" }}>⚠️ {selectedSubmission.cheat_log.length}× Tab/App-Wechsel erkannt</div>
