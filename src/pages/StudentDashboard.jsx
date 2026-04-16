@@ -72,6 +72,12 @@ function SubmissionDetailModal({ submission, onClose }) {
 
         {/* Corrections */}
         <div style={{ padding: "20px 24px" }}>
+          {/* Meta-Infos */}
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px 16px", marginBottom: "18px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", fontSize: "13px" }}>
+            <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>SCHÜLER/IN</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{submission.username}</span></div>
+            <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>DATUM</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{new Date(submission.submitted_at).toLocaleDateString("de-DE")}</span></div>
+            <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>LEHRKRAFT</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{submission.teacherName || "–"}</span></div>
+          </div>
           {orderedCorrections.map(({ qId, correction, question }, i) => {
             const manualOverride = submission.manual_overrides?.[qId];
             const pts = manualOverride !== undefined ? Number(manualOverride) : (correction.points ?? 0);
@@ -228,12 +234,19 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     // Frische Daten aus DB laden damit manuelle Korrekturen aktuell sind
     const [{ data: freshSubmission }, { data: assignmentData }] = await Promise.all([
       supabase.from("submissions").select("*").eq("id", s.id).single(),
-      supabase.from("assignments").select("question_data").eq("id", s.assignment_id).single(),
+      supabase.from("assignments").select("question_data, teacher_id").eq("id", s.assignment_id).single(),
     ]);
+    // Lehrername laden
+    let teacherName = "–";
+    if (assignmentData?.teacher_id) {
+      const { data: profile } = await supabase.from("profiles").select("name").eq("id", assignmentData.teacher_id).single();
+      if (profile?.name) teacherName = profile.name;
+    }
     setSelectedSubmission({
       ...(freshSubmission || s),
       assignments: s.assignments,
       question_data: assignmentData?.question_data || [],
+      teacherName,
     });
   };
 
