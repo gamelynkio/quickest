@@ -222,13 +222,14 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
   });
 
   const handleOpenSubmission = async (s) => {
-    const { data: assignmentData } = await supabase
-      .from("assignments")
-      .select("question_data")
-      .eq("id", s.assignment_id)
-      .single();
+    // Frische Daten aus DB laden damit manuelle Korrekturen aktuell sind
+    const [{ data: freshSubmission }, { data: assignmentData }] = await Promise.all([
+      supabase.from("submissions").select("*").eq("id", s.id).single(),
+      supabase.from("assignments").select("question_data").eq("id", s.assignment_id).single(),
+    ]);
     setSelectedSubmission({
-      ...s,
+      ...(freshSubmission || s),
+      assignments: s.assignments,
       question_data: assignmentData?.question_data || [],
     });
   };
