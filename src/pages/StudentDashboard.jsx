@@ -73,10 +73,12 @@ function SubmissionDetailModal({ submission, onClose }) {
         {/* Corrections */}
         <div style={{ padding: "20px 24px" }}>
           {orderedCorrections.map(({ qId, correction, question }, i) => {
-            const isCorrect = correction.correct === true;
-            const isWrong = correction.correct === false;
-            const isAi = correction.aiReviewed;
-            const pts = correction.points ?? 0;
+            const manualOverride = submission.manual_overrides?.[qId];
+            const pts = manualOverride !== undefined ? Number(manualOverride) : (correction.points ?? 0);
+            const isManual = manualOverride !== undefined;
+            const isCorrect = pts >= (correction.maxPoints ?? 0) && pts > 0;
+            const isWrong = pts === 0 && correction.maxPoints > 0;
+            const isAi = correction.aiReviewed && !isManual;
 
             return (
               <div key={qId} style={{ marginBottom: "14px", background: "#f8fafc", borderRadius: "12px", padding: "14px 16px", border: `1px solid ${isCorrect ? "#bbf7d0" : isWrong ? "#fecaca" : "#e2e8f0"}` }}>
@@ -86,6 +88,7 @@ function SubmissionDetailModal({ submission, onClose }) {
                     <span style={{ fontSize: "13px", fontWeight: 700, color: "#374151" }}>Aufgabe {i + 1}</span>
                     {isCorrect && <span style={{ color: "#16a34a", fontSize: "14px" }}>✓</span>}
                     {isWrong && <span style={{ color: "#dc2626", fontSize: "14px" }}>✗</span>}
+                    {isManual && <span style={{ fontSize: "10px", background: "#fef9c3", color: "#92400e", borderRadius: "4px", padding: "1px 5px", fontWeight: 700 }}>✏️ Angepasst</span>}
                     {isAi && <span style={{ fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 5px", fontWeight: 700 }}>🤖 KI</span>}
                   </div>
                   <span style={{ fontSize: "13px", fontWeight: 700, color: isCorrect ? "#16a34a" : isWrong ? "#dc2626" : "#374151" }}>
