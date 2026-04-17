@@ -107,6 +107,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const lobbyStartAtRef = useRef(null); // stabiler Ref für lobby_started_at
   const lobbyTimeLimitRef = useRef(1200); // stabiler Ref für time_limit
   const serverOffsetRef = useRef(0); // ms-Differenz zwischen Server und lokalem Browser
+  const assignmentRef = useRef(null); // stabiler Ref für assignment
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
   const [sebRequired, setSebRequired] = useState(false);
@@ -116,6 +117,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const submissionIdRef = useRef(null);
   const handleSubmitRef = useRef(null);
   const isEndedRef = useRef(false); // verhindert Doppel-Submit
+
+  // assignmentRef immer aktuell halten
+  useEffect(() => { assignmentRef.current = assignment; }, [assignment]);
 
   // Echte Serverzeit holen und Offset berechnen
   useEffect(() => {
@@ -256,8 +260,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => { cancelled = true; };
   }, [assignment?.id]);
 
-  // Countdown bis Lobby-Start — läuft einmal, nutzt server-adjustierten Timestamp
+  // Countdown — läuft wenn lobbyWaiting aktiv ist
   useEffect(() => {
+    if (!lobbyWaiting) return;
     const interval = setInterval(() => {
       const startAt = lobbyStartAtRef.current;
       if (!startAt) return;
@@ -274,7 +279,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       }
     }, 250);
     return () => clearInterval(interval);
-  }, []); // läuft einmal, liest Refs dynamisch
+  }, [lobbyWaiting]);
 
   // Lobby-Poll (nur während Lobby-Warteraum aktiv)
   useEffect(() => {
@@ -307,15 +312,17 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => clearInterval(interval);
   }, [lobbyWaiting, assignment?.id]);
 
-  // Timer (pausiert wenn isPaused) — für Lobby-Modus server-adjustiert
+  // Timer — läuft stabil, liest assignment nur via Ref
   useEffect(() => {
-    if (submitted || loading || lobbyWaiting || !assignment || isPaused) return;
+    if (submitted || loading || lobbyWaiting || !assignment?.id || isPaused) return;
     const timer = setInterval(() => {
-      if (assignment.timing_mode === "lobby" && assignment.lobby_started_at) {
-        // Immer aus server-adjustiertem Timestamp neu berechnen — nie akkumulieren
+      const asgn = assignmentRef.current;
+      if (!asgn) return;
+      if (asgn.timing_mode === "lobby" && lobbyStartAtRef.current) {
+        // Immer aus server-adjustiertem Timestamp neu berechnen — kein Akkumulationsfehler
         const serverNow = Date.now() + serverOffsetRef.current;
-        const elapsed = Math.floor((serverNow - new Date(assignment.lobby_started_at).getTime()) / 1000);
-        const remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
+        const elapsed = Math.floor((serverNow - new Date(lobbyStartAtRef.current).getTime()) / 1000);
+        const remaining = Math.max(0, lobbyTimeLimitRef.current - elapsed);
         setTimeLeft(remaining);
         if (remaining <= 0) { clearInterval(timer); handleSubmitRef.current?.(); }
       } else {
@@ -327,7 +334,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [submitted, loading, lobbyWaiting, assignment?.id, assignment?.lobby_started_at, isPaused]);
+  }, [submitted, loading, lobbyWaiting, assignment?.id, isPaused]);
 
   // Anti-cheat
   useEffect(() => {
