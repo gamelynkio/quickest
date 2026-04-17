@@ -189,6 +189,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           setLobbyWaiting(true);
           setTimeLeft(timeLimit);
         } else {
+          // Start bereits erreicht — Refs trotzdem setzen für den Timer
+          lobbyStartAtRef.current = data.lobby_started_at;
+          lobbyTimeLimitRef.current = timeLimit;
           const elapsed = Math.floor((serverNow - startTime) / 1000);
           setTimeLeft(Math.max(0, timeLimit - elapsed));
         }
@@ -285,16 +288,18 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   useEffect(() => {
     if (!lobbyWaiting || !assignment?.id) return;
     const id = assignment.id;
-    const timeLimit = assignment.time_limit || 1200;
     const interval = setInterval(async () => {
-      const { data } = await supabase.from("assignments").select("lobby_started_at, status").eq("id", id).single();
+      const timeLimit = assignmentRef.current?.time_limit || 1200; // frisch aus Ref lesen
+      const { data } = await supabase.from("assignments").select("lobby_started_at, status, time_limit").eq("id", id).single();
       if (!data) return;
+      const timeLimit = data.time_limit || assignmentRef.current?.time_limit || 1200;
       if (data.status === "beendet") { setIsEnded(true); return; }
       if (data.lobby_started_at) {
         const startTime = new Date(data.lobby_started_at).getTime();
         const serverNow = Date.now() + serverOffsetRef.current;
-        // Ref setzen damit Countdown-Effekt den Timestamp kennt
+        // Beide Refs setzen damit Countdown und Timer korrekt rechnen
         lobbyStartAtRef.current = data.lobby_started_at;
+        lobbyTimeLimitRef.current = timeLimit;
         if (startTime <= serverNow) {
           // Start bereits erreicht — sofort loslegen
           setLobbyWaiting(false);
