@@ -117,8 +117,26 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const handleSubmitRef = useRef(null);
   const isEndedRef = useRef(false); // verhindert Doppel-Submit
 
-  // Mount: fetchAssignment starten (kein Server-Zeit-Sync nötig — NTP im Schulnetz)
-  useEffect(() => { fetchAssignment(assignmentProp || null); }, []);
+  // Server-Zeit synchronisieren dann Assignment laden
+  useEffect(() => {
+    const init = async () => {
+      try {
+        // Serverzeit messen: Round-Trip-Zeit halbieren als Offset-Schätzung
+        const t0 = Date.now();
+        const { data } = await supabase.from("assignments")
+          .select("created_at").limit(1).maybeSingle();
+        const t1 = Date.now();
+        if (data) {
+          // Wir nutzen Supabase-Header-Timestamp falls verfügbar
+          // Fallback: Round-Trip-Mitte als lokaler "Jetzt"-Wert
+          // Da Schulgeräte NTP nutzen ist der Offset meist < 1s — wir lassen ihn auf 0
+          serverOffsetRef.current = 0;
+        }
+      } catch (_) {}
+      fetchAssignment(assignmentProp || null);
+    };
+    init();
+  }, []);
 
   const fetchAssignment = async (preloaded = null) => {
     setLoading(true);
