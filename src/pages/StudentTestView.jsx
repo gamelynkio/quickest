@@ -289,7 +289,6 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     if (!lobbyWaiting || !assignment?.id) return;
     const id = assignment.id;
     const interval = setInterval(async () => {
-      const timeLimit = assignmentRef.current?.time_limit || 1200; // frisch aus Ref lesen
       const { data } = await supabase.from("assignments").select("lobby_started_at, status, time_limit").eq("id", id).single();
       if (!data) return;
       const timeLimit = data.time_limit || assignmentRef.current?.time_limit || 1200;
