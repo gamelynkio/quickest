@@ -103,6 +103,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [submitting, setSubmitting] = useState(false);
   const [lobbyWaiting, setLobbyWaiting] = useState(false);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState(0);
+  const [lobbyCountdown, setLobbyCountdown] = useState(null); // Sekunden bis Teststart
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
   const [sebRequired, setSebRequired] = useState(false);
@@ -152,8 +153,16 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       const storageKey = `qt_start_${data.id}_${currentUser.id}`;
       const timeLimit = data.time_limit || 1200;
       if (data.timing_mode === "lobby" && data.lobby_started_at) {
-        const elapsed = Math.floor((Date.now() - new Date(data.lobby_started_at).getTime()) / 1000);
-        setTimeLeft(Math.max(0, timeLimit - elapsed));
+        const startTime = new Date(data.lobby_started_at).getTime();
+        const now = Date.now();
+        if (startTime > now) {
+          // Start noch in der Zukunft — Lobby-Warteraum mit Countdown zeigen
+          setLobbyWaiting(true);
+          setTimeLeft(timeLimit);
+        } else {
+          const elapsed = Math.floor((now - startTime) / 1000);
+          setTimeLeft(Math.max(0, timeLimit - elapsed));
+        }
       } else if (data.timing_mode === "window") {
         setTimeLeft(timeLimit);
       } else {
@@ -222,6 +231,27 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => { cancelled = true; };
   }, [assignment?.id]);
 
+  // Countdown bis Lobby-Start (wenn lobby_started_at in der Zukunft)
+  useEffect(() => {
+    if (!assignment?.lobby_started_at) return;
+    const tick = () => {
+      const msLeft = new Date(assignment.lobby_started_at).getTime() - Date.now();
+      if (msLeft <= 0) {
+        setLobbyCountdown(null);
+        if (lobbyWaiting) {
+          setLobbyWaiting(false);
+          const elapsed = Math.floor(-msLeft / 1000);
+          setTimeLeft(Math.max(0, (assignment.time_limit || 1200) - elapsed));
+        }
+      } else {
+        setLobbyCountdown(Math.ceil(msLeft / 1000));
+      }
+    };
+    tick();
+    const t = setInterval(tick, 200);
+    return () => clearInterval(t);
+  }, [assignment?.lobby_started_at, lobbyWaiting]);
+
   // Lobby-Poll (nur während Lobby-Warteraum aktiv)
   useEffect(() => {
     if (!lobbyWaiting || !assignment?.id) return;
@@ -232,10 +262,18 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (!data) return;
       if (data.status === "beendet") { setIsEnded(true); return; }
       if (data.lobby_started_at) {
-        setLobbyWaiting(false);
-        setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
-        const elapsed = Math.floor((Date.now() - new Date(data.lobby_started_at).getTime()) / 1000);
-        setTimeLeft(Math.max(0, timeLimit - elapsed));
+        const startTime = new Date(data.lobby_started_at).getTime();
+        const now = Date.now();
+        if (startTime <= now) {
+          // Start bereits erreicht — sofort loslegen
+          setLobbyWaiting(false);
+          setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
+          const elapsed = Math.floor((now - startTime) / 1000);
+          setTimeLeft(Math.max(0, timeLimit - elapsed));
+        } else {
+          // Start in der Zukunft — Countdown anzeigen
+          setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
+        }
       }
       const { data: presenceData } = await supabase.from("lobby_presence").select("username").eq("assignment_id", id);
       setLobbyPlayerCount(presenceData?.length || 0);
@@ -346,7 +384,14 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)", marginBottom: "8px" }}>TEST</div>
           <div style={{ fontSize: "17px", fontWeight: 700, color: "#fff" }}>{assignment?.title}</div>
         </div>
-        <div style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px" }}>{lobbyPlayerCount} Schüler/in{lobbyPlayerCount !== 1 ? "nen" : ""} in der Lobby</div>
+        {lobbyCountdown !== null ? (
+          <div style={{ marginTop: "16px" }}>
+            <div style={{ fontSize: "72px", fontWeight: 900, color: "#fff", lineHeight: 1 }}>{lobbyCountdown}</div>
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.8)", marginTop: "8px" }}>Test startet gleich...</div>
+          </div>
+        ) : (
+          <div style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px" }}>{lobbyPlayerCount} Schüler/in{lobbyPlayerCount !== 1 ? "nen" : ""} in der Lobby</div>
+        )}
       </div>
     </div>
   );
