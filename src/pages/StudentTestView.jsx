@@ -105,6 +105,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState(0);
   const [lobbyCountdown, setLobbyCountdown] = useState(null); // Sekunden bis Teststart
   const assignmentRef = useRef(null); // stabiler Ref für assignment
+  const serverOffsetRef = useRef(0); // Differenz zwischen Serverzeit und Date.now()
+  const serverNow = () => Date.now() + serverOffsetRef.current;
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
   const [sebRequired, setSebRequired] = useState(false);
@@ -118,7 +120,23 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   // assignmentRef immer aktuell halten
   useEffect(() => { assignmentRef.current = assignment; }, [assignment]);
 
-  useEffect(() => { fetchAssignment(assignmentProp || null); }, []);
+  useEffect(() => {
+    const init = async () => {
+      // Serverzeit-Offset berechnen damit alle Geräte dieselbe Zeit haben
+      try {
+        const t0 = Date.now();
+        const { data: serverTimeStr } = await supabase.rpc("get_server_time");
+        const t1 = Date.now();
+        if (serverTimeStr) {
+          const serverMs = new Date(serverTimeStr).getTime();
+          const localMid = (t0 + t1) / 2;
+          serverOffsetRef.current = serverMs - localMid;
+        }
+      } catch (_) { serverOffsetRef.current = 0; }
+      fetchAssignment(assignmentProp || null);
+    };
+    init();
+  }, []);
 
   const fetchAssignment = async (preloaded = null) => {
     setLoading(true);
@@ -158,7 +176,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       const timeLimit = data.time_limit || 1200;
       if (data.timing_mode === "lobby" && data.lobby_started_at) {
         const startTime = new Date(data.lobby_started_at).getTime();
-        const now = Date.now();
+        const now = serverNow();
         if (startTime > now) {
           // Start noch in der Zukunft — Lobby-Warteraum mit Countdown zeigen
           setLobbyWaiting(true);
@@ -247,7 +265,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       const asgn = assignmentRef.current;
       if (!asgn?.lobby_started_at) return;
       const startTime = new Date(asgn.lobby_started_at).getTime();
-      const now = Date.now();
+      const now = serverNow();
       const msLeft = startTime - now;
       if (msLeft <= 0) {
         // Test startet — timeLeft aus lobby_end_at berechnen
@@ -278,15 +296,15 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (data.status === "beendet") { setIsEnded(true); return; }
       if (data.lobby_started_at) {
         const startTime = new Date(data.lobby_started_at).getTime();
-        if (startTime <= Date.now()) {
+        if (startTime <= serverNow()) {
           // Start bereits erreicht — sofort loslegen
           setLobbyWaiting(false);
           setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at, lobby_end_at: data.lobby_end_at }));
           if (data.lobby_end_at) {
-            const remaining = Math.max(0, Math.round((new Date(data.lobby_end_at).getTime() - Date.now()) / 1000));
+            const remaining = Math.max(0, Math.round((new Date(data.lobby_end_at).getTime() - serverNow()) / 1000));
             setTimeLeft(remaining);
           } else {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const elapsed = Math.floor((serverNow() - startTime) / 1000);
             setTimeLeft(Math.max(0, timeLimit - elapsed));
           }
         } else {
@@ -308,7 +326,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (!asgn) return;
       if (asgn.timing_mode === "lobby" && asgn.lobby_end_at) {
         // Verbleibende Zeit direkt aus absolutem Endzeitpunkt — alle Clients identisch
-        const remaining = Math.max(0, Math.round((new Date(asgn.lobby_end_at).getTime() - Date.now()) / 1000));
+        const remaining = Math.max(0, Math.round((new Date(asgn.lobby_end_at).getTime() - serverNow()) / 1000));
         setTimeLeft(remaining);
         if (remaining <= 0) { clearInterval(timer); handleSubmitRef.current?.(); }
       } else {
