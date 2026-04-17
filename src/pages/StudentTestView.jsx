@@ -106,6 +106,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [lobbyCountdown, setLobbyCountdown] = useState(null); // Sekunden bis Teststart
   const lobbyStartAtRef = useRef(null); // stabiler Ref für lobby_started_at
   const lobbyTimeLimitRef = useRef(1200); // stabiler Ref für time_limit
+  const serverOffsetRef = useRef(0); // ms-Differenz zwischen Server und lokalem Browser
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
   const [sebRequired, setSebRequired] = useState(false);
@@ -116,6 +117,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const handleSubmitRef = useRef(null);
   const isEndedRef = useRef(false); // verhindert Doppel-Submit
 
+  // Mount: fetchAssignment starten (kein Server-Zeit-Sync nötig — NTP im Schulnetz)
   useEffect(() => { fetchAssignment(assignmentProp || null); }, []);
 
   const fetchAssignment = async (preloaded = null) => {
@@ -235,29 +237,25 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => { cancelled = true; };
   }, [assignment?.id]);
 
-  // Countdown bis Lobby-Start — läuft einmal und nutzt Ref statt State-Dependency
+  // Countdown bis Lobby-Start — läuft einmal, nutzt server-adjustierten Timestamp
   useEffect(() => {
-    let t = null;
-    const tick = () => {
+    const interval = setInterval(() => {
       const startAt = lobbyStartAtRef.current;
-      if (!startAt) { t = setTimeout(tick, 200); return; }
-      const msLeft = new Date(startAt).getTime() - Date.now();
+      if (!startAt) return;
+      const serverNow = Date.now() + serverOffsetRef.current;
+      const msLeft = new Date(startAt).getTime() - serverNow;
       if (msLeft <= 0) {
         setLobbyCountdown(null);
         setLobbyWaiting(false);
-        // timeLeft wird vom Timer-Effekt korrekt berechnet sobald lobbyWaiting false ist
-        // Wir setzen es hier direkt damit kein Frame verloren geht
         const elapsed = Math.floor(-msLeft / 1000);
-        setAssignment(prev => prev ? { ...prev, lobby_started_at: startAt } : prev);
         setTimeLeft(Math.max(0, lobbyTimeLimitRef.current - elapsed));
+        clearInterval(interval);
       } else {
         setLobbyCountdown(Math.ceil(msLeft / 1000));
-        t = setTimeout(tick, 100);
       }
-    };
-    tick();
-    return () => { if (t) clearTimeout(t); };
-  }, []); // läuft nur einmal — liest lobbyStartAtRef.current dynamisch
+    }, 250);
+    return () => clearInterval(interval);
+  }, []); // läuft einmal, liest Refs dynamisch
 
   // Lobby-Poll (nur während Lobby-Warteraum aktiv)
   useEffect(() => {
@@ -290,18 +288,27 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => clearInterval(interval);
   }, [lobbyWaiting, assignment?.id]);
 
-  // Timer (pausiert wenn isPaused)
+  // Timer (pausiert wenn isPaused) — für Lobby-Modus server-adjustiert
   useEffect(() => {
     if (submitted || loading || lobbyWaiting || !assignment || isPaused) return;
     const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev === null) return null;
-        if (prev <= 1) { clearInterval(timer); handleSubmit(); return 0; }
-        return prev - 1;
-      });
+      if (assignment.timing_mode === "lobby" && assignment.lobby_started_at) {
+        // Immer aus server-adjustiertem Timestamp neu berechnen — nie akkumulieren
+        const serverNow = Date.now() + serverOffsetRef.current;
+        const elapsed = Math.floor((serverNow - new Date(assignment.lobby_started_at).getTime()) / 1000);
+        const remaining = Math.max(0, (assignment.time_limit || 1200) - elapsed);
+        setTimeLeft(remaining);
+        if (remaining <= 0) { clearInterval(timer); handleSubmitRef.current?.(); }
+      } else {
+        setTimeLeft(prev => {
+          if (prev === null) return null;
+          if (prev <= 1) { clearInterval(timer); handleSubmitRef.current?.(); return 0; }
+          return prev - 1;
+        });
+      }
     }, 1000);
     return () => clearInterval(timer);
-  }, [submitted, loading, lobbyWaiting, assignment, isPaused]);
+  }, [submitted, loading, lobbyWaiting, assignment?.id, assignment?.lobby_started_at, isPaused]);
 
   // Anti-cheat
   useEffect(() => {
