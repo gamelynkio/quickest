@@ -117,22 +117,23 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const handleSubmitRef = useRef(null);
   const isEndedRef = useRef(false); // verhindert Doppel-Submit
 
-  // Server-Zeit synchronisieren dann Assignment laden
+  // Echte Serverzeit holen und Offset berechnen
   useEffect(() => {
     const init = async () => {
       try {
-        // Serverzeit messen: Round-Trip-Zeit halbieren als Offset-Schätzung
         const t0 = Date.now();
-        const { data } = await supabase.from("assignments")
-          .select("created_at").limit(1).maybeSingle();
+        const { data } = await supabase.rpc("get_server_time");
         const t1 = Date.now();
         if (data) {
-          // Wir nutzen Supabase-Header-Timestamp falls verfügbar
-          // Fallback: Round-Trip-Mitte als lokaler "Jetzt"-Wert
-          // Da Schulgeräte NTP nutzen ist der Offset meist < 1s — wir lassen ihn auf 0
-          serverOffsetRef.current = 0;
+          const serverMs = new Date(data).getTime();
+          const localMid = Math.round((t0 + t1) / 2); // Round-Trip-Mitte
+          serverOffsetRef.current = serverMs - localMid;
+          console.log(`Server offset: ${serverOffsetRef.current}ms`);
         }
-      } catch (_) {}
+      } catch (e) {
+        console.warn("Server time sync failed, using local time", e);
+        serverOffsetRef.current = 0;
+      }
       fetchAssignment(assignmentProp || null);
     };
     init();
@@ -176,15 +177,15 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       const timeLimit = data.time_limit || 1200;
       if (data.timing_mode === "lobby" && data.lobby_started_at) {
         const startTime = new Date(data.lobby_started_at).getTime();
-        const now = Date.now();
-        if (startTime > now) {
+        const serverNow = Date.now() + serverOffsetRef.current;
+        if (startTime > serverNow) {
           // Start noch in der Zukunft — Lobby-Warteraum mit Countdown zeigen
           lobbyStartAtRef.current = data.lobby_started_at;
           lobbyTimeLimitRef.current = timeLimit;
           setLobbyWaiting(true);
           setTimeLeft(timeLimit);
         } else {
-          const elapsed = Math.floor((now - startTime) / 1000);
+          const elapsed = Math.floor((serverNow - startTime) / 1000);
           setTimeLeft(Math.max(0, timeLimit - elapsed));
         }
       } else if (data.timing_mode === "window") {
@@ -286,14 +287,14 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (data.status === "beendet") { setIsEnded(true); return; }
       if (data.lobby_started_at) {
         const startTime = new Date(data.lobby_started_at).getTime();
-        const now = Date.now();
+        const serverNow = Date.now() + serverOffsetRef.current;
         // Ref setzen damit Countdown-Effekt den Timestamp kennt
         lobbyStartAtRef.current = data.lobby_started_at;
-        if (startTime <= now) {
+        if (startTime <= serverNow) {
           // Start bereits erreicht — sofort loslegen
           setLobbyWaiting(false);
           setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
-          const elapsed = Math.floor((now - startTime) / 1000);
+          const elapsed = Math.floor((serverNow - startTime) / 1000);
           setTimeLeft(Math.max(0, timeLimit - elapsed));
         } else {
           // Start in der Zukunft — Countdown läuft via Ref-Effekt
