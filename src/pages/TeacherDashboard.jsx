@@ -146,11 +146,17 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const startLobby = async () => {
     if (!lobbyModal || starting) return;
     setStarting(true);
-    // 20 Sekunden in der Zukunft — alle Schüler starten gleichzeitig
-    const startAt = new Date(Date.now() + 20000).toISOString();
-    await supabase.from("assignments").update({ lobby_started_at: startAt }).eq("id", lobbyModal.id);
-    setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: startAt } : a));
-    setLobbyModal(prev => ({ ...prev, lobby_started_at: startAt }));
+    const timeLimit = lobbyModal.time_limit || 1200;
+    // lobby_started_at: 5s in der Zukunft (Countdown für Schüler)
+    // lobby_end_at: absoluter Endzeitpunkt — alle Clients rechnen dagegen
+    const startAt = new Date(Date.now() + 5000).toISOString();
+    const endAt = new Date(Date.now() + 5000 + timeLimit * 1000).toISOString();
+    await supabase.from("assignments").update({
+      lobby_started_at: startAt,
+      lobby_end_at: endAt,
+    }).eq("id", lobbyModal.id);
+    setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: startAt, lobby_end_at: endAt } : a));
+    setLobbyModal(prev => ({ ...prev, lobby_started_at: startAt, lobby_end_at: endAt }));
     setStarting(false);
   };
 
@@ -160,11 +166,11 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
       "Lobby zurücksetzen?\n\nDadurch werden alle Abgaben dieses Tests gelöscht, sodass Schüler ihn erneut machen können.\n\nFortfahren?"
     );
     if (!confirmed) return;
-    await supabase.from("assignments").update({ lobby_started_at: null, status: "aktiv", paused_at: null }).eq("id", lobbyModal.id);
+    await supabase.from("assignments").update({ lobby_started_at: null, lobby_end_at: null, status: "aktiv", paused_at: null }).eq("id", lobbyModal.id);
     await supabase.from("lobby_presence").delete().eq("assignment_id", lobbyModal.id);
     await supabase.from("submissions").delete().eq("assignment_id", lobbyModal.id);
-    setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: null, status: "aktiv", paused_at: null } : a));
-    setLobbyModal(prev => ({ ...prev, lobby_started_at: null, status: "aktiv", paused_at: null }));
+    setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: null, lobby_end_at: null, status: "aktiv", paused_at: null } : a));
+    setLobbyModal(prev => ({ ...prev, lobby_started_at: null, lobby_end_at: null, status: "aktiv", paused_at: null }));
     setLobbyStudents([]);
     setLobbySubmissions([]);
     setLobbyTimeLeft(null);
