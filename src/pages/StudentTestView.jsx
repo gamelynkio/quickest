@@ -104,6 +104,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [lobbyWaiting, setLobbyWaiting] = useState(false);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState(0);
   const [lobbyCountdown, setLobbyCountdown] = useState(null); // Sekunden bis Teststart
+  const lobbyStartAtRef = useRef(null); // stabiler Ref für lobby_started_at
+  const lobbyTimeLimitRef = useRef(1200); // stabiler Ref für time_limit
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
   const [sebRequired, setSebRequired] = useState(false);
@@ -157,6 +159,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         const now = Date.now();
         if (startTime > now) {
           // Start noch in der Zukunft — Lobby-Warteraum mit Countdown zeigen
+          lobbyStartAtRef.current = data.lobby_started_at;
+          lobbyTimeLimitRef.current = timeLimit;
           setLobbyWaiting(true);
           setTimeLeft(timeLimit);
         } else {
@@ -231,26 +235,29 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     return () => { cancelled = true; };
   }, [assignment?.id]);
 
-  // Countdown bis Lobby-Start (wenn lobby_started_at in der Zukunft)
+  // Countdown bis Lobby-Start — läuft einmal und nutzt Ref statt State-Dependency
   useEffect(() => {
-    if (!assignment?.lobby_started_at) return;
+    let t = null;
     const tick = () => {
-      const msLeft = new Date(assignment.lobby_started_at).getTime() - Date.now();
+      const startAt = lobbyStartAtRef.current;
+      if (!startAt) { t = setTimeout(tick, 200); return; }
+      const msLeft = new Date(startAt).getTime() - Date.now();
       if (msLeft <= 0) {
         setLobbyCountdown(null);
-        if (lobbyWaiting) {
-          setLobbyWaiting(false);
-          const elapsed = Math.floor(-msLeft / 1000);
-          setTimeLeft(Math.max(0, (assignment.time_limit || 1200) - elapsed));
-        }
+        setLobbyWaiting(false);
+        // timeLeft wird vom Timer-Effekt korrekt berechnet sobald lobbyWaiting false ist
+        // Wir setzen es hier direkt damit kein Frame verloren geht
+        const elapsed = Math.floor(-msLeft / 1000);
+        setAssignment(prev => prev ? { ...prev, lobby_started_at: startAt } : prev);
+        setTimeLeft(Math.max(0, lobbyTimeLimitRef.current - elapsed));
       } else {
         setLobbyCountdown(Math.ceil(msLeft / 1000));
+        t = setTimeout(tick, 100);
       }
     };
     tick();
-    const t = setInterval(tick, 200);
-    return () => clearInterval(t);
-  }, [assignment?.lobby_started_at, lobbyWaiting]);
+    return () => { if (t) clearTimeout(t); };
+  }, []); // läuft nur einmal — liest lobbyStartAtRef.current dynamisch
 
   // Lobby-Poll (nur während Lobby-Warteraum aktiv)
   useEffect(() => {
@@ -264,6 +271,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (data.lobby_started_at) {
         const startTime = new Date(data.lobby_started_at).getTime();
         const now = Date.now();
+        // Ref setzen damit Countdown-Effekt den Timestamp kennt
+        lobbyStartAtRef.current = data.lobby_started_at;
         if (startTime <= now) {
           // Start bereits erreicht — sofort loslegen
           setLobbyWaiting(false);
@@ -271,7 +280,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           const elapsed = Math.floor((now - startTime) / 1000);
           setTimeLeft(Math.max(0, timeLimit - elapsed));
         } else {
-          // Start in der Zukunft — Countdown anzeigen
+          // Start in der Zukunft — Countdown läuft via Ref-Effekt
           setAssignment(prev => ({ ...prev, lobby_started_at: data.lobby_started_at }));
         }
       }
