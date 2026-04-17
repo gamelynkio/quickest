@@ -120,12 +120,10 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const openLobby = async (assignment) => {
     setLobbyModal(assignment);
     setLobbyStudents([]);
-    const cutoff = new Date(Date.now() - 12000).toISOString();
     const { data } = await supabase
       .from("lobby_presence")
       .select("username")
-      .eq("assignment_id", assignment.id)
-      .gte("last_seen", cutoff);
+      .eq("assignment_id", assignment.id);
     setLobbyStudents((data || []).map(d => d.username));
   };
 
@@ -148,8 +146,8 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const startLobby = async () => {
     if (!lobbyModal || starting) return;
     setStarting(true);
-    // 15 Sekunden in der Zukunft — alle Schüler starten gleichzeitig
-    const startAt = new Date(Date.now() + 15000).toISOString();
+    // 20 Sekunden in der Zukunft — alle Schüler starten gleichzeitig
+    const startAt = new Date(Date.now() + 20000).toISOString();
     await supabase.from("assignments").update({ lobby_started_at: startAt }).eq("id", lobbyModal.id);
     setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: startAt } : a));
     setLobbyModal(prev => ({ ...prev, lobby_started_at: startAt }));
@@ -178,9 +176,8 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   useEffect(() => {
     if (!lobbyModal) return;
     const tick = async () => {
-      const cutoff = new Date(Date.now() - 12000).toISOString();
       const [{ data: presence }, { data: subs }] = await Promise.all([
-        supabase.from("lobby_presence").select("username").eq("assignment_id", lobbyModal.id).gte("last_seen", cutoff),
+        supabase.from("lobby_presence").select("username").eq("assignment_id", lobbyModal.id),
         supabase.from("submissions").select("username").eq("assignment_id", lobbyModal.id),
       ]);
       const unique = [...new Set((presence || []).map(d => d.username))];
