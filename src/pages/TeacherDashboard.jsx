@@ -148,8 +148,8 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const startLobby = async () => {
     if (!lobbyModal || starting) return;
     setStarting(true);
-    // 10 Sekunden in der Zukunft — alle Schüler starten gleichzeitig
-    const startAt = new Date(Date.now() + 10000).toISOString();
+    // 15 Sekunden in der Zukunft — alle Schüler starten gleichzeitig
+    const startAt = new Date(Date.now() + 15000).toISOString();
     await supabase.from("assignments").update({ lobby_started_at: startAt }).eq("id", lobbyModal.id);
     setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: startAt } : a));
     setLobbyModal(prev => ({ ...prev, lobby_started_at: startAt }));
