@@ -438,6 +438,10 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         ) : (
           <div style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px" }}>{lobbyPlayerCount} Schüler/in{lobbyPlayerCount !== 1 ? "nen" : ""} in der Lobby</div>
         )}
+        {/* DEBUG — wird nach dem Test entfernt */}
+        <div style={{ color: "#ff0", fontSize: "11px", marginTop: "8px", fontFamily: "monospace", background: "rgba(0,0,0,0.4)", padding: "4px 8px", borderRadius: "4px" }}>
+          offset: {serverOffsetRef.current}ms | lokal: {new Date().toISOString().slice(11,19)} | end: {assignment?.lobby_end_at ? new Date(assignment.lobby_end_at).toISOString().slice(11,19) : "–"}
+        </div>
       </div>
     </div>
   );
