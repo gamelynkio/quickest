@@ -22,6 +22,7 @@ export type Database = {
           grading_scale: Json
           group_id: number
           id: number
+          lobby_end_at: string | null
           lobby_started_at: string | null
           makeup_usernames: string[] | null
           parent_assignment_id: number | null
@@ -44,6 +45,7 @@ export type Database = {
           grading_scale?: Json
           group_id: number
           id?: number
+          lobby_end_at?: string | null
           lobby_started_at?: string | null
           makeup_usernames?: string[] | null
           parent_assignment_id?: number | null
@@ -66,6 +68,7 @@ export type Database = {
           grading_scale?: Json
           group_id?: number
           id?: number
+          lobby_end_at?: string | null
           lobby_started_at?: string | null
           makeup_usernames?: string[] | null
           parent_assignment_id?: number | null
