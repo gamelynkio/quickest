@@ -283,23 +283,28 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   // Berechnet direkt aus assignment.lobby_started_at und lobby_end_at
   useEffect(() => {
     if (!lobbyWaiting) return;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       const asgn = assignmentRef.current;
       if (!asgn?.lobby_started_at) return;
       const startTime = new Date(asgn.lobby_started_at).getTime();
       const now = serverNow();
       const msLeft = startTime - now;
       if (msLeft <= 0) {
-        // Test startet — timeLeft aus lobby_end_at berechnen
+        clearInterval(interval);
         setLobbyCountdown(null);
         setLobbyWaiting(false);
-        if (asgn.lobby_end_at) {
-          const remaining = Math.max(0, Math.round((new Date(asgn.lobby_end_at).getTime() - now) / 1000));
+        // Immer frisch aus DB laden — lobby_end_at könnte im State noch null sein
+        const { data: fresh } = await supabase
+          .from("assignments").select("lobby_end_at, time_limit").eq("id", asgn.id).single();
+        const endAt = fresh?.lobby_end_at || asgn.lobby_end_at;
+        if (endAt) {
+          const remaining = Math.max(0, Math.round((new Date(endAt).getTime() - serverNow()) / 1000));
           setTimeLeft(remaining);
+          // Assignment-State mit lobby_end_at aktualisieren damit der Timer ihn hat
+          setAssignment(prev => prev ? { ...prev, lobby_end_at: endAt } : prev);
         } else {
-          setTimeLeft(asgn.time_limit || 1200);
+          setTimeLeft(fresh?.time_limit || asgn.time_limit || 1200);
         }
-        clearInterval(interval);
       } else {
         setLobbyCountdown(Math.ceil(msLeft / 1000));
       }
