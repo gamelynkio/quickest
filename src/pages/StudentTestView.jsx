@@ -138,9 +138,11 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const submissionIdRef = useRef(null);
   const handleSubmitRef = useRef(null);
   const isEndedRef = useRef(false); // verhindert Doppel-Submit
+  const answersRef = useRef({}); // immer aktuelle Antworten für handleSubmit
 
-  // assignmentRef immer aktuell halten
+  // assignmentRef + answersRef immer aktuell halten
   useEffect(() => { assignmentRef.current = assignment; }, [assignment]);
+  useEffect(() => { answersRef.current = answers; }, [answers]);
 
   useEffect(() => {
     const init = async () => {
@@ -403,12 +405,13 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const allQuestions = assignment.question_data || [];
     const realQuestions = flattenQuestions(allQuestions).filter(q => q.type !== "section");
     const totalPoints = realQuestions.reduce((sum, q) => sum + Number(q.points || 0), 0);
-    const { score: initialScore, corrections } = autoCorrect(realQuestions, answers);
+    const currentAnswers = answersRef.current; // Ref statt State — immer aktuell
+    const { score: initialScore, corrections } = autoCorrect(realQuestions, currentAnswers);
     const hasOpenQuestions = Object.values(corrections).some(c => c.needsReview);
     const grade = hasOpenQuestions ? null : calcGrade(initialScore, totalPoints, assignment.grading_scale);
     const { data: newSubmission } = await supabase.from("submissions").insert({
       assignment_id: assignment.id, student_id: currentUser.id, username: currentUser.username,
-      answers, score: initialScore, total_points: totalPoints, grade,
+      answers: currentAnswers, score: initialScore, total_points: totalPoints, grade,
       ai_corrections: corrections, reviewed: !hasOpenQuestions, cheat_log: cheatLogRef.current,
     }).select("id").single();
     if (newSubmission) submissionIdRef.current = newSubmission.id;
