@@ -92,6 +92,28 @@ const safeStorage = {
   removeItem: (key) => { try { sessionStorage.removeItem(key); } catch (_) { try { localStorage.removeItem(key); } catch (__) {} } },
 };
 
+function DebugBar({ assignmentRef, serverOffsetRef }) {
+  const [info, setInfo] = useState("");
+  useEffect(() => {
+    const t = setInterval(() => {
+      const asgn = assignmentRef.current;
+      const offset = serverOffsetRef.current;
+      const lokal = new Date().toISOString().slice(11, 19);
+      const endAt = asgn?.lobby_end_at ? new Date(asgn.lobby_end_at).toISOString().slice(11, 19) : "–";
+      const remaining = asgn?.lobby_end_at
+        ? Math.round((new Date(asgn.lobby_end_at).getTime() - Date.now() - offset) / 1000) + "s"
+        : "–";
+      setInfo(`offset:${offset}ms | lokal:${lokal} | end:${endAt} | verbleibt:${remaining}`);
+    }, 500);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div style={{ color: "#ff0", fontSize: "11px", marginTop: "8px", fontFamily: "monospace", background: "rgba(0,0,0,0.5)", padding: "4px 8px", borderRadius: "4px", wordBreak: "break-all" }}>
+      {info || "lädt..."}
+    </div>
+  );
+}
+
 export default function StudentTestView({ currentUser, assignment: assignmentProp, onFinish }) {
   const [assignment, setAssignment] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -439,9 +461,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
           <div style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px" }}>{lobbyPlayerCount} Schüler/in{lobbyPlayerCount !== 1 ? "nen" : ""} in der Lobby</div>
         )}
         {/* DEBUG — wird nach dem Test entfernt */}
-        <div style={{ color: "#ff0", fontSize: "11px", marginTop: "8px", fontFamily: "monospace", background: "rgba(0,0,0,0.4)", padding: "4px 8px", borderRadius: "4px" }}>
-          offset: {serverOffsetRef.current}ms | lokal: {new Date().toISOString().slice(11,19)} | end: {assignment?.lobby_end_at ? new Date(assignment.lobby_end_at).toISOString().slice(11,19) : "–"}
-        </div>
+        <DebugBar assignmentRef={assignmentRef} serverOffsetRef={serverOffsetRef} />
       </div>
     </div>
   );
