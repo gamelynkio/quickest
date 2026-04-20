@@ -10,6 +10,57 @@ const QUESTION_TYPES = [
   { id: "assignment", label: "Zuordnungsaufgabe", icon: "🔗" },
 ];
 
+// Sonderzeichen-Palette für Französisch/Spanisch
+const SPECIAL_CHARS = {
+  fr: { label: "🇫🇷 FR", chars: ["à","â","ä","æ","ç","é","è","ê","ë","î","ï","ô","œ","ù","û","ü","ÿ","À","Â","Ç","É","È","Ê","Î","Ô","Œ","Ù","Û","«","»"] },
+  es: { label: "🇪🇸 ES", chars: ["á","é","í","ó","ú","ü","ñ","¿","¡","Á","É","Í","Ó","Ú","Ü","Ñ"] },
+};
+
+function SpecialCharBar({ inputRef, value, onChange }) {
+  const [activeLang, setActiveLang] = useState(null);
+  const insertChar = (char) => {
+    if (inputRef?.current) {
+      const el = inputRef.current;
+      const start = el.selectionStart ?? value.length;
+      const end = el.selectionEnd ?? value.length;
+      const newVal = value.slice(0, start) + char + value.slice(end);
+      onChange(newVal);
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + char.length, start + char.length); }, 0);
+    } else {
+      onChange(value + char);
+    }
+  };
+  if (!activeLang) return (
+    <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+      {Object.entries(SPECIAL_CHARS).map(([lang, { label }]) => (
+        <button key={lang} type="button" onClick={() => setActiveLang(lang)}
+          style={{ padding: "2px 8px", fontSize: "11px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "5px", cursor: "pointer", fontFamily: "inherit" }}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <div style={{ marginTop: "4px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "4px 6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "3px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginRight: "2px" }}>{SPECIAL_CHARS[activeLang].label}:</span>
+        {SPECIAL_CHARS[activeLang].chars.map((char, i) => (
+          <button key={i} type="button" onClick={() => insertChar(char)}
+            style={{ padding: "2px 5px", minWidth: "22px", fontSize: "13px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "4px", cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }}>
+            {char}
+          </button>
+        ))}
+        <button type="button" onClick={() => setActiveLang(activeLang === "fr" ? "es" : "fr")}
+          style={{ padding: "2px 6px", fontSize: "10px", background: "#eff6ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "4px", cursor: "pointer", marginLeft: "4px" }}>
+          {activeLang === "fr" ? "🇪🇸 ES" : "🇫🇷 FR"}
+        </button>
+        <button type="button" onClick={() => setActiveLang(null)}
+          style={{ padding: "2px 6px", fontSize: "10px", color: "#94a3b8", background: "none", border: "none", cursor: "pointer", marginLeft: "auto" }}>✕</button>
+      </div>
+    </div>
+  );
+}
+
 const newQuestion = (type) => ({
   id: Date.now() + Math.random(),
   type, text: "", points: 1,
@@ -75,6 +126,8 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
   const [localTitle, setLocalTitle] = useState(task.taskTitle || "");
   const [localInstruction, setLocalInstruction] = useState(task.taskInstruction || "");
   const [localTaskText, setLocalTaskText] = useState(task.taskText || "");
+  const titleRef = useRef(null);
+  const instructionRef = useRef(null);
   const localRef = useRef({});
   localRef.current = { localTitle, localInstruction, localTaskText };
   useEffect(() => { return () => { onUpdate("taskTitle", localRef.current.localTitle); onUpdate("taskInstruction", localRef.current.localInstruction); onUpdate("taskText", localRef.current.localTaskText); }; }, []);
@@ -88,13 +141,15 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
         <div>
           <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabentitel (optional)</label>
-          <input value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={() => onUpdate("taskTitle", localTitle)} placeholder="z.B. Right or wrong?"
+          <input ref={titleRef} value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={() => onUpdate("taskTitle", localTitle)} placeholder="z.B. Right or wrong?"
             style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
+          <SpecialCharBar inputRef={titleRef} value={localTitle} onChange={val => { setLocalTitle(val); onUpdate("taskTitle", val); }} />
         </div>
         <div>
           <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabenanweisung (optional)</label>
-          <input value={localInstruction} onChange={e => setLocalInstruction(e.target.value)} onBlur={() => onUpdate("taskInstruction", localInstruction)} placeholder="z.B. Tick the correct box."
+          <input ref={instructionRef} value={localInstruction} onChange={e => setLocalInstruction(e.target.value)} onBlur={() => onUpdate("taskInstruction", localInstruction)} placeholder="z.B. Tick the correct box."
             style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
+          <SpecialCharBar inputRef={instructionRef} value={localInstruction} onChange={val => { setLocalInstruction(val); onUpdate("taskInstruction", val); }} />
         </div>
       </div>
       <div style={{ marginBottom: "10px" }}>
@@ -131,6 +186,9 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [localPartialPoints, setLocalPartialPoints] = useState(tq.partialPoints || []);
   const [suggestingRubric, setSuggestingRubric] = useState(false);
   const rubricDebounceRef = useRef(null);
+  const textRef = useRef(null);
+  const solutionRef = useRef(null);
+  const fullTextRef = useRef(null);
 
   const localRef = useRef({});
   localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localPairs, localPartialPoints };
@@ -143,7 +201,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
     };
   }, []);
 
-  // KI-Maßstab automatisch vorschlagen sobald Musterlösung eingetragen
   useEffect(() => {
     if (tq.type !== "qa" && tq.type !== "open") return;
     if (!localSolution.trim()) return;
@@ -187,29 +244,37 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
           <button onClick={onRemove} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px", padding: "0 4px" }}>×</button>
         </div>
       </div>
+
       {isQaType ? (
         <div style={{ marginBottom: "8px" }}>
           <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>Frage / Aufgabenstellung</label>
           <RichTextEditor value={localText} onChange={val => { setLocalText(val); onUpdate("text", val); }} placeholder="Frage eingeben — Text formatieren, Bild oder Video einfügen..." />
         </div>
       ) : (
-        <input value={localText} onChange={e => setLocalText(e.target.value)} onBlur={() => onUpdate("text", localText)}
-          placeholder="Unteraufgabe / Frage eingeben..."
-          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
+        <div style={{ marginBottom: "8px" }}>
+          <input ref={textRef} value={localText} onChange={e => setLocalText(e.target.value)} onBlur={() => onUpdate("text", localText)}
+            placeholder="Unteraufgabe / Frage eingeben..."
+            style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box" }} />
+          <SpecialCharBar inputRef={textRef} value={localText} onChange={val => { setLocalText(val); onUpdate("text", val); }} />
+        </div>
       )}
 
       {tq.type === "multiple_choice" && (
         <div>
-          {localOptions.map((opt, oi) => { const isCorrect = correctAnswers.includes(oi); return (
-            <div key={oi} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
-              <input type="checkbox" checked={isCorrect} onChange={() => { const next = isCorrect ? correctAnswers.filter(x => x !== oi) : [...correctAnswers, oi]; setCorrectAnswers(next); onUpdate("correctAnswers", next); }} style={{ accentColor: "#2563a8" }} />
-              <input value={opt} onChange={e => { const opts = [...localOptions]; opts[oi] = e.target.value; setLocalOptions(opts); }} onBlur={() => onUpdate("options", localOptions)} placeholder={`Antwort ${String.fromCharCode(65 + oi)}`} style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
-              {localOptions.length > 2 && <button onClick={() => { const opts = localOptions.filter((_, j) => j !== oi); setLocalOptions(opts); onUpdate("options", opts); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer" }}>×</button>}
-            </div>
-          ); })}
+          {localOptions.map((opt, oi) => {
+            const isCorrect = correctAnswers.includes(oi);
+            return (
+              <div key={oi} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                <input type="checkbox" checked={isCorrect} onChange={() => { const next = isCorrect ? correctAnswers.filter(x => x !== oi) : [...correctAnswers, oi]; setCorrectAnswers(next); onUpdate("correctAnswers", next); }} style={{ accentColor: "#2563a8" }} />
+                <input value={opt} onChange={e => { const opts = [...localOptions]; opts[oi] = e.target.value; setLocalOptions(opts); }} onBlur={() => onUpdate("options", localOptions)} placeholder={`Antwort ${String.fromCharCode(65 + oi)}`} style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+                {localOptions.length > 2 && <button onClick={() => { const opts = localOptions.filter((_, j) => j !== oi); setLocalOptions(opts); onUpdate("options", opts); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer" }}>×</button>}
+              </div>
+            );
+          })}
           <button onClick={() => { const opts = [...localOptions, ""]; setLocalOptions(opts); onUpdate("options", opts); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: "2px" }}>+ Antwort</button>
         </div>
       )}
+
       {tq.type === "true_false" && (
         <div style={{ display: "flex", gap: "8px" }}>
           {["Wahr", "Falsch"].map((opt, oi) => (
@@ -218,6 +283,7 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
           ))}
         </div>
       )}
+
       {tq.type === "assignment" && (
         <div>
           {localPairs.map((pair, i) => (
@@ -231,14 +297,16 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
           <button onClick={() => { const p = [...localPairs, { left: "", right: "" }]; setLocalPairs(p); onUpdate("pairs", p); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: 0 }}>+ Paar hinzufügen</button>
         </div>
       )}
+
       {tq.type === "fill_blank" && (
         <div>
           <label style={{ fontSize: "11px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>Vollständiger Text — Wort markieren → wird zur Lücke</label>
-          <textarea value={localFullText} onChange={e => setLocalFullText(e.target.value)} onBlur={() => onUpdate("fullText", localFullText)}
+          <textarea ref={fullTextRef} value={localFullText} onChange={e => setLocalFullText(e.target.value)} onBlur={() => onUpdate("fullText", localFullText)}
             onMouseUp={() => { const sel = window.getSelection(); const selected = sel?.toString().trim(); if (!selected || !localFullText) return; const start = localFullText.indexOf(selected); if (start === -1) return; const newText = localFullText.slice(0, start) + "[Lücke]" + localFullText.slice(start + selected.length); const newBlanks = [...localBlanks, { solution: selected, alternatives: [] }]; setLocalFullText(newText); setLocalBlanks(newBlanks); onUpdate("fullText", newText); onUpdate("blanks", newBlanks); onUpdate("text", newText); sel.removeAllRanges(); }}
             placeholder="Text eingeben, dann Wort markieren..." rows={3}
             style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "13px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", marginBottom: "4px" }} />
-          <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "8px" }}>💡 Text markieren → wird automatisch zur Lücke</div>
+          <SpecialCharBar inputRef={fullTextRef} value={localFullText} onChange={val => { setLocalFullText(val); onUpdate("fullText", val); onUpdate("text", val); }} />
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "8px", marginTop: "2px" }}>💡 Text markieren → wird automatisch zur Lücke</div>
           {localBlanks.map((blank, bi) => (
             <div key={bi} style={{ background: "#f8fafc", borderRadius: "6px", padding: "8px 10px", marginBottom: "5px", border: "1px solid #e2e8f0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
@@ -251,7 +319,6 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
         </div>
       )}
 
-      {/* Musterlösung & Teilbepunktung — nur für qa/open */}
       {isQaType && (
         <div style={{ marginTop: "10px", background: "#f0f7ff", borderRadius: "8px", padding: "10px", border: "1px solid #bfdbfe" }}>
           <div style={{ marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -273,9 +340,11 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
               </button>
             )}
           </div>
-          <textarea value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
+          <textarea ref={solutionRef} value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
             placeholder="Musterlösung / Erwartungshorizont (wird von KI für Bewertung genutzt)..." rows={2}
-            style={{ width: "100%", padding: "6px 10px", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "8px" }} />
+            style={{ width: "100%", padding: "6px 10px", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "4px" }} />
+          <SpecialCharBar inputRef={solutionRef} value={localSolution} onChange={val => { setLocalSolution(val); onUpdate("solution", val); }} />
+          <div style={{ marginTop: "4px" }}>
           {localPartialPoints.map((p, i) => (
             <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "5px" }}>
               <input type="number" value={p.points} min={0} step={0.5} onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }} style={{ width: "50px", padding: "4px 6px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
@@ -285,10 +354,10 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
             </div>
           ))}
           <button onClick={() => { const pp = [...localPartialPoints, { points: 0.5, description: "" }]; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>+ Teilpunkt</button>
+          </div>
         </div>
       )}
 
-      {/* Lückentext: alternative Lösungen pro Lücke (ersetzt globale Musterlösung) */}
       {tq.type === "fill_blank" && localBlanks.length > 0 && (
         <div style={{ marginTop: "10px", background: "#f8fafc", borderRadius: "8px", padding: "10px", border: "1px solid #e2e8f0" }}>
           <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "8px" }}>✏️ Alternative Lösungen pro Lücke</div>
@@ -338,6 +407,8 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const [suggestingRubricId, setSuggestingRubricId] = useState(null);
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const titleRef = useRef(null);
+  const descRef = useRef(null);
 
   const safeNavigate = (target, data = null) => {
     if (saved) { navigate(target, data); return; }
@@ -436,7 +507,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     setTimeout(() => { setSaved(false); navigate("library"); }, 1000);
   };
 
-  const SUBJECTS = ["Mathematik", "Deutsch", "Englisch", "Sachkunde", "Geschichte", "Geographie", "Biologie", "Physik", "Chemie", "Musik", "Kunst", "Sport"];
+  const SUBJECTS = ["Mathematik", "Deutsch", "Englisch", "Französisch", "Spanisch", "Sachkunde", "Geschichte", "Geographie", "Biologie", "Physik", "Chemie", "Musik", "Kunst", "Sport"];
   const GRADING_MODES = [
     { id: "content", label: "🎯 Nur Inhalt", description: "Rechtschreibung & Grammatik werden ignoriert" },
     { id: "standard", label: "⚖️ Standard", description: "Inhalt zählt hauptsächlich, grobe Fehler leicht abgezogen" },
@@ -466,15 +537,24 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
         {importError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#dc2626" }}>⚠️ {importError}</div>}
         {importing && <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "16px", marginBottom: "16px", fontSize: "13px", color: "#2563a8", textAlign: "center" }}><div style={{ fontSize: "24px", marginBottom: "8px" }}>🤖</div><strong>Claude analysiert die Datei...</strong></div>}
 
-        {/* Meta Card */}
         <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-            <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Titel *</label><input value={title} onChange={e => setTitle(e.target.value)} placeholder="z.B. Bruchrechnung – Grundlagen" style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
+            <div>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Titel *</label>
+              <input ref={titleRef} value={title} onChange={e => setTitle(e.target.value)} placeholder="z.B. Vocabulario – Unidad 4"
+                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+              <SpecialCharBar inputRef={titleRef} value={title} onChange={setTitle} />
+            </div>
             <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Fach</label><select value={subject} onChange={e => setSubject(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}><option value="">– Fach –</option>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
             <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Klasse</label><select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}><option value="">– Klasse –</option>{[5,6,7,8,9,10,11,12,13].map(g => <option key={g} value={String(g)}>{g}. Klasse</option>)}</select></div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-            <div style={{ gridColumn: "span 2" }}><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Kurzbeschreibung</label><input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
+            <div style={{ gridColumn: "span 2" }}>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Kurzbeschreibung</label>
+              <input ref={descRef} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional"
+                style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
+              <SpecialCharBar inputRef={descRef} value={description} onChange={setDescription} />
+            </div>
             <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Standard-Zeit (Min.)</label><input type="number" min={1} max={180} value={timeLimit} onChange={e => setTimeLimit(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
           </div>
           <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", marginBottom: "16px" }}>
@@ -509,7 +589,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
           </details>
         </div>
 
-        {/* Sections */}
         {questions.map((q, index) => {
           if (q.type !== "section") return null;
           const pts = getSectionPoints(index);
@@ -529,18 +608,19 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
                   <button onClick={() => removeQuestion(q.id)} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "7px", padding: "5px 12px", cursor: "pointer", fontSize: "13px" }}>✕ Entfernen</button>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                  <div><label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Abschnittstitel</label><input value={q.sectionTitle || ""} onChange={e => updateQuestion(q.id, "sectionTitle", e.target.value)} placeholder="z.B. Teil A – Leseverstehen" style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} /></div>
-                  <div><label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Anweisung (optional)</label><input value={q.sectionInstruction || ""} onChange={e => updateQuestion(q.id, "sectionInstruction", e.target.value)} placeholder="z.B. Lies den Text und beantworte die Fragen." style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} /></div>
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Abschnittstitel</label>
+                    <SectionInput field="sectionTitle" value={q.sectionTitle || ""} onChange={val => updateQuestion(q.id, "sectionTitle", val)} placeholder="z.B. Teil A – Leseverstehen" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Anweisung (optional)</label>
+                    <SectionInput field="sectionInstruction" value={q.sectionInstruction || ""} onChange={val => updateQuestion(q.id, "sectionInstruction", val)} placeholder="z.B. Lies den Text und beantworte die Fragen." />
+                  </div>
                 </div>
                 <div style={{ marginBottom: "12px" }}>
                   <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>📝 Text / Lesetext (optional)</label>
                   <RichTextEditor value={q.sectionText || ""} onChange={val => updateQuestion(q.id, "sectionText", val)} placeholder="Füge hier einen Lesetext, Gedicht, Dialog o.ä. ein..." />
                 </div>
-                <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", marginBottom: "16px" }}>
-                  <span style={{ background: "rgba(255,255,255,0.15)", border: "1px dashed rgba(255,255,255,0.4)", borderRadius: "6px", padding: "5px 10px" }}>🎬 Bild / Audio / Video anhängen</span>
-                  <input type="file" accept="image/*,audio/*,video/*" style={{ display: "none" }} onChange={e => { const file = e.target.files[0]; if (!file) return; const t = file.type.startsWith("image") ? "image" : file.type.startsWith("audio") ? "audio" : "video"; updateQuestion(q.id, "sectionMedia", file.name); updateQuestion(q.id, "sectionMediaType", t); }} />
-                  {q.sectionMedia && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)" }}>✓ {q.sectionMedia}</span>}
-                </label>
                 {(q.tasks || []).map((task, tIdx) => (
                   <TaskEditor key={task.id} task={task} tIdx={tIdx} sectionId={q.id}
                     onUpdate={(field, val) => updateTask(q.id, task.id, field, val)}
@@ -573,5 +653,17 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
         </div>
       )}
     </TeacherLayout>
+  );
+}
+
+// Hilfskomponente für Abschnittsfelder mit Sonderzeichen
+function SectionInput({ value, onChange, placeholder }) {
+  const inputRef = useRef(null);
+  return (
+    <div>
+      <input ref={inputRef} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} />
+      <SpecialCharBar inputRef={inputRef} value={value} onChange={onChange} />
+    </div>
   );
 }
