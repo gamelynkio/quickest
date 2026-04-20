@@ -92,6 +92,84 @@ const safeStorage = {
   removeItem: (key) => { try { sessionStorage.removeItem(key); } catch (_) { try { localStorage.removeItem(key); } catch (__) {} } },
 };
 
+// Sonderzeichen-Palette für Schüler (Französisch/Spanisch)
+const STUDENT_SPECIAL_CHARS = {
+  fr: { label: "🇫🇷", chars: ["à","â","ä","æ","ç","é","è","ê","ë","î","ï","ô","œ","ù","û","ü","ÿ","À","Â","Ç","É","È","Ê","Î","Ô","Œ","Ù","Û","«","»"] },
+  es: { label: "🇪🇸", chars: ["á","é","í","ó","ú","ü","ñ","¿","¡","Á","É","Í","Ó","Ú","Ü","Ñ"] },
+};
+
+function StudentCharBar({ inputRef, value, onChange }) {
+  const [activeLang, setActiveLang] = useState(null);
+  const insertChar = (char) => {
+    const el = inputRef?.current;
+    if (el) {
+      const start = el.selectionStart ?? value.length;
+      const end = el.selectionEnd ?? value.length;
+      const newVal = value.slice(0, start) + char + value.slice(end);
+      onChange(newVal);
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + 1, start + 1); }, 0);
+    } else { onChange(value + char); }
+  };
+  if (!activeLang) return (
+    <div style={{ display: "flex", gap: "4px", marginTop: "5px" }}>
+      {Object.entries(STUDENT_SPECIAL_CHARS).map(([lang, { label }]) => (
+        <button key={lang} type="button" onMouseDown={e => e.preventDefault()} onClick={() => setActiveLang(lang)}
+          style={{ padding: "3px 8px", fontSize: "12px", background: "rgba(255,255,255,0.9)", color: "#374151", border: "1px solid #d1d5db", borderRadius: "5px", cursor: "pointer" }}>
+          {label} Sonderzeichen
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <div style={{ marginTop: "5px", background: "rgba(255,255,255,0.97)", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "6px 8px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "3px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "12px", marginRight: "2px" }}>{STUDENT_SPECIAL_CHARS[activeLang].label}</span>
+        {STUDENT_SPECIAL_CHARS[activeLang].chars.map((char, i) => (
+          <button key={i} type="button" onMouseDown={e => e.preventDefault()} onClick={() => insertChar(char)}
+            style={{ padding: "4px 7px", minWidth: "26px", fontSize: "15px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "5px", cursor: "pointer", fontFamily: "inherit", lineHeight: 1.3 }}>
+            {char}
+          </button>
+        ))}
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setActiveLang(activeLang === "fr" ? "es" : "fr")}
+          style={{ padding: "3px 7px", fontSize: "11px", background: "#eff6ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "4px", cursor: "pointer", marginLeft: "4px" }}>
+          {activeLang === "fr" ? "🇪🇸" : "🇫🇷"}
+        </button>
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setActiveLang(null)}
+          style={{ padding: "3px 6px", fontSize: "11px", color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+      </div>
+    </div>
+  );
+}
+
+// Antwort-Textarea mit Sonderzeichen-Palette
+function AnswerTextarea({ value, onChange, rows = 3, style = {} }) {
+  const ref = useRef(null);
+  return (
+    <div>
+      <textarea ref={ref} value={value} onChange={e => onChange(e.target.value)}
+        placeholder="Deine Antwort..." rows={rows}
+        autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+        data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
+        style={{ width: "100%", ...style }} />
+      <StudentCharBar inputRef={ref} value={value} onChange={onChange} />
+    </div>
+  );
+}
+
+// Antwort-Input mit Sonderzeichen-Palette
+function AnswerInput({ value, onChange, placeholder = "Antwort eingeben...", style = {} }) {
+  const ref = useRef(null);
+  return (
+    <div>
+      <input ref={ref} value={value} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+        style={{ width: "100%", ...style }} />
+      <StudentCharBar inputRef={ref} value={value} onChange={onChange} />
+    </div>
+  );
+}
+
 function DebugBar({ assignmentRef, serverOffsetRef }) {
   const [info, setInfo] = useState("");
   useEffect(() => {
@@ -529,7 +607,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       );
     }
     if (q.type === "true_false") return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>{["Wahr", "Falsch"].map((opt, i) => <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))} style={{ padding: "12px", border: `2px solid ${answers[q.id] === i ? "#2563a8" : "#e2e8f0"}`, borderRadius: "8px", background: answers[q.id] === i ? "#2563a8" : "#f8fafc", color: answers[q.id] === i ? "#fff" : "#374151", cursor: "pointer", fontWeight: 700, fontSize: "14px", fontFamily: "inherit" }}>{opt}</button>)}</div>;
-    if (q.type === "open" || q.type === "qa") return <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={3} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", color: "#0f172a", background: "#fff" }} />;
+    if (q.type === "open" || q.type === "qa") return <AnswerTextarea value={answers[q.id] || ""} onChange={val => setAnswers(a => ({ ...a, [q.id]: val }))} rows={3} style={{ padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", color: "#0f172a", background: "#fff" }} />;
     if (q.type === "fill_blank") {
       const text = q.fullText || q.text || "";
       if ((q.blanks || []).length > 0 && text.includes("[Lücke]")) {
@@ -538,7 +616,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       return <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={3} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />;
     }
     if (q.type === "assignment") return <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{(q.pairs || []).map((pair, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.8)", borderRadius: "8px", padding: "8px 12px" }}><span style={{ fontWeight: 700, fontSize: "14px", minWidth: "80px" }}>{pair.left}</span><span style={{ color: "#94a3b8", fontSize: "16px" }}>→</span><select value={(answers[q.id] || {})[i] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [i]: e.target.value } }))} style={{ flex: 1, padding: "8px 10px", border: "2px solid #e5e7eb", borderRadius: "7px", fontSize: "14px", background: "#fff", fontFamily: "inherit" }}><option value="">– auswählen –</option>{(q.pairs || []).map((p, j) => <option key={j} value={p.right}>{p.right}</option>)}</select></div>)}</div>;
-    if (q.type === "flashcard") return <div><div style={{ background: "#f8fafc", borderRadius: "10px", padding: "16px", textAlign: "center", marginBottom: "10px", border: "2px solid #e2e8f0" }}><div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", marginBottom: "6px" }}>A-SEITE</div>{q.cardFrontMedia ? <img src={q.cardFrontMedia} alt="A-Seite" style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", objectFit: "contain" }} /> : <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>}</div><input value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="B-Seite eingeben..." autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ width: "100%", padding: "12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "15px", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }} /></div>;
+    if (q.type === "flashcard") return <div><div style={{ background: "#f8fafc", borderRadius: "10px", padding: "16px", textAlign: "center", marginBottom: "10px", border: "2px solid #e2e8f0" }}><div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", marginBottom: "6px" }}>A-SEITE</div>{q.cardFrontMedia ? <img src={q.cardFrontMedia} alt="A-Seite" style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", objectFit: "contain" }} /> : <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{q.cardFront}</div>}</div><AnswerInput value={answers[q.id] || ""} onChange={val => setAnswers(a => ({ ...a, [q.id]: val }))} placeholder="B-Seite eingeben..." style={{ padding: "12px", border: "2px solid #e2e8f0", borderRadius: "8px", fontSize: "15px", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }} /></div>;
     return null;
   };
 
@@ -627,7 +705,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                   </div>
                   <span style={{ fontSize: "13px", color: "#94a3b8", whiteSpace: "nowrap", flexShrink: 0, background: "#f1f5f9", borderRadius: "6px", padding: "3px 8px" }}>{q.points} Pkt.</span>
                 </div>
-                {(q.type === "open" || q.type === "qa") && <textarea value={answers[q.id] || ""} onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} placeholder="Deine Antwort..." rows={5} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ width: "100%", padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", lineHeight: 1.6, color: "#0f172a" }} />}
+                {(q.type === "open" || q.type === "qa") && <AnswerTextarea value={answers[q.id] || ""} onChange={val => setAnswers(a => ({ ...a, [q.id]: val }))} rows={5} style={{ padding: "14px", border: "2px solid rgba(0,0,0,0.12)", borderRadius: "12px", fontSize: "15px", resize: "vertical", background: "rgba(255,255,255,0.8)", fontFamily: "inherit", boxSizing: "border-box", lineHeight: 1.6, color: "#0f172a" }} />}
                 {q.type === "multiple_choice" && (() => {
                   const multiCorrect = (q.correctAnswers?.length || 0) > 1;
                   const filledOptions = q.options.filter(o => o.trim() !== "");
