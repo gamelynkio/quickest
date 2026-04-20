@@ -132,7 +132,7 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
   useEffect(() => { return () => { onUpdate("taskTitle", localRef.current.localTitle); onUpdate("taskInstruction", localRef.current.localInstruction); onUpdate("taskText", localRef.current.localTaskText); }; }, []);
 
   return (
-    <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.15)" }}>
+    <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: "12px", padding: "16px", marginBottom: "10px", border: "1px solid rgba(255,255,255,0.2)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
         <span style={{ fontSize: "12px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "0.5px" }}>📋 AUFGABE {tIdx + 1}</span>
         <button onClick={onRemove} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", borderRadius: "6px", padding: "3px 10px", cursor: "pointer", fontSize: "12px" }}>✕</button>
@@ -152,13 +152,16 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
           onUpdate={(field, val) => onUpdateQuestion(tq.id, field, val)}
           onRemove={() => onRemoveQuestion(tq.id)} />
       ))}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
-        {QUESTION_TYPES.map(qt => (
-          <button key={qt.id} onClick={() => onAddQuestion(qt.id)}
-            style={{ padding: "5px 10px", background: "rgba(255,255,255,0.15)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", fontFamily: "inherit" }}>
-            + {qt.icon} {qt.label}
-          </button>
-        ))}
+      <div style={{ marginTop: "10px" }}>
+        <div style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.5)", letterSpacing: "0.5px", marginBottom: "5px" }}>UNTERAUFGABE HINZUFÜGEN</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+          {QUESTION_TYPES.map(qt => (
+            <button key={qt.id} onClick={() => onAddQuestion(qt.id)}
+              style={{ padding: "5px 10px", background: "rgba(255,255,255,0.15)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", fontFamily: "inherit" }}>
+              + {qt.icon} {qt.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
