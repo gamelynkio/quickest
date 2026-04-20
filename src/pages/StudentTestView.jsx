@@ -126,7 +126,7 @@ function StudentCharBar({ inputRef, value, onChange }) {
         <span style={{ fontSize: "12px", marginRight: "2px" }}>{STUDENT_SPECIAL_CHARS[activeLang].label}</span>
         {STUDENT_SPECIAL_CHARS[activeLang].chars.map((char, i) => (
           <button key={i} type="button" onMouseDown={e => e.preventDefault()} onClick={() => insertChar(char)}
-            style={{ padding: "4px 7px", minWidth: "26px", fontSize: "15px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "5px", cursor: "pointer", fontFamily: "inherit", lineHeight: 1.3 }}>
+            style={{ padding: "4px 7px", minWidth: "26px", fontSize: "15px", background: "#fff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "5px", cursor: "pointer", fontFamily: "inherit", lineHeight: 1.3 }}>
             {char}
           </button>
         ))}
