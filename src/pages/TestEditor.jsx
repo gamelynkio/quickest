@@ -537,7 +537,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Titel *</label>
               <input ref={titleRef} value={title} onChange={e => setTitle(e.target.value)} placeholder="z.B. Vocabulario – Unidad 4"
                 style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-              <SpecialCharBar inputRef={titleRef} value={title} onChange={setTitle} />
             </div>
             <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Fach</label><select value={subject} onChange={e => setSubject(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}><option value="">– Fach –</option>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
             <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Klasse</label><select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}><option value="">– Klasse –</option>{[5,6,7,8,9,10,11,12,13].map(g => <option key={g} value={String(g)}>{g}. Klasse</option>)}</select></div>
@@ -547,7 +546,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
               <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Kurzbeschreibung</label>
               <input ref={descRef} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional"
                 style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-              <SpecialCharBar inputRef={descRef} value={description} onChange={setDescription} />
             </div>
             <div><label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Standard-Zeit (Min.)</label><input type="number" min={1} max={180} value={timeLimit} onChange={e => setTimeLimit(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} /></div>
           </div>
@@ -651,7 +649,6 @@ function SectionInput({ value, onChange, placeholder }) {
     <div>
       <input ref={inputRef} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} />
-      <SpecialCharBar inputRef={inputRef} value={value} onChange={onChange} />
     </div>
   );
 }
