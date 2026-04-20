@@ -127,7 +127,6 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
   const [localInstruction, setLocalInstruction] = useState(task.taskInstruction || "");
   const [localTaskText, setLocalTaskText] = useState(task.taskText || "");
   const titleRef = useRef(null);
-  const instructionRef = useRef(null);
   const localRef = useRef({});
   localRef.current = { localTitle, localInstruction, localTaskText };
   useEffect(() => { return () => { onUpdate("taskTitle", localRef.current.localTitle); onUpdate("taskInstruction", localRef.current.localInstruction); onUpdate("taskText", localRef.current.localTaskText); }; }, []);
@@ -138,19 +137,11 @@ function TaskEditor({ task, tIdx, sectionId, onUpdate, onRemove, onAddQuestion, 
         <span style={{ fontSize: "12px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "0.5px" }}>📋 AUFGABE {tIdx + 1}</span>
         <button onClick={onRemove} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", borderRadius: "6px", padding: "3px 10px", cursor: "pointer", fontSize: "12px" }}>✕</button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
-        <div>
-          <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabentitel (optional)</label>
-          <input ref={titleRef} value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={() => onUpdate("taskTitle", localTitle)} placeholder="z.B. Right or wrong?"
-            style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
-          <SpecialCharBar inputRef={titleRef} value={localTitle} onChange={val => { setLocalTitle(val); onUpdate("taskTitle", val); }} />
-        </div>
-        <div>
-          <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabenanweisung (optional)</label>
-          <input ref={instructionRef} value={localInstruction} onChange={e => setLocalInstruction(e.target.value)} onBlur={() => onUpdate("taskInstruction", localInstruction)} placeholder="z.B. Tick the correct box."
-            style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
-          <SpecialCharBar inputRef={instructionRef} value={localInstruction} onChange={val => { setLocalInstruction(val); onUpdate("taskInstruction", val); }} />
-        </div>
+      <div style={{ marginBottom: "10px" }}>
+        <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Aufgabentitel (optional)</label>
+        <input ref={titleRef} value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={() => onUpdate("taskTitle", localTitle)} placeholder="z.B. Right or wrong?"
+          style={{ width: "100%", padding: "7px 10px", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "7px", fontSize: "13px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.08)", color: "#fff" }} />
+        <SpecialCharBar inputRef={titleRef} value={localTitle} onChange={val => { setLocalTitle(val); onUpdate("taskTitle", val); }} />
       </div>
       <div style={{ marginBottom: "10px" }}>
         <label style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>📝 Beispieltext / Aufgabentext (optional)</label>
@@ -607,15 +598,9 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
                   </div>
                   <button onClick={() => removeQuestion(q.id)} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "7px", padding: "5px 12px", cursor: "pointer", fontSize: "13px" }}>✕ Entfernen</button>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                  <div>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Abschnittstitel</label>
-                    <SectionInput field="sectionTitle" value={q.sectionTitle || ""} onChange={val => updateQuestion(q.id, "sectionTitle", val)} placeholder="z.B. Teil A – Leseverstehen" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Anweisung (optional)</label>
-                    <SectionInput field="sectionInstruction" value={q.sectionInstruction || ""} onChange={val => updateQuestion(q.id, "sectionInstruction", val)} placeholder="z.B. Lies den Text und beantworte die Fragen." />
-                  </div>
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Abschnittstitel</label>
+                  <SectionInput field="sectionTitle" value={q.sectionTitle || ""} onChange={val => updateQuestion(q.id, "sectionTitle", val)} placeholder="z.B. Teil A – Leseverstehen" />
                 </div>
                 <div style={{ marginBottom: "12px" }}>
                   <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>📝 Text / Lesetext (optional)</label>
