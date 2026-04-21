@@ -10,6 +10,7 @@ import GroupManager from "./pages/GroupManager";
 import ResultsView from "./pages/ResultsView";
 import SharePage from "./pages/SharePage";
 import TestPreview from "./pages/TestPreview";
+import AdminDashboard from "./pages/AdminDashboard";
 
 export default function App() {
   const [session, setSession] = useState(undefined);
@@ -114,6 +115,11 @@ export default function App() {
       setCurrentPage("dashboard");
     }
   };
+
+  // Admin route
+  if (window.location.pathname === "/admin") {
+    return <AdminDashboard />;
+  }
 
   // Check for share route: /share/[token] or /share (code import)
   const shareMatch = window.location.pathname.match(/^\/share\/([a-zA-Z0-9]+)$/);
