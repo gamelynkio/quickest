@@ -24,6 +24,7 @@ export default function TeacherLayout({ children, navigate, onLogout, currentUse
         <nav style={{ flex: 1, padding: "12px 0" }}>
           {navItems.map(item => (
             <button key={item.id} onClick={() => navigate(item.id)}
+              data-tour={`nav-${item.id}`}
               style={{
                 width: "100%", display: "flex", alignItems: "center", gap: "12px",
                 padding: "12px 20px", border: "none",
