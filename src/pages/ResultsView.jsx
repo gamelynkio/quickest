@@ -125,125 +125,43 @@ Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
 };
 
 
-// Batch-Bewertung: alle Antworten auf dieselbe Frage zusammen bewerten
-// → einheitliche Maßstäbe für alle Schüler
-const aiCorrectBatch = async (submissions, assignmentData, allSubmissions = []) => {
-  // allSubmissions enthält bereits korrigierte Abgaben als Kalibrierungs-Referenz
-  const calibrationSubs = allSubmissions.filter(s =>
-    s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.aiReviewed)
-  );
-  const questions = assignmentData?.question_data || [];
-  const gradingMode = assignmentData?.grading_mode || "standard";
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Bewertungsmaßstab vorschlagen basierend auf echten Schülerantworten
+const suggestRubricFromAnswers = async (question, submissions, supabaseUrl, supabaseAnonKey) => {
+  const answers = submissions
+    .filter(s => s.answers?.[question.id]?.trim())
+    .map(s => s.answers[question.id]);
 
-  const flattenQuestions = (qs) => {
-    const result = [];
-    for (const q of qs) {
-      if (q.type === "section") {
-        for (const task of (q.tasks || [])) {
-          for (const tq of (task.questions || [])) result.push(tq);
-        }
-      } else { result.push(q); }
-    }
-    return result;
-  };
+  if (answers.length === 0) return null;
 
-  const openQuestions = flattenQuestions(questions).filter(q => q.type === "open" || q.type === "qa");
-  if (openQuestions.length === 0) return [];
+  const prompt = `Du bist ein erfahrener Schullehrer. Du hast eine offene Frage gestellt und siehst jetzt die Antworten deiner Schüler.
 
-  const gradingModeText = {
-    content: "Bewerte NUR den inhaltlichen Kern. Rechtschreibung, Grammatik und Zeichensetzung sind vollkommen egal.",
-    standard: "Bewerte primär den Inhalt. Grobe Rechtschreib- oder Grammatikfehler können leicht abgezogen werden, spielen aber keine große Rolle.",
-    strict: "Bewerte Inhalt UND Sprachform. Rechtschreibfehler, Grammatikfehler und falsche Zeichensetzung führen zu Punktabzügen.",
-  }[gradingMode] || "";
+Frage: ${question.text || "(Fragetext nicht verfügbar)"}
+Musterlösung: ${question.solution || "(keine Musterlösung hinterlegt)"}
+Maximale Punktzahl: ${question.points}
 
-  // Ergebnisse: { submissionId: { qId: { points, comment } } }
-  const results = {};
+Schülerantworten (${answers.length} Antworten):
+${answers.map((a, i) => `${i + 1}. "${a}"`).join("\n")}
 
-  for (const q of openQuestions) {
-    // Alle Antworten auf diese Frage sammeln
-    const answers = submissions
-      .filter(s => s.answers?.[q.id]?.trim())
-      .map(s => ({ id: s.id, username: s.username, answer: s.answers[q.id] }));
+Erstelle einen Bewertungsmaßstab der zu diesen echten Schülerantworten passt.
+Die Kriterien sollen klar und nachvollziehbar sein.
+Schritte von 0.5 Punkten, Summe der Kriterien = ${question.points}.
 
-    if (answers.length === 0) continue;
+Gib das Ergebnis NUR als JSON zurück:
+{
+  "partialPoints": [
+    {"points": <Zahl>, "description": "<konkretes Kriterium>"},
+    ...
+  ]
+}`;
 
-    const answersText = answers
-      .map((a, i) => `Schüler ${i + 1} (${a.username}): "${a.answer}"`)
-      .join("\n");
-
-    const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
-
-Frage: ${q.text}
-Musterlösung: ${q.solution || "(keine Musterlösung hinterlegt — bewerte inhaltlich nach bestem Ermessen)"}
-Maximale Punktzahl: ${q.points}
-Bewertungsregeln: ${gradingModeText}
-
-WICHTIG — Kalibrierung:
-- Bewerte alle Antworten nach demselben Maßstab
-- Vergleiche die Antworten miteinander bevor du Punkte vergibst
-- Eine Antwort die inhaltlich gleichwertig zu einer anderen ist, bekommt dieselbe Punktzahl
-- Wörter in runden Klammern () in der Musterlösung sind OPTIONAL
-
-${(q.partialPoints || []).length > 0
-  ? `Bewertungskriterien (verbindlich):
-${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}`
-  : `- Vergib anteilige Punkte wenn die Antwort teilweise korrekt ist
-- Schritte von 0.5 Punkten möglich`}
-
-Schülerantworten:
-${answersText}
-
-${(() => {
-      const refs = calibrationSubs
-        .filter(s => s.answers?.[q.id]?.trim() && s.ai_corrections?.[q.id]?.aiReviewed)
-        .slice(0, 4)
-        .map(s => `- "${s.answers[q.id]}" → ${s.ai_corrections[q.id].points} Pkt. (${(s.ai_corrections[q.id].comment || "").replace("🤖 ", "")})`)
-        .join("\n");
-      return refs ? `Referenz-Bewertungen (bereits kalibriert — halte exakt denselben Maßstab):\n${refs}\n` : "";
-    })()}
-Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in derselben Reihenfolge:
-[{"username": "<name>", "points": <Zahl, max ${q.points}>, "comment": "<kurze Begründung, max 1 Satz>"}]`;
-
-    try {
-      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabaseAnonKey}`,
-          "apikey": supabaseAnonKey,
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 2000,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
-      const data = await response.json();
-      const text = data.content?.map(b => b.text || "").join("") || "";
-      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-
-      // Ergebnisse zuordnen
-      parsed.forEach((r, i) => {
-        const sub = answers[i];
-        if (!sub) return;
-        if (!results[sub.id]) results[sub.id] = {};
-        results[sub.id][q.id] = {
-          points: Math.min(Math.max(0, Number(r.points) || 0), Number(q.points)),
-          comment: `🤖 ${r.comment}`,
-          aiReviewed: true,
-          needsReview: false,
-          correct: Number(r.points) >= Number(q.points),
-          maxPoints: Number(q.points),
-        };
-      });
-    } catch (e) {
-      console.error("Batch-Korrektur fehlgeschlagen für Frage", q.id, e);
-    }
-  }
-
-  return results; // { submissionId: { qId: correction } }
+  const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
+  });
+  const data = await response.json();
+  const text = data.content?.map(b => b.text || "").join("") || "";
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
 };
 
 export default function ResultsView({ navigate, onLogout, currentUser, assignment }) {
@@ -266,6 +184,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [creatingMakeup, setCreatingMakeup] = useState(false);
   const [assignmentData, setAssignmentData] = useState(null);
   const [releaseModal, setReleaseModal] = useState(false); // nach KI-Korrektur: Freigabe-Frage
+  const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
+  const [suggestingRubric, setSuggestingRubric] = useState(false);
+  const [savingRubric, setSavingRubric] = useState(false);
 
   useEffect(() => {
     if (!assignment?.id) return;
@@ -277,67 +198,48 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     return () => supabase.removeChannel(channel);
   }, [assignment]);
 
-  // Auto-Batch-Bewertung — läuft automatisch, nutzt bereits korrigierte als Referenz
+  // Beim Laden: unreviewte Submissions automatisch KI-korrigieren
   useEffect(() => {
-    if (!assignmentData || submissions.length === 0 || aiRunning) return;
+    if (!assignmentData || submissions.length === 0) return;
     const pending = submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
     if (pending.length === 0) return;
-    // Snapshot mitgeben damit Kalibrierung korrekte Referenzen hat
-    runAutoBatchCorrection(pending, submissions);
-  }, [assignmentData, submissions.length]);
-
-  const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null) => {
-    const pending = pendingOverride || submissions.filter(s =>
-      !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
-    );
-    if (pending.length === 0) return;
     setAiRunning(true);
-    setAiProgress(`🤖 KI bewertet ${pending.length} Abgabe${pending.length !== 1 ? "n" : ""} einheitlich...`);
+    setAiProgress(`🤖 KI korrigiert ${pending.length} Abgabe${pending.length !== 1 ? "n" : ""} automatisch...`);
     (async () => {
-      try {
-        // Batch: alle Antworten pro Frage gemeinsam bewerten
-        const batchResults = await aiCorrectBatch(pending, assignmentData, allSubsSnapshot || submissions);
-        for (const s of pending) {
-          const newCorrections = batchResults[s.id] || {};
-          // Bestehende corrections mergen (nicht-offene Fragen bleiben erhalten)
-          const merged = { ...(s.ai_corrections || {}), ...newCorrections };
-          // Fehlende offene Fragen (keine Antwort gegeben) als 0 markieren
-          const allOpen = (() => {
-            const flat = [];
-            for (const q of (assignmentData.question_data || [])) {
-              if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) { if (tq.type==="open"||tq.type==="qa") flat.push(tq); } }
-              else if (q.type==="open"||q.type==="qa") flat.push(q);
-            }
-            return flat;
-          })();
-          for (const q of allOpen) {
-            if (!merged[q.id] || merged[q.id].needsReview) {
-              merged[q.id] = { points: 0, correct: false, comment: "Keine Antwort gegeben.", aiReviewed: true, needsReview: false, maxPoints: Number(q.points) };
-            }
-          }
-          let newScore = 0;
-          for (const [qId, correction] of Object.entries(merged)) {
-            const ov = (s.manual_overrides || {})[qId];
-            newScore += ov !== undefined ? Number(ov) : (correction.points ?? 0);
-          }
-          const percent = (newScore / (s.total_points || 1)) * 100;
-          const gs = [...(assignmentData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
-          let newGrade = "6";
-          for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
-          await supabase.from("submissions").update({ ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true }).eq("id", s.id);
-          setSubmissions(prev => prev.map(sub => sub.id === s.id ? { ...sub, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true } : sub));
-          if (selectedSubmission?.id === s.id) setSelectedSubmission(prev => ({ ...prev, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true }));
+      for (let i = 0; i < pending.length; i++) {
+        const s = pending[i];
+        if (pending.length > 1) setAiProgress(`🤖 KI korrigiert ${i + 1}/${pending.length}: ${s.username}...`);
+        const { corrections, changed } = await aiCorrectOpenQuestions(s, assignmentData);
+        if (!changed) continue;
+        let newScore = 0;
+        for (const [qId, correction] of Object.entries(corrections)) {
+          const ov = (s.manual_overrides || {})[qId];
+          newScore += ov !== undefined ? Number(ov) : (correction.points !== null && correction.points !== undefined ? Number(correction.points) : 0);
         }
-        setAiProgress("✅ KI-Korrektur abgeschlossen!");
-        setTimeout(() => { setAiProgress(""); setAiRunning(false); setReleaseModal(true); }, 3000);
-      } catch (e) {
-        setAiProgress("❌ Fehler bei der KI-Korrektur.");
-        setTimeout(() => { setAiProgress(""); setAiRunning(false); }, 3000);
+        const percent = (newScore / (s.total_points || 1)) * 100;
+        const gs = [...(assignmentData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
+        let newGrade = "6";
+        for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
+        const hasStillOpen = Object.values(corrections).some(c => c.needsReview && !c.aiReviewed);
+        await supabase.from("submissions").update({
+          ai_corrections: corrections,
+          score: newScore,
+          grade: newGrade,
+          reviewed: !hasStillOpen,
+        }).eq("id", s.id);
+        setSubmissions(prev => prev.map(sub =>
+          sub.id === s.id ? { ...sub, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen } : sub
+        ));
+        if (selectedSubmission?.id === s.id) {
+          setSelectedSubmission(prev => ({ ...prev, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen }));
+        }
       }
+      setAiProgress("✅ KI-Korrektur abgeschlossen!");
+      setTimeout(() => { setAiProgress(""); setAiRunning(false); setReleaseModal(true); }, 3000);
     })();
-  };
+  }, [assignmentData, submissions.length]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -457,51 +359,54 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setAiRunning(false);
   };
 
-  // Batch-Bewertung: alle Abgaben pro Frage gleichzeitig korrigieren
-  const runBatchCorrection = async () => {
-    setBatchRunning(true);
-    setAiRunning(true);
-    setAiProgress("🤖 Batch-Bewertung: alle Antworten werden kalibriert...");
+
+  const handleSuggestRubric = async (question) => {
+    setSuggestingRubric(true);
     try {
-      const aData = assignmentData || assignment;
-      const batchResults = await aiCorrectBatch(submissions, aData);
-
-      // Ergebnisse in DB schreiben
-      for (const sub of submissions) {
-        const newCorrections = batchResults[sub.id];
-        if (!newCorrections || Object.keys(newCorrections).length === 0) continue;
-
-        const merged = { ...(sub.ai_corrections || {}), ...newCorrections };
-        let newScore = 0;
-        for (const [qId, correction] of Object.entries(merged)) {
-          const ov = (sub.manual_overrides || {})[qId];
-          newScore += ov !== undefined ? Number(ov) : (correction.points ?? 0);
-        }
-        const percent = (newScore / (sub.total_points || 1)) * 100;
-        const gs = [...(aData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
-        let newGrade = "6";
-        for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
-
-        await supabase.from("submissions").update({
-          ai_corrections: merged,
-          score: newScore,
-          grade: newGrade,
-          reviewed: true,
-        }).eq("id", sub.id);
-
-        setSubmissions(prev => prev.map(s =>
-          s.id === sub.id ? { ...s, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true } : s
-        ));
-        if (selectedSubmission?.id === sub.id) {
-          setSelectedSubmission(prev => ({ ...prev, ai_corrections: merged, score: newScore, grade: newGrade }));
-        }
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const result = await suggestRubricFromAnswers(question, submissions, supabaseUrl, supabaseAnonKey);
+      if (result?.partialPoints?.length) {
+        setRubricModal({ question, suggested: result.partialPoints });
       }
-      setAiProgress("✅ Batch-Bewertung abgeschlossen!");
-      setTimeout(() => { setAiProgress(""); setAiRunning(false); setBatchRunning(false); setReleaseModal(true); }, 3000);
     } catch (e) {
-      setAiProgress("❌ Fehler bei der Batch-Bewertung.");
-      setTimeout(() => { setAiProgress(""); setAiRunning(false); setBatchRunning(false); }, 3000);
+      console.error("Rubric suggestion failed:", e);
     }
+    setSuggestingRubric(false);
+  };
+
+  const saveRubricToTemplate = async () => {
+    if (!rubricModal || !assignmentData?.template_id) return;
+    setSavingRubric(true);
+    try {
+      // Template laden
+      const { data: template } = await supabase.from("templates").select("question_data").eq("id", assignmentData.template_id).single();
+      if (!template) return;
+
+      // Frage in template finden und partialPoints setzen
+      const updateQuestionData = (qs) => qs.map(q => {
+        if (String(q.id) === String(rubricModal.question.id)) {
+          return { ...q, partialPoints: rubricModal.suggested };
+        }
+        // Auch in tasks/sections suchen
+        if (q.tasks) return { ...q, tasks: q.tasks.map(t => ({ ...t, questions: (t.questions || []).map(tq => String(tq.id) === String(rubricModal.question.id) ? { ...tq, partialPoints: rubricModal.suggested } : tq) })) };
+        if (q.questions) return { ...q, questions: updateQuestionData(q.questions) };
+        return q;
+      });
+
+      const updatedQd = updateQuestionData(template.question_data || []);
+      await supabase.from("templates").update({ question_data: updatedQd }).eq("id", assignmentData.template_id);
+
+      // Auch assignments question_data updaten damit aktuelle KI-Korrekturen den Maßstab kennen
+      const updatedAsgn = updateQuestionData(assignmentData.question_data || []);
+      await supabase.from("assignments").update({ question_data: updatedAsgn }).eq("id", assignmentData.id);
+      setAssignmentData(prev => ({ ...prev, question_data: updatedAsgn }));
+
+      setRubricModal(null);
+    } catch (e) {
+      console.error("Save rubric failed:", e);
+    }
+    setSavingRubric(false);
   };
 
   const saveOverrides = async () => {
@@ -591,11 +496,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>
             {submissions.length} Abgaben{avg ? ` · Ø ${avg}%` : ""}
             <button onClick={fetchSubmissions} style={{ marginLeft: "12px", background: "none", border: "none", color: "#2563a8", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>🔄 Aktualisieren</button>
-
             {submissions.some(s => !s.released) && (
               <button onClick={releaseAll} style={{ marginLeft: "12px", padding: "4px 12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>✓ Alle freigeben</button>
             )}
-
           </p>
         </div>
 
@@ -639,7 +542,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                 <div style={{ fontWeight: 600 }}>Noch keine Abgaben</div>
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: selectedSubmission ? "1fr 1fr" : "1fr", gap: "20px" }}>
                 <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
@@ -695,10 +598,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                 </div>
 
                 {selectedSubmission && (
-                  <div onClick={() => setSelectedSubmission(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.15)", zIndex: 499 }} />
-                )}
-                {selectedSubmission && (
-                  <div style={{ position: "fixed", top: 0, right: 0, width: "480px", height: "100vh", background: "#fff", borderLeft: "1px solid #e2e8f0", padding: "24px", overflowY: "auto", zIndex: 500, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)" }}>
+                  <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "22px", overflowY: "auto", maxHeight: "600px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
                       <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{selectedSubmission.username}</h3>
                       <div style={{ display: "flex", gap: "8px" }}>
@@ -776,12 +676,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                             {isStillOpen && <span style={{ fontSize: "10px", background: "#fef9c3", color: "#ca8a04", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>Ausstehend</span>}
                           </div>
                           <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
-                            <em style={{ color: "#94a3b8" }}>Antwort:</em> {(() => {
-                              const ans = selectedSubmission.answers?.[qId];
-                              if (!ans) return "–";
-                              if (Array.isArray(ans)) return ans.join(", ");
-                              return ans;
-                            })()}
+                            <em style={{ color: "#94a3b8" }}>Antwort:</em> {correction.studentAnswer ?? "–"}
                           </div>
                           {correction.comment && (
                             <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
@@ -793,6 +688,16 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                               <strong>📝 Musterlösung:</strong> {correction.solution}
                             </div>
                           )}
+                          {correction.aiReviewed && !correction.partialPoints?.length && (() => {
+                            const q = (assignmentData?.question_data || []).flatMap(q => q.type === "section" ? (q.tasks || []).flatMap(t => t.questions || []) : q.tasks ? (q.tasks || []).flatMap(t => t.questions || []) : [q]).find(q => String(q.id) === qId);
+                            if (!q || (q.partialPoints?.length > 0)) return null;
+                            return (
+                              <button onClick={() => handleSuggestRubric({ ...q, id: qId })} disabled={suggestingRubric}
+                                style={{ marginBottom: "8px", padding: "5px 10px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "6px", fontSize: "11px", fontWeight: 600, cursor: suggestingRubric ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                                {suggestingRubric ? "⏳ KI analysiert..." : "🎯 Bewertungsmaßstab vorschlagen"}
+                              </button>
+                            );
+                          })()}
                           {(correction.partialPoints?.length > 0) && (
                             <details style={{ marginBottom: "8px" }}>
                               <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "2px 0" }}>📋 Bewertungsmaßstab ({correction.partialPoints.length} Kriterien)</summary>
@@ -959,6 +864,41 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
               <button onClick={createMakeupTest} disabled={!makeupTemplateId || makeupSelected.size === 0 || creatingMakeup}
                 style={{ flex: 1, padding: "11px", background: (makeupTemplateId && makeupSelected.size > 0) ? "#2563a8" : "#e2e8f0", color: (makeupTemplateId && makeupSelected.size > 0) ? "#fff" : "#94a3b8", border: "none", borderRadius: "10px", fontWeight: 700, cursor: (makeupTemplateId && makeupSelected.size > 0) ? "pointer" : "not-allowed" }}>
                 {creatingMakeup ? "Wird erstellt..." : `Nachtest für ${makeupSelected.size} Schüler/in aktivieren →`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* BEWERTUNGSMASSTAB MODAL */}
+      {rubricModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "480px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ fontSize: "48px", textAlign: "center", marginBottom: "12px" }}>🎯</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 6px", color: "#0f172a", textAlign: "center" }}>KI schlägt Bewertungsmaßstab vor</h3>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px", textAlign: "center", lineHeight: 1.5 }}>
+              Basierend auf den echten Schülerantworten. Wird in der Vorlage gespeichert und bei künftigen Tests wiederverwendet.
+            </p>
+            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "20px", border: "1px solid #e2e8f0" }}>
+              {rubricModal.suggested.map((p, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                  <div style={{ background: "#6d28d9", color: "#fff", borderRadius: "6px", padding: "3px 10px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{p.points} Pkt.</div>
+                  <input value={p.description} onChange={e => setRubricModal(prev => ({ ...prev, suggested: prev.suggested.map((pp, pi) => pi === i ? { ...pp, description: e.target.value } : pp) }))}
+                    style={{ flex: 1, padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit" }} />
+                  <input type="number" value={p.points} min={0} step={0.5} onChange={e => setRubricModal(prev => ({ ...prev, suggested: prev.suggested.map((pp, pi) => pi === i ? { ...pp, points: Number(e.target.value) } : pp) }))}
+                    style={{ width: "54px", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", textAlign: "center" }} />
+                </div>
+              ))}
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px", textAlign: "right" }}>
+                Summe: <strong style={{ color: rubricModal.suggested.reduce((s, p) => s + Number(p.points), 0) === Number(rubricModal.question.points) ? "#16a34a" : "#dc2626" }}>
+                  {rubricModal.suggested.reduce((s, p) => s + Number(p.points), 0)} / {rubricModal.question.points} Pkt.
+                </strong>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setRubricModal(null)} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
+              <button onClick={saveRubricToTemplate} disabled={savingRubric}
+                style={{ flex: 1, padding: "11px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, cursor: savingRubric ? "not-allowed" : "pointer" }}>
+                {savingRubric ? "Wird gespeichert..." : "✓ In Vorlage speichern"}
               </button>
             </div>
           </div>
