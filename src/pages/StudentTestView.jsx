@@ -12,6 +12,11 @@ const flattenQuestions = (qs) => {
           result.push({ ...tq, _taskId: task.id, _sectionId: q.id });
         }
       }
+    } else if (q.type === "task") {
+      // Neues flaches Format ohne Abschnitt
+      for (const tq of (q.questions || [])) {
+        result.push({ ...tq, _taskId: q.id });
+      }
     } else {
       result.push(q);
     }
@@ -694,6 +699,34 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
                 </div>
               );
             }
+            // Neues flaches Task-Format (kein Abschnitt)
+            if (q.type === "task") {
+              const taskNum = questions.slice(0, index).filter(x => x.type === "task").length + 1;
+              return (
+                <div key={q.id} style={{ marginBottom: "20px", background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "18px", padding: "20px 16px 16px", color: "#fff" }}>
+                  <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: "8px", padding: "10px 14px", marginBottom: "10px" }}>
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>Aufgabe {taskNum}{q.taskTitle ? `: ${q.taskTitle}` : ""}</div>
+                  </div>
+                  {q.taskText?.replace(/<[^>]*>/g, "").trim() && <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "10px", padding: "14px 16px", marginBottom: "10px", fontSize: "14px", lineHeight: 1.8, color: "#fff", wordBreak: "break-word" }} dangerouslySetInnerHTML={{ __html: q.taskText }} />}
+                  {(q.questions || []).map((tq, tqIdx) => {
+                    const isAns = Array.isArray(answers[tq.id]) ? answers[tq.id].length > 0 : answers[tq.id] !== undefined && answers[tq.id] !== "";
+                    return (
+                      <div key={tq.id} style={{ background: "#fff", borderRadius: "10px", padding: "14px 16px", marginBottom: "6px", border: `2px solid ${isAns ? "#bfdbfe" : "#e2e8f0"}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ background: isAns ? "#2563a8" : "#64748b", color: "#fff", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>{taskNum}.{tqIdx + 1}</span>
+                            {(tq.type === "qa" || tq.type === "open") && tq.text?.includes("<") ? <div style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a", lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: tq.text }} /> : <span style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{tq.text}</span>}
+                          </div>
+                          <span style={{ fontSize: "11px", color: "#94a3b8", background: "#f1f5f9", borderRadius: "5px", padding: "2px 7px", flexShrink: 0, marginLeft: "8px" }}>{tq.points} Pkt.</span>
+                        </div>
+                        {renderQuestionInput(tq)}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
+
             const qIndex = questions.slice(0, index).filter(x => x.type !== "section").length;
             const isAnswered = q.type === "fill_blank" && q.blanks?.length > 0 ? Array.isArray(answers[q.id]) && answers[q.id].some(a => a?.trim()) : q.type === "multiple_choice" ? (Array.isArray(answers[q.id]) ? answers[q.id].length > 0 : answers[q.id] !== undefined && answers[q.id] !== "") : answers[q.id] !== undefined && answers[q.id] !== "";
             return (
