@@ -171,7 +171,8 @@ const aiCorrectBatch = async (submissions, assignmentData, allSubmissions = []) 
 
     const answersText = answers
       .map((a, i) => `Schüler ${i + 1} (${a.username}): "${a.answer}"`)
-      .join("\n");
+      .join("
+");
 
     const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
 
@@ -188,7 +189,8 @@ WICHTIG — Kalibrierung:
 
 ${(q.partialPoints || []).length > 0
   ? `Bewertungskriterien (verbindlich):
-${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}`
+${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("
+")}`
   : `- Vergib anteilige Punkte wenn die Antwort teilweise korrekt ist
 - Schritte von 0.5 Punkten möglich`}
 
@@ -284,10 +286,11 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
     if (pending.length === 0) return;
-    runAutoBatchCorrection(pending);
+    // Snapshot mitgeben damit Kalibrierung korrekte Referenzen hat
+    runAutoBatchCorrection(pending, submissions);
   }, [assignmentData, submissions.length]);
 
-  const runAutoBatchCorrection = async (pendingOverride = null) => {
+  const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null) => {
     const pending = pendingOverride || submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
@@ -297,7 +300,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     (async () => {
       try {
         // Batch: alle Antworten pro Frage gemeinsam bewerten
-        const batchResults = await aiCorrectBatch(pending, assignmentData, submissions);
+        const batchResults = await aiCorrectBatch(pending, assignmentData, allSubsSnapshot || submissions);
         for (const s of pending) {
           const newCorrections = batchResults[s.id] || {};
           // Bestehende corrections mergen (nicht-offene Fragen bleiben erhalten)
@@ -775,7 +778,12 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                             {isStillOpen && <span style={{ fontSize: "10px", background: "#fef9c3", color: "#ca8a04", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>Ausstehend</span>}
                           </div>
                           <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
-                            <em style={{ color: "#94a3b8" }}>Antwort:</em> {correction.studentAnswer ?? "–"}
+                            <em style={{ color: "#94a3b8" }}>Antwort:</em> {(() => {
+                              const ans = selectedSubmission.answers?.[qId];
+                              if (!ans) return "–";
+                              if (Array.isArray(ans)) return ans.join(", ");
+                              return ans;
+                            })()}
                           </div>
                           {correction.comment && (
                             <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
