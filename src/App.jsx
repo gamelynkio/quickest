@@ -33,7 +33,12 @@ export default function App() {
       return stored ? JSON.parse(stored) : null;
     } catch { return null; }
   });
-  const [viewingResults, setViewingResults] = useState(null);
+  const [viewingResults, setViewingResults] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem("qt_viewing_results");
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
 
   const persistPage = (page, test = editingTest) => {
     try {
@@ -77,7 +82,11 @@ export default function App() {
   const navigate = (page, data = null) => {
     if (page === "testEditor") { setEditingTest(data); persistPage(page, data); }
     else if (page === "testPreview") { setEditingTest(data); persistPage(page, data); }
-    else if (page === "results") { setViewingResults(data); persistPage(page, null); }
+    else if (page === "results") {
+      setViewingResults(data);
+      try { sessionStorage.setItem("qt_viewing_results", JSON.stringify(data)); } catch {}
+      persistPage(page, null);
+    }
     else { persistPage(page, null); }
     setCurrentPage(page);
   };
@@ -103,6 +112,7 @@ export default function App() {
     try {
       sessionStorage.removeItem("qt_page");
       sessionStorage.removeItem("qt_editing_test");
+      sessionStorage.removeItem("qt_viewing_results");
     } catch {}
     if (studentUser) {
       sessionStorage.removeItem("qt_student");
