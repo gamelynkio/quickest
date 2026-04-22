@@ -100,20 +100,6 @@ export default function LoginPage({ onLogin }) {
     try {
       if (role === "teacher") {
         if (isRegister) {
-          // Zuerst prüfen ob E-Mail bereits existiert indem wir versuchen einzuloggen
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: username, password: "check_existing_account_only"
-          });
-          // Wenn der Fehler "Invalid login credentials" ist, existiert die E-Mail bereits
-          if (signInError && !signInError.message.includes("Invalid login credentials") && !signInError.message.includes("invalid_credentials")) {
-            // Andere Fehler — E-Mail existiert möglicherweise nicht, also normal registrieren
-          } else if (!signInError || signInError.message.includes("email_not_confirmed") || signInError.message.includes("Email not confirmed")) {
-            // E-Mail existiert bereits
-            setError("Diese E-Mail-Adresse ist bereits registriert. Bitte melde dich direkt an oder setze dein Passwort zurück.");
-            setLoading(false);
-            return;
-          }
-
           const { data, error } = await supabase.auth.signUp({
             email: username, password,
             options: { data: { name } }
@@ -132,7 +118,7 @@ export default function LoginPage({ onLogin }) {
           }
           // Supabase gibt bei bereits existierender E-Mail manchmal kein error zurück
           // aber identities ist leer
-          if (data?.user && data.user.identities?.length === 0) {
+          if (!data?.session && (!data?.user?.identities || data.user.identities.length === 0)) {
             setError("Diese E-Mail-Adresse ist bereits registriert. Bitte melde dich direkt an oder setze dein Passwort zurück.");
             return;
           }
@@ -146,7 +132,7 @@ export default function LoginPage({ onLogin }) {
           if (error.message.includes("Email not confirmed") || error.message.includes("email_not_confirmed")) {
             setEmailNotConfirmed(true);
           } else if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
-            setError('E-Mail oder Passwort falsch. Falls du dein Passwort vergessen hast, klicke auf „Passwort vergessen".');
+            setError("E-Mail oder Passwort falsch. Falls du dein Passwort vergessen hast, klicke auf „Passwort vergessen".");
           } else {
             setError(`Anmeldung fehlgeschlagen: ${error.message}`);
           }
