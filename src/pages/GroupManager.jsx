@@ -51,8 +51,13 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
   const handleExpand = async (groupId) => {
     if (expandedGroup === groupId) { setExpandedGroup(null); return; }
     setExpandedGroup(groupId);
-    const { data } = await supabase.from("students").select("username, pin").eq("group_id", groupId);
-    if (data) {
+    await loadPins(groupId);
+  };
+
+  const loadPins = async (groupId) => {
+    const { data, error } = await supabase.from("students").select("username, pin").eq("group_id", groupId);
+    if (error) { console.error("PIN-Ladefehler:", error); return; }
+    if (data && data.length > 0) {
       const pinMap = {};
       data.forEach(s => { pinMap[s.username] = s.pin; });
       setStudentPins(prev => ({ ...prev, [groupId]: pinMap }));
@@ -90,6 +95,9 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
         await supabase.from("students").insert(students);
         setGroups(prev => [data, ...prev]);
         setShowForm(false);
+        // Automatisch aufklappen und PINs laden
+        setExpandedGroup(data.id);
+        await loadPins(data.id);
       }
     } finally {
       setNewName(""); setNewSubject(""); setNewCount(20);
@@ -121,6 +129,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     await supabase.from("students").insert(students);
     setGroups(prev => prev.map(g => g.id === group.id ? data : g));
     setExpandedGroup(group.id);
+    await loadPins(group.id);
     setRegenConfirm(null);
   };
 
