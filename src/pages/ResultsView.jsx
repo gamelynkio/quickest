@@ -198,48 +198,16 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     return () => supabase.removeChannel(channel);
   }, [assignment]);
 
-  // Beim Laden: unreviewte Submissions automatisch KI-korrigieren
+  // Beim Laden: unreviewte Submissions automatisch per Batch-Korrektur bewerten
   useEffect(() => {
-    if (!assignmentData || submissions.length === 0) return;
+    if (!assignmentData || submissions.length === 0 || aiRunning) return;
     const pending = submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
     if (pending.length === 0) return;
-    setAiRunning(true);
-    setAiProgress(`🤖 KI korrigiert ${pending.length} Abgabe${pending.length !== 1 ? "n" : ""} automatisch...`);
-    (async () => {
-      for (let i = 0; i < pending.length; i++) {
-        const s = pending[i];
-        if (pending.length > 1) setAiProgress(`🤖 KI korrigiert ${i + 1}/${pending.length}: ${s.username}...`);
-        const { corrections, changed } = await aiCorrectOpenQuestions(s, assignmentData);
-        if (!changed) continue;
-        let newScore = 0;
-        for (const [qId, correction] of Object.entries(corrections)) {
-          const ov = (s.manual_overrides || {})[qId];
-          newScore += ov !== undefined ? Number(ov) : (correction.points !== null && correction.points !== undefined ? Number(correction.points) : 0);
-        }
-        const percent = (newScore / (s.total_points || 1)) * 100;
-        const gs = [...(assignmentData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
-        let newGrade = "6";
-        for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
-        const hasStillOpen = Object.values(corrections).some(c => c.needsReview && !c.aiReviewed);
-        await supabase.from("submissions").update({
-          ai_corrections: corrections,
-          score: newScore,
-          grade: newGrade,
-          reviewed: !hasStillOpen,
-        }).eq("id", s.id);
-        setSubmissions(prev => prev.map(sub =>
-          sub.id === s.id ? { ...sub, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen } : sub
-        ));
-        if (selectedSubmission?.id === s.id) {
-          setSelectedSubmission(prev => ({ ...prev, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen }));
-        }
-      }
-      setAiProgress("✅ KI-Korrektur abgeschlossen!");
-      setTimeout(() => { setAiProgress(""); setAiRunning(false); setReleaseModal(true); }, 3000);
-    })();
+    runAutoBatchCorrection(pending, submissions);
   }, [assignmentData, submissions.length]);
+
 
   const fetchAll = async () => {
     setLoading(true);
@@ -271,6 +239,124 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const fetchTemplates = async () => {
     const { data } = await supabase.from("templates").select("id, title").order("created_at", { ascending: false });
     setTemplates(data || []);
+  };
+
+  // Batch-Bewertung: alle Abgaben einer Frage gemeinsam und einheitlich korrigieren
+  const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
+    const pending = pendingOverride || submissions.filter(s =>
+      !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
+    );
+    if (pending.length === 0) return;
+    const aData = aDataOverride || assignmentData;
+    setAiRunning(true);
+    setAiProgress(`🤖 KI bewertet ${pending.length} Abgabe${pending.length !== 1 ? "n" : ""} einheitlich...`);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const allSubs = allSubsSnapshot || submissions;
+
+      // Fragen flachklopfen (sections + tasks)
+      const flattenQs = (qs) => {
+        const result = [];
+        for (const q of qs) {
+          if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) result.push(tq); }
+          else if (q.type === "task") { for (const tq of (q.questions||[])) result.push(tq); }
+          else result.push(q);
+        }
+        return result;
+      };
+      const openQs = flattenQs(aData?.question_data || []).filter(q => q.type === "open" || q.type === "qa");
+      if (openQs.length === 0) { setAiRunning(false); setAiProgress(""); return; }
+
+      const gradingModeText = {
+        content: "Bewerte NUR den inhaltlichen Kern. Rechtschreibung, Grammatik und Zeichensetzung sind vollkommen egal.",
+        standard: "Bewerte primär den Inhalt. Grobe Fehler können leicht abgezogen werden.",
+        strict: "Bewerte Inhalt UND Sprachform. Fehler führen zu Punktabzügen.",
+      }[aData?.grading_mode || "standard"] || "";
+
+      const batchResults = {};
+
+      for (const q of openQs) {
+        const answers = pending.filter(s => s.answers?.[q.id]?.trim()).map(s => ({ id: s.id, username: s.username, answer: s.answers[q.id] }));
+        if (answers.length === 0) continue;
+
+        const calibrationRefs = allSubs.filter(s => s.reviewed && s.ai_corrections?.[q.id]?.aiReviewed && !pending.find(p => p.id === s.id))
+          .slice(0, 4)
+          .map(s => `- "${s.answers[q.id]}" → ${s.ai_corrections[q.id].points} Pkt. (${(s.ai_corrections[q.id].comment || "").replace("🤖 ", "")})`)
+          .join("\n");
+
+        const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
+
+Frage: ${q.text || "(Fragetext)"}
+Musterlösung: ${q.solution || "(keine Musterlösung)"}
+Maximale Punktzahl: ${q.points}
+Bewertungsregeln: ${gradingModeText}
+
+${(q.partialPoints || []).length > 0
+  ? `Bewertungskriterien (verbindlich — halte dich EXAKT daran):
+${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}`
+  : `- Vergib anteilige Punkte wenn die Antwort teilweise korrekt ist\n- Schritte von 0.5 Punkten möglich`}
+
+${calibrationRefs ? `Referenz-Bewertungen (bereits kalibriert):\n${calibrationRefs}\n` : ""}
+Schülerantworten:
+${answers.map((a, i) => `Schüler ${i + 1} (${a.username}): "${a.answer}"`).join("\n")}
+
+Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in derselben Reihenfolge:
+[{"username": "<name>", "points": <Zahl, max ${q.points}>, "comment": "<kurze Begründung, max 1 Satz>"}]`;
+
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+            body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] }),
+          });
+          const data = await response.json();
+          const text = data.content?.map(b => b.text || "").join("") || "";
+          const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+          parsed.forEach((r, i) => {
+            const sub = answers[i];
+            if (!sub) return;
+            if (!batchResults[sub.id]) batchResults[sub.id] = {};
+            batchResults[sub.id][q.id] = {
+              points: Math.min(Math.max(0, Number(r.points) || 0), Number(q.points)),
+              comment: `🤖 ${r.comment}`,
+              aiReviewed: true, needsReview: false,
+              correct: Number(r.points) >= Number(q.points),
+              maxPoints: Number(q.points),
+            };
+          });
+        } catch (e) { console.error("Batch error for question", q.id, e); }
+      }
+
+      // In DB speichern
+      for (const s of pending) {
+        const newCorrections = batchResults[s.id] || {};
+        const merged = { ...(s.ai_corrections || {}), ...newCorrections };
+        // Fehlende offene Fragen als 0 markieren
+        for (const q of openQs) {
+          if (!merged[q.id] || (merged[q.id].needsReview && !merged[q.id].aiReviewed)) {
+            merged[q.id] = { points: 0, correct: false, comment: "Keine Antwort gegeben.", aiReviewed: true, needsReview: false, maxPoints: Number(q.points) };
+          }
+        }
+        let newScore = 0;
+        for (const [qId, correction] of Object.entries(merged)) {
+          const ov = (s.manual_overrides || {})[qId];
+          newScore += ov !== undefined ? Number(ov) : (correction.points ?? 0);
+        }
+        const percent = (newScore / (s.total_points || 1)) * 100;
+        const gs = [...(aData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
+        let newGrade = "6";
+        for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
+        await supabase.from("submissions").update({ ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true }).eq("id", s.id);
+        setSubmissions(prev => prev.map(sub => sub.id === s.id ? { ...sub, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true } : sub));
+        if (selectedSubmission?.id === s.id) setSelectedSubmission(prev => ({ ...prev, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true }));
+      }
+      setAiProgress("✅ KI-Korrektur abgeschlossen!");
+      setTimeout(() => { setAiProgress(""); setAiRunning(false); setReleaseModal(true); }, 3000);
+    } catch (e) {
+      setAiProgress("❌ Fehler bei der KI-Korrektur.");
+      setTimeout(() => { setAiProgress(""); setAiRunning(false); }, 3000);
+    }
   };
 
   // KI-Korrektur für eine einzelne Abgabe ausführen
@@ -400,9 +486,29 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       // Auch assignments question_data updaten damit aktuelle KI-Korrekturen den Maßstab kennen
       const updatedAsgn = updateQuestionData(assignmentData.question_data || []);
       await supabase.from("assignments").update({ question_data: updatedAsgn }).eq("id", assignmentData.id);
-      setAssignmentData(prev => ({ ...prev, question_data: updatedAsgn }));
+      const updatedAssignmentData = { ...assignmentData, question_data: updatedAsgn };
+      setAssignmentData(updatedAssignmentData);
 
       setRubricModal(null);
+      setSavingRubric(false);
+
+      // Alle Abgaben mit dem neuen Maßstab neu korrigieren
+      const toReCorrect = submissions.filter(s =>
+        Object.values(s.ai_corrections || {}).some(c => c.aiReviewed) ||
+        Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
+      );
+      if (toReCorrect.length > 0) {
+        // ai_corrections zurücksetzen damit Batch neu bewertet
+        const resetSubs = toReCorrect.map(s => ({
+          ...s,
+          ai_corrections: Object.fromEntries(
+            Object.entries(s.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }])
+          ),
+          reviewed: false,
+        }));
+        await runAutoBatchCorrection(resetSubs, [...submissions, ...resetSubs]);
+      }
+      return;
     } catch (e) {
       console.error("Save rubric failed:", e);
     }
