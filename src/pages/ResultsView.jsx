@@ -167,8 +167,7 @@ const aiCorrectBatch = async (submissions, assignmentData) => {
 
     const answersText = answers
       .map((a, i) => `Schüler ${i + 1} (${a.username}): "${a.answer}"`)
-      .join("
-");
+      .join("\n");
 
     const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
 
@@ -185,8 +184,7 @@ WICHTIG — Kalibrierung:
 
 ${(q.partialPoints || []).length > 0
   ? `Bewertungskriterien (verbindlich):
-${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("
-")}`
+${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}`
   : `- Vergib anteilige Punkte wenn die Antwort teilweise korrekt ist
 - Schritte von 0.5 Punkten möglich`}
 
