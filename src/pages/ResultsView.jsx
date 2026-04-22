@@ -124,6 +124,116 @@ Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
   return { corrections, changed };
 };
 
+
+// Batch-Bewertung: alle Antworten auf dieselbe Frage zusammen bewerten
+// → einheitliche Maßstäbe für alle Schüler
+const aiCorrectBatch = async (submissions, assignmentData) => {
+  const questions = assignmentData?.question_data || [];
+  const gradingMode = assignmentData?.grading_mode || "standard";
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  const flattenQuestions = (qs) => {
+    const result = [];
+    for (const q of qs) {
+      if (q.type === "section") {
+        for (const task of (q.tasks || [])) {
+          for (const tq of (task.questions || [])) result.push(tq);
+        }
+      } else { result.push(q); }
+    }
+    return result;
+  };
+
+  const openQuestions = flattenQuestions(questions).filter(q => q.type === "open" || q.type === "qa");
+  if (openQuestions.length === 0) return [];
+
+  const gradingModeText = {
+    content: "Bewerte NUR den inhaltlichen Kern. Rechtschreibung, Grammatik und Zeichensetzung sind vollkommen egal.",
+    standard: "Bewerte primär den Inhalt. Grobe Rechtschreib- oder Grammatikfehler können leicht abgezogen werden, spielen aber keine große Rolle.",
+    strict: "Bewerte Inhalt UND Sprachform. Rechtschreibfehler, Grammatikfehler und falsche Zeichensetzung führen zu Punktabzügen.",
+  }[gradingMode] || "";
+
+  // Ergebnisse: { submissionId: { qId: { points, comment } } }
+  const results = {};
+
+  for (const q of openQuestions) {
+    // Alle Antworten auf diese Frage sammeln
+    const answers = submissions
+      .filter(s => s.answers?.[q.id]?.trim())
+      .map(s => ({ id: s.id, username: s.username, answer: s.answers[q.id] }));
+
+    if (answers.length === 0) continue;
+
+    const answersText = answers
+      .map((a, i) => `Schüler ${i + 1} (${a.username}): "${a.answer}"`)
+      .join("\n");
+
+    const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
+
+Frage: ${q.text}
+Musterlösung: ${q.solution || "(keine Musterlösung hinterlegt — bewerte inhaltlich nach bestem Ermessen)"}
+Maximale Punktzahl: ${q.points}
+Bewertungsregeln: ${gradingModeText}
+
+WICHTIG — Kalibrierung:
+- Bewerte alle Antworten nach demselben Maßstab
+- Vergleiche die Antworten miteinander bevor du Punkte vergibst
+- Eine Antwort die inhaltlich gleichwertig zu einer anderen ist, bekommt dieselbe Punktzahl
+- Wörter in runden Klammern () in der Musterlösung sind OPTIONAL
+
+${(q.partialPoints || []).length > 0
+  ? `Bewertungskriterien (verbindlich):
+${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}`
+  : `- Vergib anteilige Punkte wenn die Antwort teilweise korrekt ist
+- Schritte von 0.5 Punkten möglich`}
+
+Schülerantworten:
+${answersText}
+
+Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in derselben Reihenfolge:
+[{"username": "<name>", "points": <Zahl, max ${q.points}>, "comment": "<kurze Begründung, max 1 Satz>"}]`;
+
+    try {
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabaseAnonKey}`,
+          "apikey": supabaseAnonKey,
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2000,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+
+      // Ergebnisse zuordnen
+      parsed.forEach((r, i) => {
+        const sub = answers[i];
+        if (!sub) return;
+        if (!results[sub.id]) results[sub.id] = {};
+        results[sub.id][q.id] = {
+          points: Math.min(Math.max(0, Number(r.points) || 0), Number(q.points)),
+          comment: `🤖 ${r.comment}`,
+          aiReviewed: true,
+          needsReview: false,
+          correct: Number(r.points) >= Number(q.points),
+          maxPoints: Number(q.points),
+        };
+      });
+    } catch (e) {
+      console.error("Batch-Korrektur fehlgeschlagen für Frage", q.id, e);
+    }
+  }
+
+  return results; // { submissionId: { qId: correction } }
+};
+
 export default function ResultsView({ navigate, onLogout, currentUser, assignment }) {
   const [submissions, setSubmissions] = useState([]);
   const [groupUsernames, setGroupUsernames] = useState([]);
@@ -155,7 +265,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     return () => supabase.removeChannel(channel);
   }, [assignment]);
 
-  // Beim Laden: unreviewte Submissions automatisch KI-korrigieren
+  // Beim Laden: automatisch Batch-Bewertung starten (einheitliche Maßstäbe)
   useEffect(() => {
     if (!assignmentData || submissions.length === 0) return;
     const pending = submissions.filter(s =>
@@ -163,38 +273,48 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     );
     if (pending.length === 0) return;
     setAiRunning(true);
-    setAiProgress(`🤖 KI korrigiert ${pending.length} Abgabe${pending.length !== 1 ? "n" : ""} automatisch...`);
+    setAiProgress(`🤖 KI bewertet ${pending.length} Abgabe${pending.length !== 1 ? "n" : ""} einheitlich...`);
     (async () => {
-      for (let i = 0; i < pending.length; i++) {
-        const s = pending[i];
-        if (pending.length > 1) setAiProgress(`🤖 KI korrigiert ${i + 1}/${pending.length}: ${s.username}...`);
-        const { corrections, changed } = await aiCorrectOpenQuestions(s, assignmentData);
-        if (!changed) continue;
-        let newScore = 0;
-        for (const [qId, correction] of Object.entries(corrections)) {
-          const ov = (s.manual_overrides || {})[qId];
-          newScore += ov !== undefined ? Number(ov) : (correction.points !== null && correction.points !== undefined ? Number(correction.points) : 0);
+      try {
+        // Batch: alle Antworten pro Frage gemeinsam bewerten
+        const batchResults = await aiCorrectBatch(pending, assignmentData);
+        for (const s of pending) {
+          const newCorrections = batchResults[s.id] || {};
+          // Bestehende corrections mergen (nicht-offene Fragen bleiben erhalten)
+          const merged = { ...(s.ai_corrections || {}), ...newCorrections };
+          // Fehlende offene Fragen (keine Antwort gegeben) als 0 markieren
+          const allOpen = (() => {
+            const flat = [];
+            for (const q of (assignmentData.question_data || [])) {
+              if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) { if (tq.type==="open"||tq.type==="qa") flat.push(tq); } }
+              else if (q.type==="open"||q.type==="qa") flat.push(q);
+            }
+            return flat;
+          })();
+          for (const q of allOpen) {
+            if (!merged[q.id] || merged[q.id].needsReview) {
+              merged[q.id] = { points: 0, correct: false, comment: "Keine Antwort gegeben.", aiReviewed: true, needsReview: false, maxPoints: Number(q.points) };
+            }
+          }
+          let newScore = 0;
+          for (const [qId, correction] of Object.entries(merged)) {
+            const ov = (s.manual_overrides || {})[qId];
+            newScore += ov !== undefined ? Number(ov) : (correction.points ?? 0);
+          }
+          const percent = (newScore / (s.total_points || 1)) * 100;
+          const gs = [...(assignmentData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
+          let newGrade = "6";
+          for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
+          await supabase.from("submissions").update({ ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true }).eq("id", s.id);
+          setSubmissions(prev => prev.map(sub => sub.id === s.id ? { ...sub, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true } : sub));
+          if (selectedSubmission?.id === s.id) setSelectedSubmission(prev => ({ ...prev, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true }));
         }
-        const percent = (newScore / (s.total_points || 1)) * 100;
-        const gs = [...(assignmentData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
-        let newGrade = "6";
-        for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
-        const hasStillOpen = Object.values(corrections).some(c => c.needsReview && !c.aiReviewed);
-        await supabase.from("submissions").update({
-          ai_corrections: corrections,
-          score: newScore,
-          grade: newGrade,
-          reviewed: !hasStillOpen,
-        }).eq("id", s.id);
-        setSubmissions(prev => prev.map(sub =>
-          sub.id === s.id ? { ...sub, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen } : sub
-        ));
-        if (selectedSubmission?.id === s.id) {
-          setSelectedSubmission(prev => ({ ...prev, ai_corrections: corrections, score: newScore, grade: newGrade, reviewed: !hasStillOpen }));
-        }
+        setAiProgress("✅ KI-Korrektur abgeschlossen!");
+        setTimeout(() => { setAiProgress(""); setAiRunning(false); setReleaseModal(true); }, 3000);
+      } catch (e) {
+        setAiProgress("❌ Fehler bei der KI-Korrektur.");
+        setTimeout(() => { setAiProgress(""); setAiRunning(false); }, 3000);
       }
-      setAiProgress("✅ KI-Korrektur abgeschlossen!");
-      setTimeout(() => { setAiProgress(""); setAiRunning(false); setReleaseModal(true); }, 3000);
     })();
   }, [assignmentData, submissions.length]);
 
@@ -316,6 +436,53 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setAiRunning(false);
   };
 
+  // Batch-Bewertung: alle Abgaben pro Frage gleichzeitig korrigieren
+  const runBatchCorrection = async () => {
+    setBatchRunning(true);
+    setAiRunning(true);
+    setAiProgress("🤖 Batch-Bewertung: alle Antworten werden kalibriert...");
+    try {
+      const aData = assignmentData || assignment;
+      const batchResults = await aiCorrectBatch(submissions, aData);
+
+      // Ergebnisse in DB schreiben
+      for (const sub of submissions) {
+        const newCorrections = batchResults[sub.id];
+        if (!newCorrections || Object.keys(newCorrections).length === 0) continue;
+
+        const merged = { ...(sub.ai_corrections || {}), ...newCorrections };
+        let newScore = 0;
+        for (const [qId, correction] of Object.entries(merged)) {
+          const ov = (sub.manual_overrides || {})[qId];
+          newScore += ov !== undefined ? Number(ov) : (correction.points ?? 0);
+        }
+        const percent = (newScore / (sub.total_points || 1)) * 100;
+        const gs = [...(aData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
+        let newGrade = "6";
+        for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
+
+        await supabase.from("submissions").update({
+          ai_corrections: merged,
+          score: newScore,
+          grade: newGrade,
+          reviewed: true,
+        }).eq("id", sub.id);
+
+        setSubmissions(prev => prev.map(s =>
+          s.id === sub.id ? { ...s, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true } : s
+        ));
+        if (selectedSubmission?.id === sub.id) {
+          setSelectedSubmission(prev => ({ ...prev, ai_corrections: merged, score: newScore, grade: newGrade }));
+        }
+      }
+      setAiProgress("✅ Batch-Bewertung abgeschlossen!");
+      setTimeout(() => { setAiProgress(""); setAiRunning(false); setBatchRunning(false); setReleaseModal(true); }, 3000);
+    } catch (e) {
+      setAiProgress("❌ Fehler bei der Batch-Bewertung.");
+      setTimeout(() => { setAiProgress(""); setAiRunning(false); setBatchRunning(false); }, 3000);
+    }
+  };
+
   const saveOverrides = async () => {
     if (!selectedSubmission) return;
     setSaving(true);
@@ -406,6 +573,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
             {submissions.some(s => !s.released) && (
               <button onClick={releaseAll} style={{ marginLeft: "12px", padding: "4px 12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>✓ Alle freigeben</button>
             )}
+
           </p>
         </div>
 
@@ -449,7 +617,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                 <div style={{ fontWeight: 600 }}>Noch keine Abgaben</div>
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: selectedSubmission ? "1fr 1fr" : "1fr", gap: "20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }}>
                 <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
@@ -505,7 +673,10 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
                 </div>
 
                 {selectedSubmission && (
-                  <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "22px", overflowY: "auto", maxHeight: "600px" }}>
+                  <div onClick={() => setSelectedSubmission(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.15)", zIndex: 499 }} />
+                )}
+                {selectedSubmission && (
+                  <div style={{ position: "fixed", top: 0, right: 0, width: "480px", height: "100vh", background: "#fff", borderLeft: "1px solid #e2e8f0", padding: "24px", overflowY: "auto", zIndex: 500, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
                       <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{selectedSubmission.username}</h3>
                       <div style={{ display: "flex", gap: "8px" }}>
