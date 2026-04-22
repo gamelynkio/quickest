@@ -12,6 +12,7 @@ import SharePage from "./pages/SharePage";
 import TestPreview from "./pages/TestPreview";
 import AdminDashboard from "./pages/AdminDashboard";
 import OnboardingTour from "./components/OnboardingTour";
+import StatsView from "./pages/StatsView";
 
 export default function App() {
   const [session, setSession] = useState(undefined);
@@ -153,6 +154,7 @@ export default function App() {
   const teacherNav = { navigate, onLogout: handleLogout, currentUser: profile };
 
   const teacherPage = (() => {
+    if (currentPage === "stats") return <StatsView {...teacherNav} />;
     if (currentPage === "dashboard") return <TeacherDashboard {...teacherNav} />;
     if (currentPage === "testEditor") return <TestEditor {...teacherNav} editingTest={editingTest} />;
     if (currentPage === "library") return <TestLibrary {...teacherNav} />;
