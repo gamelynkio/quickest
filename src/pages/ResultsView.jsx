@@ -127,7 +127,11 @@ Gib deine Bewertung NUR als JSON zurück, ohne weiteren Text:
 
 // Batch-Bewertung: alle Antworten auf dieselbe Frage zusammen bewerten
 // → einheitliche Maßstäbe für alle Schüler
-const aiCorrectBatch = async (submissions, assignmentData) => {
+const aiCorrectBatch = async (submissions, assignmentData, allSubmissions = []) => {
+  // allSubmissions enthält bereits korrigierte Abgaben als Kalibrierungs-Referenz
+  const calibrationSubs = allSubmissions.filter(s =>
+    s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.aiReviewed)
+  );
   const questions = assignmentData?.question_data || [];
   const gradingMode = assignmentData?.grading_mode || "standard";
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -167,7 +171,8 @@ const aiCorrectBatch = async (submissions, assignmentData) => {
 
     const answersText = answers
       .map((a, i) => `Schüler ${i + 1} (${a.username}): "${a.answer}"`)
-      .join("\n");
+      .join("
+");
 
     const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
 
@@ -184,13 +189,22 @@ WICHTIG — Kalibrierung:
 
 ${(q.partialPoints || []).length > 0
   ? `Bewertungskriterien (verbindlich):
-${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}`
+${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("
+")}`
   : `- Vergib anteilige Punkte wenn die Antwort teilweise korrekt ist
 - Schritte von 0.5 Punkten möglich`}
 
 Schülerantworten:
 ${answersText}
 
+${(() => {
+      const refs = calibrationSubs
+        .filter(s => s.answers?.[q.id]?.trim() && s.ai_corrections?.[q.id]?.aiReviewed)
+        .slice(0, 4)
+        .map(s => `- "${s.answers[q.id]}" → ${s.ai_corrections[q.id].points} Pkt. (${(s.ai_corrections[q.id].comment || "").replace("🤖 ", "")})`)
+        .join("\n");
+      return refs ? `Referenz-Bewertungen (bereits kalibriert — halte exakt denselben Maßstab):\n${refs}\n` : "";
+    })()}
 Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in derselben Reihenfolge:
 [{"username": "<name>", "points": <Zahl, max ${q.points}>, "comment": "<kurze Begründung, max 1 Satz>"}]`;
 
@@ -265,10 +279,18 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     return () => supabase.removeChannel(channel);
   }, [assignment]);
 
-  // Beim Laden: automatisch Batch-Bewertung starten (einheitliche Maßstäbe)
+  // Auto-Batch-Bewertung — läuft automatisch, nutzt bereits korrigierte als Referenz
   useEffect(() => {
-    if (!assignmentData || submissions.length === 0) return;
+    if (!assignmentData || submissions.length === 0 || aiRunning) return;
     const pending = submissions.filter(s =>
+      !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
+    );
+    if (pending.length === 0) return;
+    runAutoBatchCorrection(pending);
+  }, [assignmentData, submissions.length]);
+
+  const runAutoBatchCorrection = async (pendingOverride = null) => {
+    const pending = pendingOverride || submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
     if (pending.length === 0) return;
@@ -277,7 +299,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     (async () => {
       try {
         // Batch: alle Antworten pro Frage gemeinsam bewerten
-        const batchResults = await aiCorrectBatch(pending, assignmentData);
+        const batchResults = await aiCorrectBatch(pending, assignmentData, submissions);
         for (const s of pending) {
           const newCorrections = batchResults[s.id] || {};
           // Bestehende corrections mergen (nicht-offene Fragen bleiben erhalten)
@@ -316,7 +338,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         setTimeout(() => { setAiProgress(""); setAiRunning(false); }, 3000);
       }
     })();
-  }, [assignmentData, submissions.length]);
+  };
 
   const fetchAll = async () => {
     setLoading(true);
@@ -570,6 +592,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>
             {submissions.length} Abgaben{avg ? ` · Ø ${avg}%` : ""}
             <button onClick={fetchSubmissions} style={{ marginLeft: "12px", background: "none", border: "none", color: "#2563a8", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>🔄 Aktualisieren</button>
+
             {submissions.some(s => !s.released) && (
               <button onClick={releaseAll} style={{ marginLeft: "12px", padding: "4px 12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>✓ Alle freigeben</button>
             )}
