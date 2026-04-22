@@ -4,7 +4,7 @@ export default function TeacherLayout({ children, navigate, onLogout, currentUse
     { id: "testEditor", label: "Test erstellen", icon: "✏️" },
     { id: "library", label: "Test-Vorlagen", icon: "📚" },
     { id: "groups", label: "Lerngruppen", icon: "👥" },
-    { id: "results", label: "Ergebnisse", icon: "📊" },
+    { id: "stats", label: "Statistik", icon: "📊" },
   ];
 
   return (
