@@ -152,16 +152,19 @@ export default function AdminDashboard() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
               {/* Neue Nutzer */}
               <div style={S.card}>
-                <div style={{ fontWeight: 700, marginBottom: "16px", fontSize: "14px" }}>Neue Lehrer (letzte 30 Tage)</div>
-                {profilesWithStats.filter(p => new Date(p.created_at) >= last30).length === 0
-                  ? <div style={{ color: "#6b7280", fontSize: "13px" }}>Keine neuen Nutzer</div>
-                  : profilesWithStats.filter(p => new Date(p.created_at) >= last30).map(p => (
+                <div style={{ fontWeight: 700, marginBottom: "16px", fontSize: "14px" }}>Alle Lehrer ({profilesWithStats.length})</div>
+                {profilesWithStats.length === 0
+                  ? <div style={{ color: "#6b7280", fontSize: "13px" }}>Keine Nutzer</div>
+                  : profilesWithStats.map(p => (
                     <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #1e1e2e" }}>
                       <div>
                         <div style={{ fontSize: "13px", fontWeight: 600 }}>{p.name || "–"}</div>
                         <div style={{ fontSize: "11px", color: "#6b7280" }}>{p.email}</div>
                       </div>
-                      <div style={{ fontSize: "11px", color: "#6b7280" }}>{fmt(p.created_at)}</div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "11px", color: "#6b7280" }}>{fmt(p.created_at)}</div>
+                        <div style={{ fontSize: "11px", color: "#6b7280" }}>{p.templatesCount} Vorlagen · {p.assignmentsCount} Tests</div>
+                      </div>
                     </div>
                   ))
                 }
