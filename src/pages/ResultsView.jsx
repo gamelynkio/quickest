@@ -185,6 +185,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [assignmentData, setAssignmentData] = useState(null);
   const [releaseModal, setReleaseModal] = useState(false); // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
+  const [rubricFeedback, setRubricFeedback] = useState(""); // Lehrer-Kommentar für KI
+  const [refiningRubric, setRefiningRubric] = useState(false);
   const [suggestingRubric, setSuggestingRubric] = useState(false);
   const [savingRubric, setSavingRubric] = useState(false);
 
@@ -459,6 +461,56 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
       console.error("Rubric suggestion failed:", e);
     }
     setSuggestingRubric(false);
+  };
+
+
+  const refineRubricWithFeedback = async () => {
+    if (!rubricModal || !rubricFeedback.trim()) return;
+    setRefiningRubric(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const answers = submissions
+        .filter(s => s.answers?.[rubricModal.question.id]?.trim())
+        .map(s => s.answers[rubricModal.question.id]);
+
+      const currentCriteria = rubricModal.suggested
+        .map(p => `- ${p.points} Pkt.: ${p.description}`)
+        .join("\n");
+
+      const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
+
+Frage: ${rubricModal.question.text || "(Fragetext)"}
+Musterlösung: ${rubricModal.question.solution || "(keine)"}
+Maximale Punktzahl: ${rubricModal.question.points}
+
+Aktueller Bewertungsmaßstab:
+${currentCriteria}
+
+Schülerantworten:
+${answers.map((a, i) => `${i + 1}. "${a}"`).join("\n")}
+
+Feedback der Lehrkraft: ${rubricFeedback}
+
+Passe den Bewertungsmaßstab entsprechend dem Feedback an. Die Summe der Punkte muss exakt ${rubricModal.question.points} ergeben.
+
+Gib das Ergebnis NUR als JSON zurück:
+{"partialPoints": [{"points": <Zahl>, "description": "<Kriterium>"}]}`;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const result = JSON.parse(text.replace(/```json|```/g, "").trim());
+      if (result?.partialPoints?.length) {
+        setRubricModal(prev => ({ ...prev, suggested: result.partialPoints }));
+        setRubricFeedback("");
+      }
+    } catch (e) { console.error("Refine rubric failed:", e); }
+    setRefiningRubric(false);
   };
 
   const saveRubricToTemplate = async () => {
@@ -1008,8 +1060,24 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
                 </strong>
               </div>
             </div>
+            {/* Feedback-Box für KI-Überarbeitung */}
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>
+                💬 Feedback an KI (optional) — KI überarbeitet die Kriterien
+              </label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input value={rubricFeedback} onChange={e => setRubricFeedback(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && rubricFeedback.trim()) refineRubricWithFeedback(); }}
+                  placeholder='z.B. "zu streng" oder "Grundform reicht ohne to"'
+                  style={{ flex: 1, padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", fontFamily: "inherit" }} />
+                <button onClick={refineRubricWithFeedback} disabled={!rubricFeedback.trim() || refiningRubric}
+                  style={{ padding: "8px 14px", background: rubricFeedback.trim() ? "#6d28d9" : "#e2e8f0", color: rubricFeedback.trim() ? "#fff" : "#94a3b8", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: rubricFeedback.trim() && !refiningRubric ? "pointer" : "not-allowed", flexShrink: 0 }}>
+                  {refiningRubric ? "⏳" : "↩ Anpassen"}
+                </button>
+              </div>
+            </div>
             <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={() => setRubricModal(null)} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
+              <button onClick={() => { setRubricModal(null); setRubricFeedback(""); }} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
               <button onClick={saveRubricToTemplate} disabled={savingRubric}
                 style={{ flex: 1, padding: "11px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, cursor: savingRubric ? "not-allowed" : "pointer" }}>
                 {savingRubric ? "Wird gespeichert..." : "✓ In Vorlage speichern"}
