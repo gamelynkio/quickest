@@ -187,6 +187,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
   const [rubricFeedback, setRubricFeedback] = useState(""); // Lehrer-Kommentar für KI
   const [refiningRubric, setRefiningRubric] = useState(false);
+  const [questionFeedback, setQuestionFeedback] = useState({}); // { qId: feedbackText }
+  const [refiningQuestion, setRefiningQuestion] = useState(null); // qId being refined
   const [suggestingRubric, setSuggestingRubric] = useState(false);
   const [savingRubric, setSavingRubric] = useState(false);
 
@@ -463,6 +465,93 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
     setSuggestingRubric(false);
   };
 
+
+
+  const refineQuestionWithFeedback = async (qId, feedbackText) => {
+    setRefiningQuestion(qId);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      // Frage aus assignmentData holen
+      const flattenQs = (qs) => {
+        const result = [];
+        for (const q of (qs || [])) {
+          if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) result.push(tq); }
+          else if (q.type === "task") { for (const tq of (q.questions||[])) result.push(tq); }
+          else result.push(q);
+        }
+        return result;
+      };
+      const question = flattenQs(assignmentData?.question_data || []).find(q => String(q.id) === String(qId));
+      if (!question) return;
+
+      const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
+      const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+
+      const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
+
+Frage: ${question.text || "(Fragetext)"}
+Musterlösung: ${question.solution || "(keine)"}
+Maximale Punktzahl: ${question.points}
+
+${currentCriteria ? `Aktueller Bewertungsmaßstab:
+${currentCriteria}
+` : ""}
+${exampleCorrections ? `Beispiel-Korrekturen bisher:
+${exampleCorrections}
+` : ""}
+Schülerantworten: ${answers.map((a, i) => `${i+1}. "${a}"`).join(", ")}
+
+Feedback der Lehrkraft: ${feedbackText}
+
+Passe den Bewertungsmaßstab entsprechend dem Feedback an. Die Summe muss exakt ${question.points} Punkte ergeben.
+Gib das Ergebnis NUR als JSON zurück:
+{"partialPoints": [{"points": <Zahl>, "description": "<Kriterium>"}]}`;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const result = JSON.parse(text.replace(/```json|```/g, "").trim());
+      if (!result?.partialPoints?.length) return;
+
+      // Maßstab in Template + Assignment speichern
+      const updateQd = (qs) => (qs || []).map(q => {
+        if (String(q.id) === String(qId)) return { ...q, partialPoints: result.partialPoints };
+        if (q.tasks) return { ...q, tasks: q.tasks.map(t => ({ ...t, questions: (t.questions||[]).map(tq => String(tq.id) === String(qId) ? { ...tq, partialPoints: result.partialPoints } : tq) })) };
+        if (q.questions) return { ...q, questions: updateQd(q.questions) };
+        return q;
+      });
+
+      if (assignmentData?.template_id) {
+        const { data: tmpl } = await supabase.from("templates").select("question_data").eq("id", assignmentData.template_id).single();
+        if (tmpl) await supabase.from("templates").update({ question_data: updateQd(tmpl.question_data) }).eq("id", assignmentData.template_id);
+      }
+      const updatedAsgn = updateQd(assignmentData?.question_data || []);
+      await supabase.from("assignments").update({ question_data: updatedAsgn }).eq("id", assignmentData.id);
+      const updatedAssignmentData = { ...assignmentData, question_data: updatedAsgn };
+      setAssignmentData(updatedAssignmentData);
+
+      // Feedback leeren
+      setQuestionFeedback(prev => ({ ...prev, [qId]: "" }));
+
+      // Alle Abgaben neu korrigieren mit neuem Maßstab
+      const toReCorrect = submissions.map(s => ({
+        ...s,
+        ai_corrections: Object.fromEntries(Object.entries(s.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }])),
+        reviewed: false,
+      }));
+      await runAutoBatchCorrection(toReCorrect, submissions, updatedAssignmentData);
+    } catch (e) { console.error("Refine question failed:", e); }
+    setRefiningQuestion(null);
+  };
 
   const refineRubricWithFeedback = async () => {
     if (!rubricModal || !rubricFeedback.trim()) return;
@@ -852,6 +941,30 @@ Gib das Ergebnis NUR als JSON zurück:
                           {correction.solution && (
                             <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
                               <strong>📝 Musterlösung:</strong> {correction.solution}
+                            </div>
+                          )}
+                          {/* Feedback für KI-Maßstab */}
+                          {isAiReviewed && (
+                            <div style={{ background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px" }}>
+                              <div style={{ fontSize: "11px", fontWeight: 600, color: "#6d28d9", marginBottom: "5px" }}>💬 KI-Maßstab anpassen</div>
+                              <div style={{ display: "flex", gap: "6px" }}>
+                                <input
+                                  value={questionFeedback[qId] || ""}
+                                  onChange={e => setQuestionFeedback(prev => ({ ...prev, [qId]: e.target.value }))}
+                                  onKeyDown={e => { if (e.key === "Enter" && questionFeedback[qId]?.trim()) refineQuestionWithFeedback(qId, questionFeedback[qId]); }}
+                                  placeholder='z.B. "zu streng" oder "Grundform reicht ohne to"'
+                                  style={{ flex: 1, padding: "5px 8px", border: "1px solid #e9d5ff", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit", background: "#fff" }}
+                                />
+                                <button
+                                  onClick={() => refineQuestionWithFeedback(qId, questionFeedback[qId])}
+                                  disabled={!questionFeedback[qId]?.trim() || refiningQuestion === qId}
+                                  style={{ padding: "5px 10px", background: questionFeedback[qId]?.trim() ? "#6d28d9" : "#e2e8f0", color: questionFeedback[qId]?.trim() ? "#fff" : "#94a3b8", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: questionFeedback[qId]?.trim() && refiningQuestion !== qId ? "pointer" : "not-allowed", flexShrink: 0, whiteSpace: "nowrap" }}>
+                                  {refiningQuestion === qId ? "⏳ läuft..." : "↩ Anpassen"}
+                                </button>
+                              </div>
+                              {refiningQuestion === qId && (
+                                <div style={{ fontSize: "11px", color: "#6d28d9", marginTop: "4px" }}>KI überarbeitet Maßstab und korrigiert alle Abgaben neu...</div>
+                              )}
                             </div>
                           )}
                           {correction.aiReviewed && !correction.partialPoints?.length && (() => {
