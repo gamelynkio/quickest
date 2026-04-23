@@ -168,6 +168,7 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [localFullText, setLocalFullText] = useState(tq.fullText || "");
   const [localBlanks, setLocalBlanks] = useState(tq.blanks || []);
   const [localPoints, setLocalPoints] = useState(tq.points || 1);
+  const originalPointsRef = useRef(tq.partialPoints?.length ? null : (tq.points || 1)); // Punktzahl vor Teilpunkten
   const [localPairs, setLocalPairs] = useState(tq.pairs?.length ? tq.pairs : [{ left: "", right: "" }]);
   const [localPartialPoints, setLocalPartialPoints] = useState(tq.partialPoints || []);
   const [suggestingRubric, setSuggestingRubric] = useState(false);
@@ -357,10 +358,10 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
                 <input type="number" value={p.points} min={0} step={0.5} onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }} style={{ width: "50px", padding: "4px 6px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
                 <span style={{ fontSize: "11px", color: "#94a3b8" }}>Pkt. für:</span>
                 <input value={p.description} placeholder="z.B. Nennung des Begriffs" onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], description: e.target.value }; setLocalPartialPoints(pp); }} onBlur={() => onUpdate("partialPoints", localPartialPoints)} style={{ flex: 1, padding: "4px 8px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", fontFamily: "inherit" }} />
-                <button onClick={() => { const pp = localPartialPoints.filter((_, pi) => pi !== i); setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); if (pp.length > 0) { setLocalPoints(sum); onUpdate("points", sum); } }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
+                <button onClick={() => { const pp = localPartialPoints.filter((_, pi) => pi !== i); setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); if (pp.length > 0) { setLocalPoints(sum); onUpdate("points", sum); } else { const restore = originalPointsRef.current || 1; setLocalPoints(restore); onUpdate("points", restore); } }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "14px" }}>✕</button>
               </div>
             ))}
-            <button onClick={() => { const pp = [...localPartialPoints, { points: 0.5, description: "" }]; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>+ Teilpunkt</button>
+            <button onClick={() => { if (localPartialPoints.length === 0) originalPointsRef.current = localPoints; const pp = [...localPartialPoints, { points: 0.5, description: "" }]; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }} style={{ fontSize: "11px", color: "#2563a8", background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>+ Teilpunkt</button>
           </div>
         </div>
       )}
