@@ -648,7 +648,7 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
                 <div style={{ fontWeight: 600 }}>Noch keine Abgaben</div>
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: selectedSubmission ? "1fr 1fr" : "1fr", gap: "20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }}>
                 <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
@@ -704,7 +704,10 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
                 </div>
 
                 {selectedSubmission && (
-                  <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "22px", overflowY: "auto", maxHeight: "600px" }}>
+                  <div onClick={() => setSelectedSubmission(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.15)", zIndex: 499 }} />
+                )}
+                {selectedSubmission && (
+                  <div style={{ position: "fixed", top: 0, right: 0, width: "480px", height: "100vh", background: "#fff", borderLeft: "1px solid #e2e8f0", padding: "24px", overflowY: "auto", zIndex: 500, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
                       <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{selectedSubmission.username}</h3>
                       <div style={{ display: "flex", gap: "8px" }}>
@@ -782,7 +785,12 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
                             {isStillOpen && <span style={{ fontSize: "10px", background: "#fef9c3", color: "#ca8a04", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>Ausstehend</span>}
                           </div>
                           <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
-                            <em style={{ color: "#94a3b8" }}>Antwort:</em> {correction.studentAnswer ?? "–"}
+                            <em style={{ color: "#94a3b8" }}>Antwort:</em> {(() => {
+                              const ans = selectedSubmission.answers?.[qId];
+                              if (!ans) return "–";
+                              if (Array.isArray(ans)) return ans.join(", ");
+                              return ans;
+                            })()}
                           </div>
                           {correction.comment && (
                             <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
