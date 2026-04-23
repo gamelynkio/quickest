@@ -896,6 +896,8 @@ Gib das Ergebnis NUR als JSON zurück:
                             for (const task of (q.tasks || [])) {
                               for (const tq of (task.questions || [])) flat.push(tq);
                             }
+                          } else if (q.type === "task") {
+                            for (const tq of (q.questions || [])) flat.push(tq);
                           } else {
                             flat.push(q);
                           }
