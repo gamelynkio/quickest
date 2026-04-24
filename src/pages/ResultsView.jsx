@@ -183,7 +183,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [makeupRequireSeb, setMakeupRequireSeb] = useState(true);
   const [creatingMakeup, setCreatingMakeup] = useState(false);
   const [assignmentData, setAssignmentData] = useState(null);
-  const [releaseModal, setReleaseModal] = useState(false); // nach KI-Korrektur: Freigabe-Frage
+  const [releaseModal, setReleaseModal] = useState(false);
+  const [gradingModeModal, setGradingModeModal] = useState(false); // vor erstem KI-Lauf
+  const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
   const [rubricFeedback, setRubricFeedback] = useState(""); // Lehrer-Kommentar für KI
   const [refiningRubric, setRefiningRubric] = useState(false);
@@ -202,13 +204,18 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     return () => supabase.removeChannel(channel);
   }, [assignment]);
 
-  // Beim Laden: unreviewte Submissions automatisch per Batch-Korrektur bewerten
+  // Beim Laden: unreviewte Submissions — erst Bewertungsmodus abfragen
   useEffect(() => {
     if (!assignmentData || submissions.length === 0 || aiRunning) return;
     const pending = submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
     if (pending.length === 0) return;
+    // Wenn noch kein Modus gewählt: Modal zeigen
+    if (!assignmentData.grading_mode) {
+      setGradingModeModal(true);
+      return;
+    }
     runAutoBatchCorrection(pending, submissions);
   }, [assignmentData, submissions.length]);
 
@@ -222,6 +229,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const fetchAssignmentData = async () => {
     const { data } = await supabase.from("assignments").select("*").eq("id", assignment.id).single();
     setAssignmentData(data);
+    setCurrentGradingMode(data?.grading_mode || null);
   };
 
   const fetchSubmissions = async () => {
@@ -246,6 +254,26 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   };
 
   // Batch-Bewertung: alle Abgaben einer Frage gemeinsam und einheitlich korrigieren
+
+  const saveGradingMode = async (mode) => {
+    setCurrentGradingMode(mode);
+    await supabase.from("assignments").update({ grading_mode: mode }).eq("id", assignment.id);
+    setAssignmentData(prev => ({ ...prev, grading_mode: mode }));
+  };
+
+  const applyNewGradingMode = async (mode) => {
+    await saveGradingMode(mode);
+    // Alle Abgaben zurücksetzen und neu korrigieren
+    const toReset = submissions.map(s => ({
+      ...s,
+      ai_corrections: Object.fromEntries(
+        Object.entries(s.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }])
+      ),
+      reviewed: false,
+    }));
+    await runAutoBatchCorrection(toReset, submissions, { ...assignmentData, grading_mode: mode });
+  };
+
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
     const pending = pendingOverride || submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
@@ -488,9 +516,11 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
@@ -866,9 +896,32 @@ Gib das Ergebnis NUR als JSON zurück:
                         )}
                       </div>
                     </div>
-                    <p style={{ margin: "0 0 18px", color: "#64748b", fontSize: "13px" }}>
+                    <p style={{ margin: "0 0 10px", color: "#64748b", fontSize: "13px" }}>
                       Abgegeben: {new Date(selectedSubmission.submitted_at).toLocaleString("de-DE")}
                     </p>
+
+                  {/* Bewertungsmodus-Anzeige oben im Panel */}
+                  {currentGradingMode && (() => {
+                    const MODES = {
+                      content: { label: "🎯 Nur Inhalt", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
+                      standard: { label: "⚖️ Standard", color: "#2563a8", bg: "#eff6ff", border: "#bfdbfe" },
+                      strict: { label: "🔍 Streng", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+                    };
+                    const m = MODES[currentGradingMode] || MODES.standard;
+                    return (
+                      <div style={{ background: m.bg, border: `1px solid ${m.border}`, borderRadius: "8px", padding: "8px 12px", marginBottom: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "12px", fontWeight: 700, color: m.color }}>Bewertungsmodus: {m.label}</span>
+                        <div style={{ display: "flex", gap: "4px" }}>
+                          {["content", "standard", "strict"].filter(id => id !== currentGradingMode).map(id => (
+                            <button key={id} onClick={() => applyNewGradingMode(id)} disabled={aiRunning}
+                              style={{ padding: "2px 8px", background: "#fff", border: `1px solid ${MODES[id].border}`, color: MODES[id].color, borderRadius: "5px", fontSize: "10px", fontWeight: 600, cursor: aiRunning ? "not-allowed" : "pointer" }}>
+                              {MODES[id].label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                     {/* Meta-Infos für Ausdruck */}
                     <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px 16px", marginBottom: "18px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", fontSize: "13px" }}>
@@ -1046,6 +1099,39 @@ Gib das Ergebnis NUR als JSON zurück:
           </>
         )}
       </div>
+
+      {/* BEWERTUNGSMODUS-MODAL vor KI-Korrektur */}
+      {gradingModeModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "440px", width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: "48px", marginBottom: "12px" }}>🤖</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" }}>Wie streng soll die KI korrigieren?</h3>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.6 }}>
+              Wähle den Bewertungsmodus für diesen Test. Du kannst ihn später jederzeit in den Korrekturdetails ändern.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "8px" }}>
+              {[
+                { id: "content", label: "🎯 Nur Inhalt", desc: "Rechtschreibung & Grammatik werden ignoriert — nur der inhaltliche Kern zählt", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
+                { id: "standard", label: "⚖️ Standard", desc: "Inhalt zählt hauptsächlich, grobe Fehler können leicht abgezogen werden", color: "#2563a8", bg: "#eff6ff", border: "#bfdbfe" },
+                { id: "strict", label: "🔍 Streng", desc: "Inhalt + Rechtschreibung + Grammatik + Zeichensetzung werden bewertet", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+              ].map(mode => (
+                <button key={mode.id} onClick={async () => {
+                  setGradingModeModal(false);
+                  await saveGradingMode(mode.id);
+                  const pending = submissions.filter(s =>
+                    !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
+                  );
+                  runAutoBatchCorrection(pending, submissions, { ...assignmentData, grading_mode: mode.id });
+                }}
+                  style={{ padding: "14px 16px", background: mode.bg, border: `2px solid ${mode.border}`, borderRadius: "12px", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+                  <div style={{ fontSize: "15px", fontWeight: 700, color: mode.color, marginBottom: "4px" }}>{mode.label}</div>
+                  <div style={{ fontSize: "12px", color: "#64748b", lineHeight: 1.4 }}>{mode.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FREIGABE-MODAL nach KI-Korrektur */}
       {releaseModal && (
