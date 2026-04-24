@@ -902,23 +902,21 @@ Gib das Ergebnis NUR als JSON zurück:
                     </p>
 
                   {/* Bewertungsmodus-Anzeige oben im Panel */}
-                  {currentGradingMode && (() => {
+                  {(() => {
+                    const mode = currentGradingMode || assignmentData?.grading_mode || "standard";
                     const MODES = {
                       content: { label: "🎯 Nur Inhalt", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
                       standard: { label: "⚖️ Standard", color: "#2563a8", bg: "#eff6ff", border: "#bfdbfe" },
                       strict: { label: "🔍 Streng", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
                     };
-                    const m = MODES[currentGradingMode] || MODES.standard;
+                    const m = MODES[mode] || MODES.standard;
                     return (
-                      <div style={{ background: m.bg, border: `1px solid ${m.border}`, borderRadius: "8px", padding: "8px 12px", marginBottom: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "2px" }}>BEWERTUNGSMODUS</div>
-                          <span style={{ fontSize: "13px", fontWeight: 700, color: m.color }}>{m.label}</span>
-                        </div>
-                        <div style={{ display: "flex", gap: "4px" }}>
-                          {["content", "standard", "strict"].filter(id => id !== currentGradingMode).map(id => (
+                      <div style={{ background: m.bg, border: `1px solid ${m.border}`, borderRadius: "8px", padding: "10px 14px", marginBottom: "14px" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "6px" }}>BEWERTUNGSMODUS — jetzt ändern:</div>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          {["content", "standard", "strict"].map(id => (
                             <button key={id} onClick={() => applyNewGradingMode(id)} disabled={aiRunning}
-                              style={{ padding: "3px 8px", background: "#fff", border: `1px solid ${MODES[id].border}`, color: MODES[id].color, borderRadius: "5px", fontSize: "11px", fontWeight: 600, cursor: aiRunning ? "not-allowed" : "pointer" }}>
+                              style={{ flex: 1, padding: "6px 4px", background: id === mode ? MODES[id].bg : "#fff", border: `2px solid ${id === mode ? MODES[id].border : "#e2e8f0"}`, color: id === mode ? MODES[id].color : "#94a3b8", borderRadius: "6px", fontSize: "11px", fontWeight: id === mode ? 700 : 500, cursor: aiRunning ? "not-allowed" : "pointer", transition: "all 0.15s" }}>
                               {MODES[id].label}
                             </button>
                           ))}
