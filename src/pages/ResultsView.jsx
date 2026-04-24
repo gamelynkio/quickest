@@ -257,6 +257,27 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
 
   // Batch-Bewertung: alle Abgaben einer Frage gemeinsam und einheitlich korrigieren
 
+
+  // Antwort-Normalisierung für "Nur Inhalt" Modus
+  // Gleicht Groß-/Kleinschreibung der Schülerantwort an die Musterlösung an
+  const normalizeAnswerCase = (answer, solution, mode) => {
+    if (mode !== "content") return answer;
+    if (!answer || !solution) return answer;
+    // Wort für Wort vergleichen und Großschreibung aus Musterlösung übernehmen
+    const answerWords = answer.trim().split(/\s+/);
+    const solutionWords = solution.trim().split(/\s+/);
+    const normalized = answerWords.map((word, i) => {
+      const solWord = solutionWords[i] || solutionWords[solutionWords.length - 1];
+      if (!solWord) return word;
+      // Wenn Musterlösung-Wort großgeschrieben, Antwort-Wort auch großschreiben
+      if (solWord[0] === solWord[0].toUpperCase() && solWord[0] !== solWord[0].toLowerCase()) {
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      }
+      return word.toLowerCase();
+    });
+    return normalized.join(" ");
+  };
+
   const saveGradingMode = async (mode) => {
     setCurrentGradingMode(mode);
     await supabase.from("assignments").update({ grading_mode: mode }).eq("id", assignment.id);
@@ -313,14 +334,16 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       const isContentOnly = (aData?.grading_mode || "standard") === "content";
 
       for (const q of openQs) {
+        // Bei "Nur Inhalt": alles lowercase damit Claude keine Großschreibung bemängeln kann
+        const normalizeText = (t) => isContentOnly ? (t || "").toLowerCase() : (t || "");
         const answers = pending.filter(s => s.answers?.[q.id]?.trim()).map(s => ({
           id: s.id,
           username: s.username,
-          // Bei "Nur Inhalt": Groß-/Kleinschreibung vor dem KI-Vergleich normalisieren
-          answer: isContentOnly ? s.answers[q.id].toLowerCase() : s.answers[q.id],
+          answer: normalizeText(s.answers[q.id]),
           originalAnswer: s.answers[q.id],
         }));
         if (answers.length === 0) continue;
+        const normalizedSolution = normalizeText(q.solution);
 
         const calibrationRefs = allSubs.filter(s => s.reviewed && s.ai_corrections?.[q.id]?.aiReviewed && !pending.find(p => p.id === s.id))
           .slice(0, 4)
@@ -330,7 +353,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
 
 Frage: ${q.text || "(Fragetext)"}
-Musterlösung: ${isContentOnly && q.solution ? q.solution.toLowerCase() : (q.solution || "(keine Musterlösung)")}
+Musterlösung: ${isContentOnly ? normalizedSolution || "(keine Musterlösung)" : (q.solution || "(keine Musterlösung)")}
 Maximale Punktzahl: ${q.points}
 Bewertungsregeln: ${gradingModeText}
 
