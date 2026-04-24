@@ -310,8 +310,16 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
 
       const batchResults = {};
 
+      const isContentOnly = (aData?.grading_mode || "standard") === "content";
+
       for (const q of openQs) {
-        const answers = pending.filter(s => s.answers?.[q.id]?.trim()).map(s => ({ id: s.id, username: s.username, answer: s.answers[q.id] }));
+        const answers = pending.filter(s => s.answers?.[q.id]?.trim()).map(s => ({
+          id: s.id,
+          username: s.username,
+          // Bei "Nur Inhalt": Groß-/Kleinschreibung vor dem KI-Vergleich normalisieren
+          answer: isContentOnly ? s.answers[q.id].toLowerCase() : s.answers[q.id],
+          originalAnswer: s.answers[q.id],
+        }));
         if (answers.length === 0) continue;
 
         const calibrationRefs = allSubs.filter(s => s.reviewed && s.ai_corrections?.[q.id]?.aiReviewed && !pending.find(p => p.id === s.id))
@@ -322,7 +330,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
 
 Frage: ${q.text || "(Fragetext)"}
-Musterlösung: ${q.solution || "(keine Musterlösung)"}
+Musterlösung: ${isContentOnly && q.solution ? q.solution.toLowerCase() : (q.solution || "(keine Musterlösung)")}
 Maximale Punktzahl: ${q.points}
 Bewertungsregeln: ${gradingModeText}
 
@@ -522,9 +530,11 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
