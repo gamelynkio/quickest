@@ -517,9 +517,11 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
@@ -708,6 +710,7 @@ Gib das Ergebnis NUR als JSON zurück:
     setSelectedSubmission(prev => ({ ...prev, manual_overrides: updatedOverrides, score: newScore, grade: newGrade, reviewed: true }));
     setOverrides({});
     setSaving(false);
+    setSelectedSubmission(null);
   };
 
   // Freigabe-Funktionen
@@ -880,7 +883,8 @@ Gib das Ergebnis NUR als JSON zurück:
                   <div style={{ position: "fixed", top: 0, right: 0, width: "480px", height: "100vh", background: "#fff", borderLeft: "1px solid #e2e8f0", padding: "24px", overflowY: "auto", zIndex: 500, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
                       <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{selectedSubmission.username}</h3>
-                      <div style={{ display: "flex", gap: "8px" }}>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <button onClick={() => setSelectedSubmission(null)} style={{ background: "#f1f5f9", border: "none", borderRadius: "6px", padding: "4px 10px", cursor: "pointer", fontSize: "16px", color: "#64748b", lineHeight: 1 }}>✕</button>
                         {Object.values(selectedSubmission.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed) && (
                           <button onClick={() => runAiCorrection(selectedSubmission)} disabled={aiRunning}
                             style={{ padding: "7px 14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: aiRunning ? "not-allowed" : "pointer" }}>
@@ -909,11 +913,14 @@ Gib das Ergebnis NUR als JSON zurück:
                     const m = MODES[currentGradingMode] || MODES.standard;
                     return (
                       <div style={{ background: m.bg, border: `1px solid ${m.border}`, borderRadius: "8px", padding: "8px 12px", marginBottom: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: "12px", fontWeight: 700, color: m.color }}>Bewertungsmodus: {m.label}</span>
+                        <div>
+                          <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "2px" }}>BEWERTUNGSMODUS</div>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: m.color }}>{m.label}</span>
+                        </div>
                         <div style={{ display: "flex", gap: "4px" }}>
                           {["content", "standard", "strict"].filter(id => id !== currentGradingMode).map(id => (
                             <button key={id} onClick={() => applyNewGradingMode(id)} disabled={aiRunning}
-                              style={{ padding: "2px 8px", background: "#fff", border: `1px solid ${MODES[id].border}`, color: MODES[id].color, borderRadius: "5px", fontSize: "10px", fontWeight: 600, cursor: aiRunning ? "not-allowed" : "pointer" }}>
+                              style={{ padding: "3px 8px", background: "#fff", border: `1px solid ${MODES[id].border}`, color: MODES[id].color, borderRadius: "5px", fontSize: "11px", fontWeight: 600, cursor: aiRunning ? "not-allowed" : "pointer" }}>
                               {MODES[id].label}
                             </button>
                           ))}
@@ -1088,9 +1095,14 @@ Gib das Ergebnis NUR als JSON zurück:
                     });
                     })()}
 
-                    <button onClick={saveOverrides} disabled={saving} style={{ width: "100%", marginTop: "8px", padding: "10px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: saving ? "not-allowed" : "pointer" }}>
-                      {saving ? "Wird gespeichert..." : "✓ Korrekturen speichern"}
-                    </button>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                      <button onClick={saveOverrides} disabled={saving} style={{ flex: 1, padding: "10px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: saving ? "not-allowed" : "pointer" }}>
+                        {saving ? "Wird gespeichert..." : "✓ Korrekturen speichern"}
+                      </button>
+                      <button onClick={() => setSelectedSubmission(null)} style={{ padding: "10px 16px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+                        Schließen
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
