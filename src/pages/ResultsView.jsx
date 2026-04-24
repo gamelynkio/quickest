@@ -31,7 +31,7 @@ const aiCorrectOpenQuestions = async (submission, assignmentData) => {
   if (openQuestions.length === 0) return { corrections, changed: false };
 
   const gradingModeText = {
-    content: "Bewerte AUSSCHLIESSLICH den inhaltlichen Kern. Groß-/Kleinschreibung, Rechtschreibung, Grammatik, Zeichensetzung und Tippfehler sind vollständig irrelevant und führen zu KEINEM Punktabzug. Wenn der Inhalt stimmt, gibt es volle Punktzahl — egal wie das Wort geschrieben ist.",
+    content: "Bewerte AUSSCHLIESSLICH den inhaltlichen Kern. Groß-/Kleinschreibung ist VOLLSTÄNDIG irrelevant — 'hund' ist identisch mit 'Hund'. Rechtschreibung, Grammatik, Zeichensetzung und Tippfehler führen zu KEINEM Punktabzug. Stimmt das Wort/der Inhalt inhaltlich, gibt es volle Punktzahl.",
     standard: "Bewerte hauptsächlich den Inhalt. Nur grobe, sinnentstellende Rechtschreib- oder Grammatikfehler können minimal abgezogen werden. Kleinschreibung von Nomen oder einzelne Tippfehler führen zu keinem Abzug.",
     strict: "Bewerte Inhalt UND Sprachform. Rechtschreibfehler, Grammatikfehler und falsche Zeichensetzung führen zu Punktabzügen.",
   }[gradingMode] || "";
@@ -71,6 +71,7 @@ WICHTIGE HINWEISE zur Musterlösung:
 - Wörter in runden Klammern () sind OPTIONAL und müssen NICHT genannt werden. Beispiel: "(she's) five" bedeutet, "five" allein ist vollständig richtig. "chocolate (with nuts)" bedeutet, "chocolate" allein reicht für volle Punktzahl.
 - Wenn die Schülerantwort den Kerninhalt der Musterlösung enthält, gilt sie als korrekt — auch wenn sie kürzer formuliert ist.
 - Wenn keine Musterlösung hinterlegt ist, bewerte ob die Antwort inhaltlich sinnvoll und vollständig zur Frage passt.
+- Vergleiche OHNE Rücksicht auf Groß-/Kleinschreibung: "hund" ist korrekt wenn die Musterlösung "Hund" lautet.
 
 TEILBEPUNKTUNG:
 ${(q.partialPoints || []).length > 0
@@ -302,7 +303,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       if (openQs.length === 0) { setAiRunning(false); setAiProgress(""); return; }
 
       const gradingModeText = {
-        content: "Bewerte AUSSCHLIESSLICH den inhaltlichen Kern. Groß-/Kleinschreibung, Rechtschreibung, Grammatik, Zeichensetzung und Tippfehler sind vollständig irrelevant und führen zu KEINEM Punktabzug. Wenn der Inhalt stimmt, gibt es volle Punktzahl — egal wie das Wort geschrieben ist.",
+        content: "Bewerte AUSSCHLIESSLICH den inhaltlichen Kern. Groß-/Kleinschreibung ist VOLLSTÄNDIG irrelevant — 'hund' ist identisch mit 'Hund'. Rechtschreibung, Grammatik, Zeichensetzung und Tippfehler führen zu KEINEM Punktabzug. Stimmt das Wort/der Inhalt inhaltlich, gibt es volle Punktzahl.",
         standard: "Bewerte primär den Inhalt. Grobe Fehler können leicht abgezogen werden.",
         strict: "Bewerte Inhalt UND Sprachform. Fehler führen zu Punktabzügen.",
       }[aData?.grading_mode || "standard"] || "";
@@ -324,6 +325,10 @@ Frage: ${q.text || "(Fragetext)"}
 Musterlösung: ${q.solution || "(keine Musterlösung)"}
 Maximale Punktzahl: ${q.points}
 Bewertungsregeln: ${gradingModeText}
+
+GRUNDREGEL — IMMER GÜLTIG (unabhängig vom Bewertungsmodus):
+- Vergleiche Antworten OHNE Rücksicht auf Groß-/Kleinschreibung: "hund" = "Hund" = "HUND"
+- Wenn der inhaltliche Kern stimmt, zählt die Antwort als korrekt
 
 ${(q.partialPoints || []).length > 0
   ? `Bewertungskriterien (verbindlich — halte dich EXAKT daran):
