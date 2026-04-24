@@ -912,7 +912,7 @@ Gib das Ergebnis NUR als JSON zurück:
                     const m = MODES[mode] || MODES.standard;
                     return (
                       <div style={{ background: m.bg, border: `1px solid ${m.border}`, borderRadius: "8px", padding: "10px 14px", marginBottom: "14px" }}>
-                        <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "6px" }}>BEWERTUNGSMODUS — jetzt ändern:</div>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "6px" }}>RECHTSCHREIBUNG & GRAMMATIK</div>
                         <div style={{ display: "flex", gap: "6px" }}>
                           {["content", "standard", "strict"].map(id => (
                             <button key={id} onClick={() => applyNewGradingMode(id)} disabled={aiRunning}
@@ -1112,9 +1112,9 @@ Gib das Ergebnis NUR als JSON zurück:
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001, padding: "20px" }}>
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "440px", width: "100%", textAlign: "center" }}>
             <div style={{ fontSize: "48px", marginBottom: "12px" }}>🤖</div>
-            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" }}>Wie streng soll die KI korrigieren?</h3>
+            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" }}>Wie soll die KI Rechtschreibung & Grammatik bewerten?</h3>
             <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.6 }}>
-              Wähle den Bewertungsmodus für diesen Test. Du kannst ihn später jederzeit in den Korrekturdetails ändern.
+              Wähle wie streng Rechtschreibung und Grammatik bewertet werden. Du kannst den Modus später jederzeit in den Korrekturdetails ändern.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "8px" }}>
               {[
