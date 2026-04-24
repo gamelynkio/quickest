@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           anti_cheat: boolean | null
           created_at: string
+          custom_rules: string | null
           grading_mode: string | null
           grading_scale: Json
           group_id: number
@@ -41,6 +42,7 @@ export type Database = {
         Insert: {
           anti_cheat?: boolean | null
           created_at?: string
+          custom_rules?: string | null
           grading_mode?: string | null
           grading_scale?: Json
           group_id: number
@@ -64,6 +66,7 @@ export type Database = {
         Update: {
           anti_cheat?: boolean | null
           created_at?: string
+          custom_rules?: string | null
           grading_mode?: string | null
           grading_scale?: Json
           group_id?: number
