@@ -31,8 +31,8 @@ const aiCorrectOpenQuestions = async (submission, assignmentData) => {
   if (openQuestions.length === 0) return { corrections, changed: false };
 
   const gradingModeText = {
-    content: "Bewerte NUR den inhaltlichen Kern. Rechtschreibung, Grammatik und Zeichensetzung sind vollkommen egal.",
-    standard: "Bewerte primär den Inhalt. Grobe Rechtschreib- oder Grammatikfehler können leicht abgezogen werden, spielen aber keine große Rolle.",
+    content: "Bewerte AUSSCHLIESSLICH den inhaltlichen Kern. Groß-/Kleinschreibung, Rechtschreibung, Grammatik, Zeichensetzung und Tippfehler sind vollständig irrelevant und führen zu KEINEM Punktabzug. Wenn der Inhalt stimmt, gibt es volle Punktzahl — egal wie das Wort geschrieben ist.",
+    standard: "Bewerte hauptsächlich den Inhalt. Nur grobe, sinnentstellende Rechtschreib- oder Grammatikfehler können minimal abgezogen werden. Kleinschreibung von Nomen oder einzelne Tippfehler führen zu keinem Abzug.",
     strict: "Bewerte Inhalt UND Sprachform. Rechtschreibfehler, Grammatikfehler und falsche Zeichensetzung führen zu Punktabzügen.",
   }[gradingMode] || "";
 
@@ -302,7 +302,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       if (openQs.length === 0) { setAiRunning(false); setAiProgress(""); return; }
 
       const gradingModeText = {
-        content: "Bewerte NUR den inhaltlichen Kern. Rechtschreibung, Grammatik und Zeichensetzung sind vollkommen egal.",
+        content: "Bewerte AUSSCHLIESSLICH den inhaltlichen Kern. Groß-/Kleinschreibung, Rechtschreibung, Grammatik, Zeichensetzung und Tippfehler sind vollständig irrelevant und führen zu KEINEM Punktabzug. Wenn der Inhalt stimmt, gibt es volle Punktzahl — egal wie das Wort geschrieben ist.",
         standard: "Bewerte primär den Inhalt. Grobe Fehler können leicht abgezogen werden.",
         strict: "Bewerte Inhalt UND Sprachform. Fehler führen zu Punktabzügen.",
       }[aData?.grading_mode || "standard"] || "";
@@ -517,9 +517,11 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
