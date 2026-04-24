@@ -165,6 +165,99 @@ Gib das Ergebnis NUR als JSON zurück:
   return JSON.parse(text.replace(/```json|```/g, "").trim());
 };
 
+
+function RegelwerkModal({ assignmentData, currentGradingMode, customRules, applyNewGradingMode, saveCustomRules, savingRules, onClose }) {
+  const [localRules, setLocalRules] = useState(customRules);
+  const MODES = {
+    content: { label: "🎯 Nur Inhalt", desc: "Groß-/Kleinschreibung, Rechtschreibung und Grammatik werden vollständig ignoriert. Nur der inhaltliche Kern zählt." },
+    standard: { label: "⚖️ Standard", desc: "Inhalt steht im Vordergrund. Nur grobe, sinnentstellende Fehler können minimal abgezogen werden." },
+    strict: { label: "🔍 Streng", desc: "Inhalt und Sprachform werden bewertet. Rechtschreibfehler, Grammatikfehler und falsche Zeichensetzung führen zu Punktabzügen." },
+  };
+  const mode = currentGradingMode || assignmentData?.grading_mode || "standard";
+  const m = MODES[mode] || MODES.standard;
+
+  const flattenQs = (qs) => {
+    const result = [];
+    for (const q of (qs || [])) {
+      if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) result.push(tq); }
+      else if (q.type === "task") { for (const tq of (q.questions||[])) result.push(tq); }
+      else result.push(q);
+    }
+    return result;
+  };
+  const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "open" || q.type === "qa");
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001, padding: "20px" }}>
+      <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "560px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>📋 Bewertungsregelwerk</h3>
+          <button onClick={onClose} style={{ background: "#f1f5f9", border: "none", borderRadius: "6px", padding: "4px 10px", cursor: "pointer", fontSize: "16px", color: "#64748b" }}>✕</button>
+        </div>
+
+        <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #e2e8f0" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>RECHTSCHREIBUNG & GRAMMATIK</div>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>{m.label}</div>
+          <div style={{ fontSize: "13px", color: "#64748b", marginBottom: "12px", lineHeight: 1.5 }}>{m.desc}</div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            {["content", "standard", "strict"].map(id => (
+              <button key={id} onClick={() => applyNewGradingMode(id)}
+                style={{ flex: 1, padding: "6px", background: id === mode ? "#eff6ff" : "#fff", border: `2px solid ${id === mode ? "#bfdbfe" : "#e2e8f0"}`, color: id === mode ? "#2563a8" : "#94a3b8", borderRadius: "6px", fontSize: "11px", fontWeight: id === mode ? 700 : 400, cursor: "pointer" }}>
+                {MODES[id].label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {openQs.length > 0 && (
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>INHALTLICHE BEWERTUNG PRO AUFGABE</div>
+            {openQs.map((q, i) => (
+              <div key={q.id} style={{ background: "#f8fafc", borderRadius: "10px", padding: "12px 14px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "12px", fontWeight: 700, color: "#374151", marginBottom: "4px" }}>Aufgabe {i + 1}</div>
+                {q.solution && (
+                  <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "4px" }}>
+                    <span style={{ fontWeight: 600 }}>Musterlösung:</span> {q.solution}
+                  </div>
+                )}
+                {(q.partialPoints || []).length > 0 ? (
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#6d28d9", fontWeight: 600, marginBottom: "4px" }}>Bewertungskriterien:</div>
+                    {q.partialPoints.map((p, pi) => (
+                      <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", marginBottom: "2px" }}>
+                        <span style={{ background: "#eff6ff", borderRadius: "4px", padding: "1px 6px", fontWeight: 700, color: "#2563a8", flexShrink: 0 }}>{p.points} Pkt.</span>
+                        <span>{p.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic" }}>KI bewertet nach Musterlösung ohne feste Kriterien</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>ZUSÄTZLICHE REGELN (für alle Aufgaben)</div>
+          <textarea value={localRules} onChange={e => setLocalRules(e.target.value)} rows={4}
+            placeholder={'z.B. "Antworten auf Englisch akzeptieren" oder "Abkürzungen sind erlaubt" oder "Vergangenheitsform ist auch korrekt"'}
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }} />
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>Diese Regeln gelten bei der nächsten KI-Korrektur und alle Abgaben werden neu bewertet.</div>
+        </div>
+
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Schließen</button>
+          <button onClick={async () => { await saveCustomRules(localRules); onClose(); }} disabled={savingRules}
+            style={{ flex: 1, padding: "11px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, cursor: savingRules ? "not-allowed" : "pointer" }}>
+            {savingRules ? "⏳ Wird gespeichert..." : "✓ Speichern & neu korrigieren"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ResultsView({ navigate, onLogout, currentUser, assignment }) {
   const [submissions, setSubmissions] = useState([]);
   const [groupUsernames, setGroupUsernames] = useState([]);
@@ -185,7 +278,10 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [creatingMakeup, setCreatingMakeup] = useState(false);
   const [assignmentData, setAssignmentData] = useState(null);
   const [releaseModal, setReleaseModal] = useState(false);
-  const [gradingModeModal, setGradingModeModal] = useState(false); // vor erstem KI-Lauf
+  const [gradingModeModal, setGradingModeModal] = useState(false);
+  const [regelwerkModal, setRegelwerkModal] = useState(false);
+  const [customRules, setCustomRules] = useState(""); // Zusatzregeln des Lehrers
+  const [savingRules, setSavingRules] = useState(false); // vor erstem KI-Lauf
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
@@ -232,6 +328,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     const { data } = await supabase.from("assignments").select("*").eq("id", assignment.id).single();
     setAssignmentData(data);
     setCurrentGradingMode(data?.grading_mode || "standard");
+    setCustomRules(data?.custom_rules || "");
   };
 
   const fetchSubmissions = async () => {
@@ -297,6 +394,26 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     await runAutoBatchCorrection(toReset, submissions, { ...assignmentData, grading_mode: mode });
   };
 
+
+  const saveCustomRules = async (rules) => {
+    setSavingRules(true);
+    setCustomRules(rules);
+    await supabase.from("assignments").update({ custom_rules: rules }).eq("id", assignment.id);
+    setAssignmentData(prev => ({ ...prev, custom_rules: rules }));
+    setSavingRules(false);
+    // Neu korrigieren mit neuen Regeln
+    if (rules !== (assignmentData?.custom_rules || "")) {
+      const toReset = submissions.map(s => ({
+        ...s,
+        ai_corrections: Object.fromEntries(
+          Object.entries(s.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }])
+        ),
+        reviewed: false,
+      }));
+      await runAutoBatchCorrection(toReset, submissions, { ...assignmentData, custom_rules: rules });
+    }
+  };
+
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
     const pending = pendingOverride || submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
@@ -350,13 +467,17 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           .map(s => `- "${s.answers[q.id]}" → ${s.ai_corrections[q.id].points} Pkt. (${(s.ai_corrections[q.id].comment || "").replace("🤖 ", "")})`)
           .join("\n");
 
+        const customRulesText = aData?.custom_rules ? `
+Zusätzliche Regeln der Lehrkraft (verbindlich):
+${aData.custom_rules}
+` : "";
         const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
 
 Frage: ${q.text || "(Fragetext)"}
 Musterlösung: ${isContentOnly ? normalizedSolution || "(keine Musterlösung)" : (q.solution || "(keine Musterlösung)")}
 Maximale Punktzahl: ${q.points}
 Bewertungsregeln: ${gradingModeText}
-
+${customRulesText}
 GRUNDREGEL — IMMER GÜLTIG (unabhängig vom Bewertungsmodus):
 - Vergleiche Antworten OHNE Rücksicht auf Groß-/Kleinschreibung: "hund" = "Hund" = "HUND"
 - Wenn der inhaltliche Kern stimmt, zählt die Antwort als korrekt
@@ -553,9 +674,11 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
@@ -809,6 +932,7 @@ Gib das Ergebnis NUR als JSON zurück:
           <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>
             {submissions.length} Abgaben{avg ? ` · Ø ${avg}%` : ""}
             <button onClick={fetchSubmissions} style={{ marginLeft: "12px", background: "none", border: "none", color: "#2563a8", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>🔄 Aktualisieren</button>
+            <button onClick={() => setRegelwerkModal(true)} style={{ marginLeft: "12px", padding: "4px 12px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>📋 Regelwerk</button>
             {submissions.some(s => !s.released) && (
               <button onClick={releaseAll} style={{ marginLeft: "12px", padding: "4px 12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>✓ Alle freigeben</button>
             )}
@@ -1142,6 +1266,20 @@ Gib das Ergebnis NUR als JSON zurück:
           </>
         )}
       </div>
+
+
+      {/* REGELWERK MODAL */}
+      {regelwerkModal && assignmentData && (
+        <RegelwerkModal
+          assignmentData={assignmentData}
+          currentGradingMode={currentGradingMode}
+          customRules={customRules}
+          applyNewGradingMode={applyNewGradingMode}
+          saveCustomRules={saveCustomRules}
+          savingRules={savingRules}
+          onClose={() => setRegelwerkModal(false)}
+        />
+      )}
 
       {/* BEWERTUNGSMODUS-MODAL vor KI-Korrektur */}
       {gradingModeModal && (
