@@ -392,7 +392,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const [gradeLevel, setGradeLevel] = useState(editingTest?.grade_level || "");
   const [timeLimit, setTimeLimit] = useState(editingTest?.time_limit ? Math.round(editingTest.time_limit / 60) : 20);
   const [antiCheat, setAntiCheat] = useState(editingTest?.anti_cheat || false);
-  const [gradingMode, setGradingMode] = useState(editingTest?.grading_mode || "standard");
   const [questions, setQuestions] = useState(() => normalizeQuestions(editingTest?.question_data || []));
   const [gradingScale, setGradingScale] = useState(editingTest?.grading_scale?.length ? editingTest.grading_scale : [
     { grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
@@ -425,7 +424,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   const moveTask = (index, dir) => { const next = [...questions]; const swap = index + dir; if (swap < 0 || swap >= next.length) return; [next[index], next[swap]] = [next[swap], next[index]]; setQuestions(next); };
 
   const totalPoints = questions.reduce((sum, t) => sum + (t.questions || []).reduce((s, tq) => s + Number(tq.points || 0), 0), 0);
-  const hasOpenQuestions = questions.some(t => (t.questions || []).some(tq => tq.type === "open" || tq.type === "qa"));
 
   const handleImport = async (e) => {
     const file = e.target.files[0]; if (!file) return;
@@ -462,7 +460,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
 
   const handleSave = async () => {
     setSaving(true);
-    const payload = { teacher_id: currentUser?.id, title: title || "Unbenannte Vorlage", description, subject, grade_level: gradeLevel, time_limit: timeLimit * 60, anti_cheat: antiCheat, grading_mode: gradingMode, question_data: questions, grading_scale: gradingScale };
+    const payload = { teacher_id: currentUser?.id, title: title || "Unbenannte Vorlage", description, subject, grade_level: gradeLevel, time_limit: timeLimit * 60, anti_cheat: antiCheat, question_data: questions, grading_scale: gradingScale };
     if (editingTest?.id) { await supabase.from("templates").update(payload).eq("id", editingTest.id); }
     else { await supabase.from("templates").insert(payload); }
     setSaving(false); setSaved(true);
@@ -470,11 +468,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
   };
 
   const SUBJECTS = ["Mathematik", "Deutsch", "Englisch", "Französisch", "Spanisch", "Sachkunde", "Geschichte", "Geographie", "Biologie", "Physik", "Chemie", "Musik", "Kunst", "Sport"];
-  const GRADING_MODES = [
-    { id: "content", label: "🎯 Nur Inhalt", description: "Rechtschreibung & Grammatik werden ignoriert" },
-    { id: "standard", label: "⚖️ Standard", description: "Inhalt zählt hauptsächlich, grobe Fehler leicht abgezogen" },
-    { id: "strict", label: "🔍 Streng", description: "Inhalt + Rechtschreibung + Grammatik + Zeichensetzung" },
-  ];
 
   return (
     <TeacherLayout navigate={safeNavigate} onLogout={onLogout} currentUser={currentUser} activePage="testEditor">
@@ -523,20 +516,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
             🛡️ Anti-Cheat als Standard aktivieren
           </label>
 
-          {hasOpenQuestions && (
-            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #e2e8f0" }}>
-              <label style={{ fontSize: "13px", fontWeight: 700, color: "#374151", display: "block", marginBottom: "10px" }}>🤖 KI-Bewertungsmodus für offene Antworten</label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-                {GRADING_MODES.map(mode => (
-                  <button key={mode.id} onClick={() => setGradingMode(mode.id)}
-                    style={{ padding: "12px", border: `2px solid ${gradingMode === mode.id ? "#2563a8" : "#e2e8f0"}`, borderRadius: "10px", background: gradingMode === mode.id ? "#eff6ff" : "#fff", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
-                    <div style={{ fontSize: "13px", fontWeight: 700, color: gradingMode === mode.id ? "#1e40af" : "#374151", marginBottom: "4px" }}>{mode.label}</div>
-                    <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.4 }}>{mode.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+
 
           <details>
             <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#374151", userSelect: "none" }}>📊 Notenschlüssel anpassen</summary>
