@@ -341,6 +341,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [savingRules, setSavingRules] = useState(false);
   const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
   const [analyzingRules, setAnalyzingRules] = useState(false);
+
+
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
@@ -570,7 +572,39 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
 
   const applyNewGradingMode = async (mode) => {
     await saveGradingMode(mode);
+
+    // Toggle-Regeln automatisch an neuen Modus anpassen
+    const modeRuleDefaults = {
+      content: { capitalize: true, typo: true, synonym: true },
+      standard: { capitalize: true, typo: true, synonym: true },
+      strict: { capitalize: false, typo: false, synonym: false },
+    };
+    const defaults = modeRuleDefaults[mode] || {};
+
+    // Keywords für automatische Erkennung der Regel-Kategorie
+    const getRuleCategory = (label) => {
+      const l = label.toLowerCase();
+      if (l.includes("groß") || l.includes("klein")) return "capitalize";
+      if (l.includes("tipp") || l.includes("schreibfehler") && !l.includes("rechtschreib")) return "typo";
+      if (l.includes("synonym") || l.includes("alternativ")) return "synonym";
+      return null;
+    };
+
+    const updatedRules = detectedRules.map(r => {
+      const cat = getRuleCategory(r.label || "");
+      if (cat && defaults[cat] !== undefined) {
+        return { ...r, enabled: defaults[cat] };
+      }
+      return r;
+    });
+
+    if (JSON.stringify(updatedRules) !== JSON.stringify(detectedRules)) {
+      setDetectedRules(updatedRules);
+      await supabase.from("assignments").update({ detected_rules: updatedRules }).eq("id", assignment.id);
+    }
+
     // Alle Abgaben zurücksetzen und neu korrigieren
+    const updatedAData = { ...assignmentData, grading_mode: mode, detected_rules: updatedRules };
     const toReset = submissions.map(s => ({
       ...s,
       ai_corrections: Object.fromEntries(
@@ -578,7 +612,7 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
       ),
       reviewed: false,
     }));
-    await runAutoBatchCorrection(toReset, submissions, { ...assignmentData, grading_mode: mode });
+    await runAutoBatchCorrection(toReset, submissions, updatedAData);
   };
 
 
@@ -600,6 +634,8 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
       await runAutoBatchCorrection(toReset, submissions, { ...assignmentData, custom_rules: rules });
     }
   };
+
+
 
 
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
