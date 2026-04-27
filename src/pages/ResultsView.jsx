@@ -166,7 +166,7 @@ Gib das Ergebnis NUR als JSON zurück:
 };
 
 
-function RegelwerkModal({ assignmentData, currentGradingMode, customRules, applyNewGradingMode, saveCustomRules, savingRules, onClose }) {
+function RegelwerkModal({ assignmentData, currentGradingMode, customRules, detectedRules, setDetectedRules, saveDetectedRules, analyzingRules, applyNewGradingMode, saveCustomRules, savingRules, onClose }) {
   const [localRules, setLocalRules] = useState(customRules);
   const MODES = {
     content: { label: "🎯 Nur Inhalt", desc: "Groß-/Kleinschreibung, Rechtschreibung und Grammatik werden vollständig ignoriert. Nur der inhaltliche Kern zählt." },
@@ -238,6 +238,66 @@ function RegelwerkModal({ assignmentData, currentGradingMode, customRules, apply
           </div>
         )}
 
+        {/* KI-erkannte Toggle-Regeln */}
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>
+            KI-ERKANNTE BEWERTUNGSREGELN
+            {analyzingRules && <span style={{ marginLeft: "8px", color: "#6d28d9", fontWeight: 400 }}>🔍 wird analysiert...</span>}
+          </div>
+          {detectedRules.length === 0 ? (
+            <div style={{ fontSize: "13px", color: "#94a3b8", fontStyle: "italic", padding: "8px 0" }}>
+              {analyzingRules ? "KI analysiert die Antworten..." : "Noch keine Regeln erkannt — erscheinen nach der ersten Korrektur."}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {detectedRules.map(rule => (
+                <div key={rule.id} onClick={() => toggleDetectedRule(rule.id)}
+                  style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "12px 14px", background: rule.enabled ? "#f0fdf4" : "#f8fafc", border: `1px solid ${rule.enabled ? "#bbf7d0" : "#e2e8f0"}`, borderRadius: "10px", cursor: "pointer", transition: "all 0.15s" }}>
+                  <div style={{ width: "20px", height: "20px", borderRadius: "6px", background: rule.enabled ? "#16a34a" : "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "1px" }}>
+                    {rule.enabled && <span style={{ color: "#fff", fontSize: "12px", fontWeight: 700 }}>✓</span>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: rule.enabled ? "#16a34a" : "#374151", marginBottom: "2px" }}>{rule.label}</div>
+                    <div style={{ fontSize: "12px", color: "#64748b" }}>{rule.description}</div>
+                    <div style={{ fontSize: "11px", color: rule.enabled ? "#16a34a" : "#94a3b8", marginTop: "3px", fontStyle: "italic" }}>
+                      → {rule.enabled ? rule.promptIfEnabled : rule.promptIfDisabled}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>
+            ERKANNTE REGELN
+            {analyzingRules && <span style={{ marginLeft: "8px", color: "#6d28d9", fontWeight: 400 }}>⏳ KI analysiert...</span>}
+          </div>
+          {detectedRules.length === 0 && !analyzingRules ? (
+            <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic", padding: "8px 0" }}>
+              Noch keine Regeln erkannt — erscheinen nach der ersten KI-Korrektur.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {detectedRules.map((rule, i) => (
+                <div key={rule.id || i} onClick={() => {
+                  const updated = detectedRules.map((r, ri) => ri === i ? { ...r, enabled: !r.enabled } : r);
+                  setDetectedRules(updated);
+                }} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", background: rule.enabled ? "#f0fdf4" : "#f8fafc", border: `1px solid ${rule.enabled ? "#bbf7d0" : "#e2e8f0"}`, borderRadius: "8px", cursor: "pointer", userSelect: "none" }}>
+                  <div style={{ width: "20px", height: "20px", borderRadius: "4px", background: rule.enabled ? "#16a34a" : "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "12px", color: "#fff" }}>
+                    {rule.enabled ? "✓" : ""}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a" }}>{rule.label}</div>
+                    <div style={{ fontSize: "11px", color: "#64748b" }}>{rule.description}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{ marginBottom: "20px" }}>
           <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>ZUSÄTZLICHE REGELN (für alle Aufgaben)</div>
           <textarea value={localRules} onChange={e => setLocalRules(e.target.value)} rows={4}
@@ -246,9 +306,12 @@ function RegelwerkModal({ assignmentData, currentGradingMode, customRules, apply
           <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>Diese Regeln gelten bei der nächsten KI-Korrektur und alle Abgaben werden neu bewertet.</div>
         </div>
 
+        <div style={{ background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 14px", marginBottom: "16px", fontSize: "12px", color: "#92400e" }}>
+          ⚠️ Regeländerungen werden beim Speichern auf alle Abgaben angewendet und lösen eine Neu-Korrektur aus.
+        </div>
         <div style={{ display: "flex", gap: "10px" }}>
           <button onClick={onClose} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Schließen</button>
-          <button onClick={async () => { await saveCustomRules(localRules); onClose(); }} disabled={savingRules}
+          <button onClick={async () => { await saveDetectedRules(detectedRules); await saveCustomRules(localRules); onClose(); }} disabled={savingRules}
             style={{ flex: 1, padding: "11px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, cursor: savingRules ? "not-allowed" : "pointer" }}>
             {savingRules ? "⏳ Wird gespeichert..." : "✓ Speichern & neu korrigieren"}
           </button>
@@ -281,7 +344,11 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [gradingModeModal, setGradingModeModal] = useState(false);
   const [regelwerkModal, setRegelwerkModal] = useState(false);
   const [customRules, setCustomRules] = useState(""); // Zusatzregeln des Lehrers
-  const [savingRules, setSavingRules] = useState(false); // vor erstem KI-Lauf
+  const [savingRules, setSavingRules] = useState(false);
+  const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
+  const [analyzingRules, setAnalyzingRules] = useState(false);
+  const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
+  const [analyzingRules, setAnalyzingRules] = useState(false); // vor erstem KI-Lauf
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
@@ -340,6 +407,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setAssignmentData(data);
     setCurrentGradingMode(data?.grading_mode || "standard");
     setCustomRules(data?.custom_rules || "");
+    setDetectedRules(data?.detected_rules || []);
+    setDetectedRules(data?.detected_rules || []);
   };
 
   const fetchSubmissions = async () => {
@@ -386,6 +455,100 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     return normalized.join(" ");
   };
 
+
+  const toggleDetectedRule = async (ruleId) => {
+    const updated = detectedRules.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
+    setDetectedRules(updated);
+    await supabase.from("assignments").update({ detected_rules: updated }).eq("id", assignment.id);
+    setAssignmentData(prev => ({ ...prev, detected_rules: updated }));
+  };
+
+
+  // Nach Batch-Korrektur: KI analysiert Antworten und schlägt Toggle-Regeln vor
+  const analyzeAndSuggestRules = async (allSubs, aData) => {
+    if (!aData?.id) return;
+    setAnalyzingRules(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const flattenQs = (qs) => {
+        const result = [];
+        for (const q of (qs || [])) {
+          if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) result.push(tq); }
+          else if (q.type === "task") { for (const tq of (q.questions||[])) result.push(tq); }
+          else result.push(q);
+        }
+        return result;
+      };
+      const openQs = flattenQs(aData.question_data || []).filter(q => q.type === "open" || q.type === "qa");
+      if (openQs.length === 0) return;
+
+      // Antworten und Musterlösungen zusammenstellen
+      const questionSummaries = openQs.map(q => {
+        const answers = allSubs.filter(s => s.answers?.[q.id]?.trim()).map(s => s.answers[q.id]);
+        return `Frage: ${q.text || "(Fragetext)"}
+Musterlösung: ${q.solution || "(keine)"}
+Schülerantworten: ${answers.slice(0, 8).map((a, i) => `${i+1}. "${a}"`).join(", ")}`;
+      }).join("
+
+");
+
+      const prompt = `Du analysierst Schülerantworten eines Tests und schlägst konkrete Bewertungsregeln vor, die der Lehrer ein- oder ausschalten kann.
+
+${questionSummaries}
+
+Analysiere die Antworten und schlage 3-6 konkrete Toggle-Regeln vor, die für DIESEN Test relevant sind.
+Berücksichtige was in den Antworten tatsächlich vorkommt.
+
+Typische Regeln (nur vorschlagen wenn relevant):
+- Groß-/Kleinschreibung ignorieren
+- Artikel (der/die/das/ein/eine) ignorieren
+- Infinitivpartikel "to" erforderlich (bei Englisch)
+- Beide Geschlechtsformen erforderlich (z.B. -o/-a)
+- Synonyme akzeptieren
+- Abkürzungen akzeptieren
+- Reihenfolge der Wörter ignorieren
+- Teilantworten geben Teilpunkte
+
+Gib das Ergebnis NUR als JSON-Array zurück:
+[
+  {"id": "capitalize", "label": "Groß-/Kleinschreibung ignorieren", "description": "hund = Hund = HUND", "enabled": true},
+  ...
+]
+"enabled" ist dein Vorschlag basierend auf den Antworten (true = empfehle an, false = empfehle aus).`;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const rules = JSON.parse(text.replace(/```json|```/g, "").trim());
+
+      // In DB speichern
+      await supabase.from("assignments").update({ detected_rules: rules }).eq("id", aData.id);
+      setDetectedRules(rules);
+      setAssignmentData(prev => ({ ...prev, detected_rules: rules }));
+    } catch (e) { console.error("Rule analysis failed:", e); }
+    setAnalyzingRules(false);
+  };
+
+
+  const saveDetectedRules = async (rules) => {
+    setDetectedRules(rules);
+    await supabase.from("assignments").update({ detected_rules: rules }).eq("id", assignment.id);
+    setAssignmentData(prev => ({ ...prev, detected_rules: rules }));
+    // Alle Abgaben neu korrigieren mit neuen Toggles
+    const toReset = submissions.map(s => ({
+      ...s,
+      ai_corrections: Object.fromEntries(Object.entries(s.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }])),
+      reviewed: false,
+    }));
+    await runAutoBatchCorrection(toReset, submissions, { ...assignmentData, detected_rules: rules });
+  };
+
   const saveGradingMode = async (mode) => {
     setCurrentGradingMode(mode);
     await supabase.from("assignments").update({ grading_mode: mode }).eq("id", assignment.id);
@@ -423,6 +586,80 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       }));
       await runAutoBatchCorrection(toReset, submissions, { ...assignmentData, custom_rules: rules });
     }
+  };
+
+
+  // Nach Batch-Korrektur: KI analysiert Antworten und schlägt Toggle-Regeln vor
+  const analyzeAndSuggestRules = async (submissionsData, aData) => {
+    setAnalyzingRules(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const flattenQs = (qs) => {
+        const result = [];
+        for (const q of (qs || [])) {
+          if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) result.push(tq); }
+          else if (q.type === "task") { for (const tq of (q.questions||[])) result.push(tq); }
+          else result.push(q);
+        }
+        return result;
+      };
+      const openQs = flattenQs(aData?.question_data || []).filter(q => q.type === "open" || q.type === "qa");
+      if (openQs.length === 0) return;
+
+      // Alle Antworten zusammenfassen
+      const answerSummary = openQs.map(q => {
+        const answers = submissionsData.filter(s => s.answers?.[q.id]?.trim()).map(s => s.answers[q.id]);
+        const corrections = submissionsData.map(s => s.ai_corrections?.[q.id]).filter(Boolean);
+        return `Frage: ${q.text || "(Fragetext)"}
+Musterlösung: ${q.solution || "(keine)"}
+Schülerantworten: ${answers.map(a => `"${a}"`).join(", ")}
+Korrekturen: ${corrections.map(c => `${c.points}Pkt: ${(c.comment||"").replace("🤖 ","")}`).join(" | ")}`;
+      }).join("
+
+");
+
+      const prompt = `Du bist ein erfahrener Schullehrer und analysierst die Antworten einer Klasse auf einen Test.
+
+${answerSummary}
+
+Analysiere die Antworten und erkenne welche Bewertungsregeln sinnvoll wären. Schlage 3-6 konkrete Toggle-Regeln vor die für DIESEN Test relevant sind.
+
+Jede Regel hat:
+- einen kurzen Label (z.B. "Groß-/Kleinschreibung ignorieren")
+- eine kurze Erklärung (z.B. "hund = Hund = HUND")
+- einen Vorschlag ob sie ein- oder ausgeschaltet sein sollte (true/false)
+- wenn "enabled: true": welche Anweisung an die KI das bedeutet
+
+Gib das Ergebnis NUR als JSON zurück:
+[
+  {
+    "id": "capitalization",
+    "label": "Groß-/Kleinschreibung ignorieren",
+    "description": "hund = Hund — Substantive müssen nicht großgeschrieben werden",
+    "enabled": true,
+    "promptIfEnabled": "Groß-/Kleinschreibung vollständig ignorieren",
+    "promptIfDisabled": "Groß-/Kleinschreibung bewerten — falsche Schreibung führt zu Punktabzug"
+  }
+]`;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const rules = JSON.parse(text.replace(/```json|```/g, "").trim());
+
+      if (Array.isArray(rules) && rules.length > 0) {
+        setDetectedRules(rules);
+        await supabase.from("assignments").update({ detected_rules: rules }).eq("id", assignment.id);
+        setAssignmentData(prev => ({ ...prev, detected_rules: rules }));
+      }
+    } catch (e) { console.error("Rule analysis failed:", e); }
+    setAnalyzingRules(false);
   };
 
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
@@ -478,6 +715,11 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           .map(s => `- "${s.answers[q.id]}" → ${s.ai_corrections[q.id].points} Pkt. (${(s.ai_corrections[q.id].comment || "").replace("🤖 ", "")})`)
           .join("\n");
 
+        const toggleRules = (aData?.detected_rules || [])
+          .map(r => r.enabled ? r.promptIfEnabled : r.promptIfDisabled)
+          .filter(Boolean)
+          .join("\n- ");
+        const toggleRulesText = toggleRules ? `\nVerbindliche Bewertungsregeln (vom Lehrer festgelegt):\n- ${toggleRules}\n` : "";
         const customRulesText = aData?.custom_rules ? `
 Zusätzliche Regeln der Lehrkraft (verbindlich):
 ${aData.custom_rules}
@@ -488,7 +730,7 @@ Frage: ${q.text || "(Fragetext)"}
 Musterlösung: ${isContentOnly ? normalizedSolution || "(keine Musterlösung)" : (q.solution || "(keine Musterlösung)")}
 Maximale Punktzahl: ${q.points}
 Bewertungsregeln: ${gradingModeText}
-${customRulesText}
+${toggleRulesText}${customRulesText}
 GRUNDREGEL — IMMER GÜLTIG (unabhängig vom Bewertungsmodus):
 - Vergleiche Antworten OHNE Rücksicht auf Groß-/Kleinschreibung: "hund" = "Hund" = "HUND"
 - Wenn der inhaltliche Kern stimmt, zählt die Antwort als korrekt
@@ -577,6 +819,13 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
         if (selectedSubmission?.id === s.id) setSelectedSubmission(prev => ({ ...prev, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true }));
       }
       setAiProgress("✅ KI-Korrektur abgeschlossen!");
+      // Regeln vorschlagen wenn noch keine erkannt wurden
+      const currentDetected = aData?.detected_rules || assignmentData?.detected_rules || [];
+      if (currentDetected.length === 0) {
+        setAiProgress("🔍 KI analysiert Bewertungsregeln...");
+        const freshSubs = await supabase.from("submissions").select("*").in("id", pending.map(s => s.id));
+        await analyzeAndSuggestRules(freshSubs.data || pending, aData || assignmentData);
+      }
       setTimeout(() => { setAiProgress(""); setAiRunning(false); setReleaseModal(true); }, 3000);
     } catch (e) {
       setAiProgress("❌ Fehler bei der KI-Korrektur.");
@@ -722,7 +971,9 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
 Musterlösung: ${q.solution || "(keine)"}
 Antwort: ${ans}
 Aktuelle Bewertung: ${corr?.points ?? "–"}/${q.points} Pkt. — ${corr?.comment || ""}`;
-      }).join("\n\n");
+      }).join("
+
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest deine Korrekturen für einen Schüler.
 
@@ -800,9 +1051,11 @@ Die IDs der Fragen sind: ${openQs.map(q => q.id).join(", ")}`;
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
@@ -1417,6 +1670,9 @@ Gib das Ergebnis NUR als JSON zurück:
           assignmentData={assignmentData}
           currentGradingMode={currentGradingMode}
           customRules={customRules}
+          detectedRules={detectedRules}
+          analyzingRules={analyzingRules}
+          toggleDetectedRule={toggleDetectedRule}
           applyNewGradingMode={applyNewGradingMode}
           saveCustomRules={saveCustomRules}
           savingRules={savingRules}
