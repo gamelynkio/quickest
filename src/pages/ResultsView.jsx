@@ -784,7 +784,7 @@ ${(() => {
     ? "GRUNDREGEL: Groß-/Kleinschreibung ist irrelevant — \"hund\" = \"Hund\" = \"HUND\"\n"
     : "GRUNDREGEL: Groß-/Kleinschreibung MUSS korrekt sein — \"hund\" ist FALSCH wenn die Musterlösung \"Hund\" lautet\n";
 })()}
-
+${(q.partialPoints && q.partialPoints.length > 0)
   ? `Bewertungskriterien (verbindlich — halte dich EXAKT daran):
 ${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}`
   : `- Vergib anteilige Punkte wenn die Antwort teilweise korrekt ist\n- Schritte von 0.5 Punkten möglich`}
