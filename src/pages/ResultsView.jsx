@@ -342,7 +342,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
   const [analyzingRules, setAnalyzingRules] = useState(false);
 
-  const [analyzingRules, setAnalyzingRules] = useState(false); // vor erstem KI-Lauf
+
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
@@ -636,76 +636,7 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
   };
 
 
-  // Nach Batch-Korrektur: KI analysiert Antworten und schlägt Toggle-Regeln vor
-  const analyzeAndSuggestRules = async (submissionsData, aData) => {
-    setAnalyzingRules(true);
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const flattenQs = (qs) => {
-        const result = [];
-        for (const q of (qs || [])) {
-          if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) result.push(tq); }
-          else if (q.type === "task") { for (const tq of (q.questions||[])) result.push(tq); }
-          else result.push(q);
-        }
-        return result;
-      };
-      const openQs = flattenQs(aData?.question_data || []).filter(q => q.type === "open" || q.type === "qa");
-      if (openQs.length === 0) return;
-
-      // Alle Antworten zusammenfassen
-      const answerSummary = openQs.map(q => {
-        const answers = submissionsData.filter(s => s.answers?.[q.id]?.trim()).map(s => s.answers[q.id]);
-        const corrections = submissionsData.map(s => s.ai_corrections?.[q.id]).filter(Boolean);
-        return `Frage: ${q.text || "(Fragetext)"}
-Musterlösung: ${q.solution || "(keine)"}
-Schülerantworten: ${answers.map(a => `"${a}"`).join(", ")}
-Korrekturen: ${corrections.map(c => `${c.points}Pkt: ${(c.comment||"").replace("🤖 ","")}`).join(" | ")}`;
-      }).join("\n\n");
-
-      const prompt = `Du bist ein erfahrener Schullehrer und analysierst die Antworten einer Klasse auf einen Test.
-
-${answerSummary}
-
-Analysiere die Antworten und erkenne welche Bewertungsregeln sinnvoll wären. Schlage 3-6 konkrete Toggle-Regeln vor die für DIESEN Test relevant sind.
-
-Jede Regel hat:
-- einen kurzen Label (z.B. "Groß-/Kleinschreibung ignorieren")
-- eine kurze Erklärung (z.B. "hund = Hund = HUND")
-- einen Vorschlag ob sie ein- oder ausgeschaltet sein sollte (true/false)
-- wenn "enabled: true": welche Anweisung an die KI das bedeutet
-
-Gib das Ergebnis NUR als JSON zurück:
-[
-  {
-    "id": "capitalization",
-    "label": "Groß-/Kleinschreibung ignorieren",
-    "description": "hund = Hund — Substantive müssen nicht großgeschrieben werden",
-    "enabled": true,
-    "promptIfEnabled": "Groß-/Kleinschreibung vollständig ignorieren",
-    "promptIfDisabled": "Groß-/Kleinschreibung bewerten — falsche Schreibung führt zu Punktabzug"
-  }
-]`;
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] }),
-      });
-      const data = await response.json();
-      const text = data.content?.map(b => b.text || "").join("") || "";
-      const rules = JSON.parse(text.replace(/```json|```/g, "").trim());
-
-      if (Array.isArray(rules) && rules.length > 0) {
-        setDetectedRules(rules);
-        await supabase.from("assignments").update({ detected_rules: rules }).eq("id", assignment.id);
-        setAssignmentData(prev => ({ ...prev, detected_rules: rules }));
-      }
-    } catch (e) { console.error("Rule analysis failed:", e); }
-    setAnalyzingRules(false);
-  };
 
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
     const pending = pendingOverride || submissions.filter(s =>
