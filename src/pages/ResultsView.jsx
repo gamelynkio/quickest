@@ -342,7 +342,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
   const [analyzingRules, setAnalyzingRules] = useState(false);
 
-  
+  const [analyzingRules, setAnalyzingRules] = useState(false); // vor erstem KI-Lauf
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
@@ -485,7 +485,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         return `Frage: ${q.text || "(Fragetext)"}
 Musterlösung: ${q.solution || "(keine)"}
 Schülerantworten: ${answers.slice(0, 8).map((a, i) => `${i+1}. "${a}"`).join(", ")}`;
-      }).join("\n\n");
+      }).join("
+
+");
 
       const prompt = `Du analysierst Schülerantworten eines Tests und schlägst konkrete Bewertungsregeln vor, die der Lehrer ein- oder ausschalten kann.
 
@@ -510,7 +512,7 @@ Gib das Ergebnis NUR als JSON-Array zurück:
   ...
 ]
 Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen diese Regel relevant ist — nicht alle Fragen pauschal, nur die wo es tatsächlich einen Unterschied macht.
-"enabled" ist dein Vorschlag. Verwende echte Fragen-IDs (${openQs.map(q => q.id).join(", ")}).`;
+"enabled" ist IMMER true — schlage nur Regeln vor die du tatsächlich erkennst. Der Lehrer deaktiviert was er nicht will. Verwende echte Fragen-IDs (${openQs.map(q => q.id).join(", ")}).`;
 
       const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
@@ -603,6 +605,80 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
     }
   };
 
+
+  // Nach Batch-Korrektur: KI analysiert Antworten und schlägt Toggle-Regeln vor
+  const analyzeAndSuggestRules = async (submissionsData, aData) => {
+    setAnalyzingRules(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const flattenQs = (qs) => {
+        const result = [];
+        for (const q of (qs || [])) {
+          if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) result.push(tq); }
+          else if (q.type === "task") { for (const tq of (q.questions||[])) result.push(tq); }
+          else result.push(q);
+        }
+        return result;
+      };
+      const openQs = flattenQs(aData?.question_data || []).filter(q => q.type === "open" || q.type === "qa");
+      if (openQs.length === 0) return;
+
+      // Alle Antworten zusammenfassen
+      const answerSummary = openQs.map(q => {
+        const answers = submissionsData.filter(s => s.answers?.[q.id]?.trim()).map(s => s.answers[q.id]);
+        const corrections = submissionsData.map(s => s.ai_corrections?.[q.id]).filter(Boolean);
+        return `Frage: ${q.text || "(Fragetext)"}
+Musterlösung: ${q.solution || "(keine)"}
+Schülerantworten: ${answers.map(a => `"${a}"`).join(", ")}
+Korrekturen: ${corrections.map(c => `${c.points}Pkt: ${(c.comment||"").replace("🤖 ","")}`).join(" | ")}`;
+      }).join("
+
+");
+
+      const prompt = `Du bist ein erfahrener Schullehrer und analysierst die Antworten einer Klasse auf einen Test.
+
+${answerSummary}
+
+Analysiere die Antworten und erkenne welche Bewertungsregeln sinnvoll wären. Schlage 3-6 konkrete Toggle-Regeln vor die für DIESEN Test relevant sind.
+
+Jede Regel hat:
+- einen kurzen Label (z.B. "Groß-/Kleinschreibung ignorieren")
+- eine kurze Erklärung (z.B. "hund = Hund = HUND")
+- einen Vorschlag ob sie ein- oder ausgeschaltet sein sollte (true/false)
+- wenn "enabled: true": welche Anweisung an die KI das bedeutet
+
+Gib das Ergebnis NUR als JSON zurück:
+[
+  {
+    "id": "capitalization",
+    "label": "Groß-/Kleinschreibung ignorieren",
+    "description": "hund = Hund — Substantive müssen nicht großgeschrieben werden",
+    "enabled": true,
+    "promptIfEnabled": "Groß-/Kleinschreibung vollständig ignorieren",
+    "promptIfDisabled": "Groß-/Kleinschreibung bewerten — falsche Schreibung führt zu Punktabzug"
+  }
+]`;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const rules = JSON.parse(text.replace(/```json|```/g, "").trim());
+
+      if (Array.isArray(rules) && rules.length > 0) {
+        setDetectedRules(rules);
+        await supabase.from("assignments").update({ detected_rules: rules }).eq("id", assignment.id);
+        setAssignmentData(prev => ({ ...prev, detected_rules: rules }));
+      }
+    } catch (e) { console.error("Rule analysis failed:", e); }
+    setAnalyzingRules(false);
+  };
+
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
     const pending = pendingOverride || submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
@@ -656,15 +732,16 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
           .map(s => `- "${s.answers[q.id]}" → ${s.ai_corrections[q.id].points} Pkt. (${(s.ai_corrections[q.id].comment || "").replace("🤖 ", "")})`)
           .join("\n");
 
-        const toggleRules = (aData?.detected_rules || [])
-          .map(r => r.enabled ? r.promptIfEnabled : r.promptIfDisabled)
-          .filter(Boolean)
-          .join("\n- ");
-        const toggleRulesText = toggleRules ? `\nVerbindliche Bewertungsregeln (vom Lehrer festgelegt):\n- ${toggleRules}\n` : "";
-        const customRulesText = aData?.custom_rules ? `
-Zusätzliche Regeln der Lehrkraft (verbindlich):
-${aData.custom_rules}
-` : "";
+        const activeRules = (aData?.detected_rules || [])
+          .filter(r => r.enabled)
+          .map(r => `- ${r.label}${r.description ? `: ${r.description}` : ""}`)
+          .join("\n");
+        const disabledRules = (aData?.detected_rules || [])
+          .filter(r => !r.enabled)
+          .map(r => `- NICHT anwenden: ${r.label} — führt zu Punktabzug`)
+          .join("\n");
+        const toggleRulesText = (activeRules || disabledRules) ? `\nVom Lehrer festgelegte Regeln (VERBINDLICH — keine Ausnahmen):\n${activeRules}${disabledRules ? "\n" + disabledRules : ""}\n` : "";
+        const customRulesText = aData?.custom_rules ? `\nZusätzliche Regeln der Lehrkraft (verbindlich):\n${aData.custom_rules}\n` : "";
         const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
 
 Frage: ${q.text || "(Fragetext)"}
@@ -933,7 +1010,9 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
 Musterlösung: ${q.solution || "(keine)"}
 Antwort: ${ans}
 Aktuelle Bewertung: ${corr?.points ?? "–"}/${q.points} Pkt. — ${corr?.comment || ""}`;
-      }).join("\n\n");
+      }).join("
+
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest deine Korrekturen für einen Schüler.
 
@@ -1011,9 +1090,11 @@ Die IDs der Fragen sind: ${openQs.map(q => q.id).join(", ")}`;
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
