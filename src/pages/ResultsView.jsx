@@ -346,8 +346,6 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [customRules, setCustomRules] = useState(""); // Zusatzregeln des Lehrers
   const [savingRules, setSavingRules] = useState(false);
   const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
-  const [analyzingRules, setAnalyzingRules] = useState(false);
-  const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
   const [analyzingRules, setAnalyzingRules] = useState(false); // vor erstem KI-Lauf
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
