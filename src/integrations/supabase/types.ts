@@ -19,6 +19,7 @@ export type Database = {
           anti_cheat: boolean | null
           created_at: string
           custom_rules: string | null
+          detected_rules: Json | null
           grading_mode: string | null
           grading_scale: Json
           group_id: number
@@ -43,6 +44,7 @@ export type Database = {
           anti_cheat?: boolean | null
           created_at?: string
           custom_rules?: string | null
+          detected_rules?: Json | null
           grading_mode?: string | null
           grading_scale?: Json
           group_id: number
@@ -67,6 +69,7 @@ export type Database = {
           anti_cheat?: boolean | null
           created_at?: string
           custom_rules?: string | null
+          detected_rules?: Json | null
           grading_mode?: string | null
           grading_scale?: Json
           group_id?: number

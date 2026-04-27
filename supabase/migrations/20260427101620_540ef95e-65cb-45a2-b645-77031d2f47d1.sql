@@ -1,0 +1,1 @@
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS detected_rules jsonb DEFAULT '[]';
