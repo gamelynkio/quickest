@@ -349,7 +349,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [rubricFeedback, setRubricFeedback] = useState(""); // Lehrer-Kommentar für KI
   const [refiningRubric, setRefiningRubric] = useState(false);
   const [questionFeedback, setQuestionFeedback] = useState({});
-  const [quickPrompt, setQuickPrompt] = useState(""); // Schnell-Prompt im Detail-Panel // { qId: feedbackText }
+  const [quickPrompt, setQuickPrompt] = useState("");
+  const [rulePropagateModal, setRulePropagateModal] = useState(null); // {rule, newEnabled, affectedCount} // Schnell-Prompt im Detail-Panel // { qId: feedbackText }
   const [refiningQuestion, setRefiningQuestion] = useState(null); // qId being refined
   const [suggestingRubric, setSuggestingRubric] = useState(false);
   const [savingRubric, setSavingRubric] = useState(false);
@@ -878,6 +879,32 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
 
 
 
+
+
+  // Toggle einer Regel direkt im Detail-Panel
+  const toggleRuleInPanel = async (rule, newEnabled) => {
+    // Prüfen ob Regel auch bei anderen Aufgaben vorkommt (allgemeine Regel oder mehrfach)
+    const sameLabel = detectedRules.filter(r => r.label === rule.label && r.id !== rule.id);
+    if (sameLabel.length > 0) {
+      // Fragen ob auch für andere Aufgaben übernehmen
+      setRulePropagateModal({ rule, newEnabled, sameLabel });
+      return;
+    }
+    // Nur diese Regel toggeln
+    const updated = detectedRules.map(r => r.id === rule.id ? { ...r, enabled: newEnabled } : r);
+    setDetectedRules(updated);
+    await saveAllRules(updated, customRules);
+  };
+
+  const applyRulePropagation = async (propagate) => {
+    if (!rulePropagateModal) return;
+    const { rule, newEnabled, sameLabel } = rulePropagateModal;
+    const idsToUpdate = new Set([rule.id, ...(propagate ? sameLabel.map(r => r.id) : [])]);
+    const updated = detectedRules.map(r => idsToUpdate.has(r.id) ? { ...r, enabled: newEnabled } : r);
+    setDetectedRules(updated);
+    setRulePropagateModal(null);
+    await saveAllRules(updated, customRules);
+  };
 
   const applyQuickPrompt = async (promptText) => {
     if (!promptText.trim() || !selectedSubmission) return;
@@ -1505,14 +1532,24 @@ Gib das Ergebnis NUR als JSON zurück:
                               <span style={{ fontWeight: 600, color: "#94a3b8" }}>📐 </span>{correction.usedCriteria}
                             </div>
                           )}
-                          {/* Aufgabenspezifische Toggle-Regeln */}
-                          {detectedRules.filter(r => r.taskId && String(r.taskId) === String(qId)).length > 0 && (
-                            <div style={{ background: "#f8fafc", borderRadius: "6px", padding: "6px 10px", marginBottom: "6px", fontSize: "11px", border: "1px solid #e2e8f0" }}>
-                              {detectedRules.filter(r => r.taskId && String(r.taskId) === String(qId)).map(r => (
-                                <div key={r.id} style={{ color: r.enabled ? "#16a34a" : "#94a3b8" }}>{r.enabled ? "✓" : "✗"} {r.label}</div>
-                              ))}
-                            </div>
-                          )}
+                          {/* Klickbare Korrekturregeln pro Aufgabe */}
+                          {(() => {
+                            // Allgemeine Regeln + aufgabenspezifische für diese Frage
+                            const qSpecific = detectedRules.filter(r => r.taskId && String(r.taskId) === String(qId));
+                            const general = detectedRules.filter(r => !r.taskId);
+                            const allRules = [...general, ...qSpecific];
+                            if (allRules.length === 0) return null;
+                            return (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
+                                {allRules.map(r => (
+                                  <button key={r.id} onClick={() => toggleRuleInPanel(r, !r.enabled)} disabled={aiRunning}
+                                    style={{ padding: "3px 9px", borderRadius: "20px", border: `1.5px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 600, cursor: aiRunning ? "not-allowed" : "pointer", transition: "all 0.15s" }}>
+                                    {r.enabled ? "✓" : "○"} {r.label}
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           {correction.solution && (
                             <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
                               <strong>📝 Musterlösung:</strong> {correction.solution}
@@ -1625,6 +1662,38 @@ Gib das Ergebnis NUR als JSON zurück:
         )}
       </div>
 
+
+      {/* REGEL-PROPAGATION MODAL */}
+      {rulePropagateModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1002, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "16px", padding: "28px", maxWidth: "380px", width: "100%" }}>
+            <div style={{ fontSize: "20px", marginBottom: "10px" }}>🔄</div>
+            <h4 style={{ margin: "0 0 8px", fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>
+              Regel auch für andere Aufgaben?
+            </h4>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "6px", lineHeight: 1.5 }}>
+              <strong>„{rulePropagateModal.rule.label}"</strong> wurde {rulePropagateModal.newEnabled ? "aktiviert" : "deaktiviert"}.
+            </p>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px", lineHeight: 1.5 }}>
+              Diese Regel kommt auch bei {rulePropagateModal.sameLabel.length} anderen Aufgabe{rulePropagateModal.sameLabel.length !== 1 ? "n" : ""} vor. Soll die Änderung auch dort übernommen werden?
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <button onClick={() => applyRulePropagation(true)}
+                style={{ padding: "11px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                Ja, für alle Aufgaben übernehmen
+              </button>
+              <button onClick={() => applyRulePropagation(false)}
+                style={{ padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+                Nein, nur für diese Aufgabe
+              </button>
+              <button onClick={() => setRulePropagateModal(null)}
+                style={{ padding: "8px", background: "none", color: "#94a3b8", border: "none", fontSize: "12px", cursor: "pointer" }}>
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* REGELWERK MODAL */}
       {regelwerkModal && assignmentData && (
