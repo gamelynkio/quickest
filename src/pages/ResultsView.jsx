@@ -505,11 +505,12 @@ Aufgabenspezifische Regeln (scope: "task") — Beispiele:
 
 Gib das Ergebnis NUR als JSON-Array zurück:
 [
-  {"id": "capitalize", "label": "Groß-/Kleinschreibung ignorieren", "description": "hund = Hund = HUND", "enabled": true, "scope": "all"},
-  {"id": "to_required_q1", "label": "Infinitivpartikel \"to\" erforderlich", "description": "Nur \"to feed\" akzeptiert, nicht \"feed\" allein", "enabled": false, "scope": "task", "taskId": "<die ID der betroffenen Frage>"},
+  {"id": "capitalize", "label": "Groß-/Kleinschreibung ignorieren", "description": "hund = Hund = HUND", "enabled": true, "scope": "all", "taskIds": ["id1", "id2", "id3"]},
+  {"id": "to_required_q1", "label": "Infinitivpartikel \"to\" erforderlich", "description": "Nur \"to feed\" akzeptiert, nicht \"feed\" allein", "enabled": false, "scope": "task", "taskId": "<ID der Frage>", "taskIds": ["<ID der Frage>"]},
   ...
 ]
-"enabled" ist dein Vorschlag (true = empfehle an). Verwende die echten Fragen-IDs für taskId.`;
+Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen diese Regel relevant ist — nicht alle Fragen pauschal, nur die wo es tatsächlich einen Unterschied macht.
+"enabled" ist dein Vorschlag. Verwende echte Fragen-IDs (${openQs.map(q => q.id).join(", ")}).`;
 
       const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
@@ -601,8 +602,6 @@ Gib das Ergebnis NUR als JSON-Array zurück:
       await runAutoBatchCorrection(toReset, submissions, { ...assignmentData, custom_rules: rules });
     }
   };
-
-
 
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
     const pending = pendingOverride || submissions.filter(s =>
@@ -882,28 +881,23 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
 
 
   // Toggle einer Regel direkt im Detail-Panel
-  const toggleRuleInPanel = async (rule, newEnabled) => {
-    // Prüfen ob Regel auch bei anderen Aufgaben vorkommt (allgemeine Regel oder mehrfach)
+  const toggleRuleInPanel = (rule, newEnabled) => {
+    // Prüfen ob Regel auch bei anderen Aufgaben vorkommt
     const sameLabel = detectedRules.filter(r => r.label === rule.label && r.id !== rule.id);
     if (sameLabel.length > 0) {
-      // Fragen ob auch für andere Aufgaben übernehmen
       setRulePropagateModal({ rule, newEnabled, sameLabel });
       return;
     }
-    // Nur diese Regel toggeln
-    const updated = detectedRules.map(r => r.id === rule.id ? { ...r, enabled: newEnabled } : r);
-    setDetectedRules(updated);
-    await saveAllRules(updated, customRules);
+    // Nur lokalen State updaten — kein Auto-Save
+    setDetectedRules(prev => prev.map(r => r.id === rule.id ? { ...r, enabled: newEnabled } : r));
   };
 
-  const applyRulePropagation = async (propagate) => {
+  const applyRulePropagation = (propagate) => {
     if (!rulePropagateModal) return;
     const { rule, newEnabled, sameLabel } = rulePropagateModal;
     const idsToUpdate = new Set([rule.id, ...(propagate ? sameLabel.map(r => r.id) : [])]);
-    const updated = detectedRules.map(r => idsToUpdate.has(r.id) ? { ...r, enabled: newEnabled } : r);
-    setDetectedRules(updated);
+    setDetectedRules(prev => prev.map(r => idsToUpdate.has(r.id) ? { ...r, enabled: newEnabled } : r));
     setRulePropagateModal(null);
-    await saveAllRules(updated, customRules);
   };
 
   const applyQuickPrompt = async (promptText) => {
@@ -1532,18 +1526,21 @@ Gib das Ergebnis NUR als JSON zurück:
                               <span style={{ fontWeight: 600, color: "#94a3b8" }}>📐 </span>{correction.usedCriteria}
                             </div>
                           )}
-                          {/* Klickbare Korrekturregeln pro Aufgabe */}
+                          {/* Klickbare Korrekturregeln — nur aufgabenrelevante */}
                           {(() => {
-                            // Allgemeine Regeln + aufgabenspezifische für diese Frage
-                            const qSpecific = detectedRules.filter(r => r.taskId && String(r.taskId) === String(qId));
-                            const general = detectedRules.filter(r => !r.taskId);
-                            const allRules = [...general, ...qSpecific];
-                            if (allRules.length === 0) return null;
+                            // Nur Regeln die explizit für diese Aufgabe gelten (taskId) ODER
+                            // allgemeine Regeln die in taskIds diese Aufgabe enthalten
+                            const relevant = detectedRules.filter(r => {
+                              if (r.taskId && String(r.taskId) === String(qId)) return true;
+                              if (!r.taskId && (!r.taskIds || r.taskIds.includes(String(qId)) || r.taskIds.length === 0)) return true;
+                              return false;
+                            });
+                            if (relevant.length === 0) return null;
                             return (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
-                                {allRules.map(r => (
-                                  <button key={r.id} onClick={() => toggleRuleInPanel(r, !r.enabled)} disabled={aiRunning}
-                                    style={{ padding: "3px 9px", borderRadius: "20px", border: `1.5px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 600, cursor: aiRunning ? "not-allowed" : "pointer", transition: "all 0.15s" }}>
+                                {relevant.map(r => (
+                                  <button key={r.id} onClick={() => toggleRuleInPanel(r, !r.enabled)}
+                                    style={{ padding: "3px 9px", borderRadius: "20px", border: `1.5px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>
                                     {r.enabled ? "✓" : "○"} {r.label}
                                   </button>
                                 ))}
@@ -1649,6 +1646,10 @@ Gib das Ergebnis NUR als JSON zurück:
                     <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
                       <button onClick={saveOverrides} disabled={saving} style={{ flex: 1, padding: "10px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: saving ? "not-allowed" : "pointer" }}>
                         {saving ? "Wird gespeichert..." : "✓ Korrekturen speichern"}
+                      </button>
+                      <button onClick={() => saveAllRules(detectedRules, customRules)} disabled={aiRunning || savingRules}
+                        style={{ padding: "10px 14px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: (aiRunning || savingRules) ? "not-allowed" : "pointer" }}>
+                        {aiRunning ? "⏳" : "🔄 Korrektur aktualisieren"}
                       </button>
                       <button onClick={() => setSelectedSubmission(null)} style={{ padding: "10px 16px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
                         Schließen
