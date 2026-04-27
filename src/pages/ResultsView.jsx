@@ -341,8 +341,6 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [savingRules, setSavingRules] = useState(false);
   const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
   const [analyzingRules, setAnalyzingRules] = useState(false);
-
-  const [analyzingRules, setAnalyzingRules] = useState(false); // vor erstem KI-Lauf
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
@@ -485,9 +483,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         return `Frage: ${q.text || "(Fragetext)"}
 Musterlösung: ${q.solution || "(keine)"}
 Schülerantworten: ${answers.slice(0, 8).map((a, i) => `${i+1}. "${a}"`).join(", ")}`;
-      }).join("
-
-");
+      }).join("\n\n");
 
       const prompt = `Du analysierst Schülerantworten eines Tests und schlägst konkrete Bewertungsregeln vor, die der Lehrer ein- oder ausschalten kann.
 
@@ -633,9 +629,7 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
 Musterlösung: ${q.solution || "(keine)"}
 Schülerantworten: ${answers.map(a => `"${a}"`).join(", ")}
 Korrekturen: ${corrections.map(c => `${c.points}Pkt: ${(c.comment||"").replace("🤖 ","")}`).join(" | ")}`;
-      }).join("
-
-");
+      }).join("\n\n");
 
       const prompt = `Du bist ein erfahrener Schullehrer und analysierst die Antworten einer Klasse auf einen Test.
 
@@ -756,7 +750,7 @@ ${(() => {
     ? "GRUNDREGEL: Groß-/Kleinschreibung ist irrelevant — \"hund\" = \"Hund\" = \"HUND\"\n"
     : "GRUNDREGEL: Groß-/Kleinschreibung MUSS korrekt sein — \"hund\" ist FALSCH wenn die Musterlösung \"Hund\" lautet\n";
 })()}
-
+${(q.partialPoints && q.partialPoints.length > 0)
   ? `Bewertungskriterien (verbindlich — halte dich EXAKT daran):
 ${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}`
   : `- Vergib anteilige Punkte wenn die Antwort teilweise korrekt ist\n- Schritte von 0.5 Punkten möglich`}
@@ -1013,9 +1007,7 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
 Musterlösung: ${q.solution || "(keine)"}
 Antwort: ${ans}
 Aktuelle Bewertung: ${corr?.points ?? "–"}/${q.points} Pkt. — ${corr?.comment || ""}`;
-      }).join("
-
-");
+      }).join("\n\n");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest deine Korrekturen für einen Schüler.
 
@@ -1093,11 +1085,9 @@ Die IDs der Fragen sind: ${openQs.map(q => q.id).join(", ")}`;
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
-");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
-");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
