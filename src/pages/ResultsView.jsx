@@ -341,8 +341,6 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [savingRules, setSavingRules] = useState(false);
   const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
   const [analyzingRules, setAnalyzingRules] = useState(false);
-
-  
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
@@ -604,8 +602,6 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
   };
 
 
-  // (analyzeAndSuggestRules ist oben bereits definiert)
-
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
     const pending = pendingOverride || submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
@@ -676,11 +672,14 @@ Musterlösung: ${isContentOnly ? normalizedSolution || "(keine Musterlösung)" :
 Maximale Punktzahl: ${q.points}
 Bewertungsregeln: ${gradingModeText}
 ${toggleRulesText}${customRulesText}
-GRUNDREGEL — IMMER GÜLTIG (unabhängig vom Bewertungsmodus):
-- Vergleiche Antworten OHNE Rücksicht auf Groß-/Kleinschreibung: "hund" = "Hund" = "HUND"
-- Wenn der inhaltliche Kern stimmt, zählt die Antwort als korrekt
-
-${(q.partialPoints || []).length > 0
+${(() => {
+  const capitalizeRule = (aData?.detected_rules || []).find(r => r.label && r.label.toLowerCase().includes("groß") && r.label.toLowerCase().includes("klein"));
+  const capitalizeIgnored = capitalizeRule ? capitalizeRule.enabled : isContentOnly;
+  return capitalizeIgnored
+    ? "GRUNDREGEL: Groß-/Kleinschreibung ist irrelevant — \"hund\" = \"Hund\" = \"HUND\"\n"
+    : "GRUNDREGEL: Groß-/Kleinschreibung MUSS korrekt sein — \"hund\" ist FALSCH wenn die Musterlösung \"Hund\" lautet\n";
+})()}
+${(q.partialPoints && q.partialPoints.length > 0)
   ? `Bewertungskriterien (verbindlich — halte dich EXAKT daran):
 ${q.partialPoints.map(p => `- ${p.points} Punkt${Number(p.points) !== 1 ? "e" : ""} für: ${p.description}`).join("\n")}`
   : `- Vergib anteilige Punkte wenn die Antwort teilweise korrekt ist\n- Schritte von 0.5 Punkten möglich`}
