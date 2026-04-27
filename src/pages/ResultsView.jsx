@@ -733,7 +733,6 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
           <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>
             {submissions.length} Abgaben{avg ? ` · Ø ${avg}%` : ""}
             <button onClick={fetchSubmissions} style={{ marginLeft: "12px", background: "none", border: "none", color: "#2563a8", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>🔄 Aktualisieren</button>
-            <button onClick={() => setRegelwerkModal(true)} style={{ marginLeft: "12px", padding: "4px 12px", background: "#f5f3ff", color: "#6d28d9", border: "1px solid #e9d5ff", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>📋 Regelwerk</button>
             {submissions.some(s => !s.released) && (
               <button onClick={releaseAll} style={{ marginLeft: "12px", padding: "4px 12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>✓ Alle freigeben</button>
             )}
@@ -853,23 +852,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                       </div>
                     </div>
 
-                    {/* Regelwerk-Zusammenfassung */}
-                    {detectedRules.length > 0 && (
-                      <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 14px", marginBottom: "12px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                          <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8" }}>KORREKTURREGELN</div>
-                          <button onClick={() => setRegelwerkModal(true)} style={{ fontSize: "10px", color: "#6d28d9", background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>📋 Bearbeiten</button>
-                        </div>
-                        {detectedRules.filter(r => !r.taskId).map(r => (
-                          <div key={r.id} style={{ fontSize: "11px", marginBottom: "2px", display: "flex", alignItems: "center", gap: "5px" }}>
-                            <span style={{ fontWeight: 700, color: r.enabled ? "#16a34a" : "#dc2626" }}>{r.enabled ? "✓" : "✗"}</span>
-                            <span style={{ color: r.enabled ? "#374151" : "#94a3b8", textDecoration: r.enabled ? "none" : "line-through" }}>{r.label}</span>
-                            <span style={{ fontSize: "10px", color: r.enabled ? "#16a34a" : "#dc2626" }}>{r.enabled ? "(ignoriert)" : "(bewertet)"}</span>
-                          </div>
-                        ))}
-                        {customRules && <div style={{ fontSize: "11px", color: "#6d28d9", marginTop: "4px", borderTop: "1px solid #e2e8f0", paddingTop: "4px" }}>+ {customRules}</div>}
-                      </div>
-                    )}
+
 
                     {/* Meta-Infos */}
                     <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px 16px", marginBottom: "18px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", fontSize: "13px" }}>
