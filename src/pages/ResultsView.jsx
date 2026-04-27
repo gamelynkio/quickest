@@ -287,7 +287,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
   const [rubricFeedback, setRubricFeedback] = useState(""); // Lehrer-Kommentar für KI
   const [refiningRubric, setRefiningRubric] = useState(false);
-  const [questionFeedback, setQuestionFeedback] = useState({}); // { qId: feedbackText }
+  const [questionFeedback, setQuestionFeedback] = useState({});
+  const [quickPrompt, setQuickPrompt] = useState(""); // Schnell-Prompt im Detail-Panel // { qId: feedbackText }
   const [refiningQuestion, setRefiningQuestion] = useState(null); // qId being refined
   const [suggestingRubric, setSuggestingRubric] = useState(false);
   const [savingRubric, setSavingRubric] = useState(false);
@@ -491,8 +492,11 @@ ${calibrationRefs ? `Referenz-Bewertungen (bereits kalibriert):\n${calibrationRe
 Schülerantworten:
 ${answers.map((a, i) => `Schüler ${i + 1} (${a.username}): "${a.answer}"`).join("\n")}
 
-Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in derselben Reihenfolge:
-[{"username": "<name>", "points": <Zahl, max ${q.points}>, "comment": "<kurze Begründung, max 1 Satz>"}]`;
+Gib deine Bewertung als JSON zurück mit zwei Feldern:
+{
+  "criteria": "<1-2 Sätze: welche inhaltlichen Kriterien du für diese Frage angewendet hast>",
+  "results": [{"username": "<name>", "points": <Zahl, max ${q.points}>, "comment": "<kurze Begründung, max 1 Satz>"}]
+}`;
 
         try {
           const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
@@ -503,13 +507,16 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
           const data = await response.json();
           const text = data.content?.map(b => b.text || "").join("") || "";
           const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-          parsed.forEach((r, i) => {
+          const results = parsed.results || parsed;
+          const usedCriteria = parsed.criteria || null;
+          (Array.isArray(results) ? results : []).forEach((r, i) => {
             const sub = answers[i];
             if (!sub) return;
             if (!batchResults[sub.id]) batchResults[sub.id] = {};
             batchResults[sub.id][q.id] = {
               points: Math.min(Math.max(0, Number(r.points) || 0), Number(q.points)),
               comment: `🤖 ${r.comment}`,
+              usedCriteria,
               aiReviewed: true, needsReview: false,
               correct: Number(r.points) >= Number(q.points),
               maxPoints: Number(q.points),
@@ -653,6 +660,99 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
 
 
 
+
+  const applyQuickPrompt = async (promptText) => {
+    if (!promptText.trim() || !selectedSubmission) return;
+    setRefiningQuestion("all");
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const aData = assignmentData;
+
+      const flattenQs = (qs) => {
+        const result = [];
+        for (const q of (qs || [])) {
+          if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) result.push(tq); }
+          else if (q.type === "task") { for (const tq of (q.questions||[])) result.push(tq); }
+          else result.push(q);
+        }
+        return result;
+      };
+      const openQs = flattenQs(aData?.question_data || []).filter(q => q.type === "open" || q.type === "qa");
+      const corrections = selectedSubmission.ai_corrections || {};
+      const gradingModeText = {
+        content: "Groß-/Kleinschreibung und Rechtschreibung vollständig ignorieren.",
+        standard: "Inhalt hauptsächlich bewerten, grobe Fehler minimal abziehen.",
+        strict: "Inhalt und Sprachform streng bewerten.",
+      }[aData?.grading_mode || "standard"] || "";
+
+      // Alle offenen Fragen dieser Abgabe neu bewerten mit dem Prompt
+      const answersBlock = openQs.map(q => {
+        const ans = selectedSubmission.answers?.[q.id] || "(keine Antwort)";
+        const corr = corrections[q.id];
+        return `Frage: ${q.text || "(Fragetext)"}
+Musterlösung: ${q.solution || "(keine)"}
+Antwort: ${ans}
+Aktuelle Bewertung: ${corr?.points ?? "–"}/${q.points} Pkt. — ${corr?.comment || ""}`;
+      }).join("
+
+");
+
+      const prompt = `Du bist ein Schullehrer und überarbeitest deine Korrekturen für einen Schüler.
+
+${answersBlock}
+
+Bewertungsregeln: ${gradingModeText}
+${aData?.custom_rules ? `Zusatzregeln: ${aData.custom_rules}` : ""}
+
+Anweisung des Lehrers: ${promptText}
+
+Bewerte alle Fragen neu und gib das Ergebnis als JSON-Array zurück:
+[{"qId": "<id>", "points": <Zahl>, "comment": "<Begründung>"}]
+
+Die IDs der Fragen sind: ${openQs.map(q => q.id).join(", ")}`;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+
+      const newCorrections = { ...corrections };
+      let newScore = 0;
+      for (const r of parsed) {
+        const q = openQs.find(q => String(q.id) === String(r.qId));
+        if (!q) continue;
+        newCorrections[r.qId] = {
+          ...(corrections[r.qId] || {}),
+          points: Math.min(Math.max(0, Number(r.points)), Number(q.points)),
+          comment: `🤖 ${r.comment}`,
+          aiReviewed: true, needsReview: false,
+          correct: Number(r.points) >= Number(q.points),
+          maxPoints: Number(q.points),
+        };
+      }
+      for (const [qId, c] of Object.entries(newCorrections)) {
+        const ov = (selectedSubmission.manual_overrides || {})[qId];
+        newScore += ov !== undefined ? Number(ov) : (c.points ?? 0);
+      }
+      const percent = (newScore / (selectedSubmission.total_points || 1)) * 100;
+      const gs = [...(aData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
+      let newGrade = "6";
+      for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
+
+      await supabase.from("submissions").update({ ai_corrections: newCorrections, score: newScore, grade: newGrade, reviewed: true }).eq("id", selectedSubmission.id);
+      const updated = { ...selectedSubmission, ai_corrections: newCorrections, score: newScore, grade: newGrade };
+      setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? updated : s));
+      setSelectedSubmission(updated);
+      setQuickPrompt("");
+    } catch (e) { console.error("Quick prompt failed:", e); }
+    setRefiningQuestion(null);
+  };
+
   const refineQuestionWithFeedback = async (qId, feedbackText) => {
     setRefiningQuestion(qId);
     try {
@@ -674,9 +774,11 @@ Gib deine Bewertung als JSON-Array zurück — ein Eintrag pro Schüler, in ders
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
@@ -1058,6 +1160,20 @@ Gib das Ergebnis NUR als JSON zurück:
                     <p style={{ margin: "0 0 10px", color: "#64748b", fontSize: "13px" }}>
                       Abgegeben: {new Date(selectedSubmission.submitted_at).toLocaleString("de-DE")}
                     </p>
+                    {/* Schnell-Prompt für alle Aufgaben */}
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 12px", marginBottom: "14px" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 600, color: "#94a3b8", marginBottom: "6px" }}>KORREKTUR VERFEINERN (alle Aufgaben)</div>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <input value={quickPrompt} onChange={e => setQuickPrompt(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter" && quickPrompt.trim()) applyQuickPrompt(quickPrompt); }}
+                          placeholder='z.B. "Sei kulanter bei Vokabeln" oder "Grundform zählt auch"'
+                          style={{ flex: 1, padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", fontFamily: "inherit" }} />
+                        <button onClick={() => applyQuickPrompt(quickPrompt)} disabled={!quickPrompt.trim() || refiningQuestion === "all"}
+                          style={{ padding: "6px 10px", background: quickPrompt.trim() ? "#2563a8" : "#e2e8f0", color: quickPrompt.trim() ? "#fff" : "#94a3b8", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: quickPrompt.trim() ? "pointer" : "not-allowed", flexShrink: 0 }}>
+                          {refiningQuestion === "all" ? "⏳" : "↩ Anwenden"}
+                        </button>
+                      </div>
+                    </div>
 
                   {/* Bewertungsmodus-Anzeige oben im Panel */}
                   {(() => {
@@ -1149,8 +1265,13 @@ Gib das Ergebnis NUR als JSON zurück:
                             })()}
                           </div>
                           {correction.comment && (
-                            <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
+                            <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "6px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
                               {correction.comment}
+                            </div>
+                          )}
+                          {correction.usedCriteria && (
+                            <div style={{ background: "#f8fafc", borderRadius: "6px", padding: "6px 10px", marginBottom: "8px", fontSize: "11px", color: "#64748b", border: "1px solid #e2e8f0" }}>
+                              <span style={{ fontWeight: 600, color: "#94a3b8" }}>📐 Angewendete Kriterien: </span>{correction.usedCriteria}
                             </div>
                           )}
                           {correction.solution && (
