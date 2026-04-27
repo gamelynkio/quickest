@@ -390,11 +390,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
     if (pending.length === 0) return;
-    const alreadyReviewed = submissions.some(s => s.reviewed);
-    if (alreadyReviewed || rulesConfirmed) {
-      startBatchCorrection(pending);
-    }
-  }, [assignmentData, submissions.length, rulesConfirmed]);
+    // Immer starten — beim ersten Mal werden Regeln nach der Korrektur analysiert
+    startBatchCorrection(pending);
+  }, [assignmentData, submissions.length]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -838,7 +836,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                         <button onClick={() => setSelectedSubmission(null)} style={{ background: "#f1f5f9", border: "none", borderRadius: "6px", padding: "4px 10px", cursor: "pointer", fontSize: "16px", color: "#64748b" }}>✕</button>
                       </div>
                     </div>
-                    <p style={{ margin: "0 0 10px", color: "#64748b", fontSize: "13px" }}>Abgegeben: {new Date(selectedSubmission.submitted_at).toLocaleString("de-DE")}</p>
+                    <p style={{ margin: "0 0 10px", color: "#64748b", fontSize: "13px" }}>Abgegeben: {selectedSubmission.submitted_at ? new Date(selectedSubmission.submitted_at).toLocaleString("de-DE") : "–"}</p>
 
                     {/* Schnell-Prompt */}
                     <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 12px", marginBottom: "12px" }}>
@@ -919,7 +917,12 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               {isAiReviewed && <span style={{ fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>🤖 KI</span>}
                             </div>
                             <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
-                              <em style={{ color: "#94a3b8" }}>Antwort:</em> {(() => { const ans = selectedSubmission.answers?.[qId]; if (!ans) return "–"; if (Array.isArray(ans)) return ans.join(", "); return ans; })()}
+                              <em style={{ color: "#94a3b8" }}>Antwort:</em> {(() => {
+                                const ans = selectedSubmission.answers?.[qId] ?? selectedSubmission.answers?.[Number(qId)];
+                                if (ans === undefined || ans === null || ans === "") return "–";
+                                if (Array.isArray(ans)) return ans.join(", ");
+                                return String(ans);
+                              })()}
                             </div>
                             {correction.comment && (
                               <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "6px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
