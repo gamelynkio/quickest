@@ -342,14 +342,15 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
   const [analyzingRules, setAnalyzingRules] = useState(false);
 
-  
+  const [analyzingRules, setAnalyzingRules] = useState(false); // vor erstem KI-Lauf
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
   const [rubricFeedback, setRubricFeedback] = useState(""); // Lehrer-Kommentar für KI
   const [refiningRubric, setRefiningRubric] = useState(false);
   const [questionFeedback, setQuestionFeedback] = useState({});
-  const [quickPrompt, setQuickPrompt] = useState(""); // Schnell-Prompt im Detail-Panel // { qId: feedbackText }
+  const [quickPrompt, setQuickPrompt] = useState("");
+  const [rulePropagateModal, setRulePropagateModal] = useState(null); // {rule, newEnabled, affectedCount} // Schnell-Prompt im Detail-Panel // { qId: feedbackText }
   const [refiningQuestion, setRefiningQuestion] = useState(null); // qId being refined
   const [suggestingRubric, setSuggestingRubric] = useState(false);
   const [savingRubric, setSavingRubric] = useState(false);
@@ -484,7 +485,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         return `Frage: ${q.text || "(Fragetext)"}
 Musterlösung: ${q.solution || "(keine)"}
 Schülerantworten: ${answers.slice(0, 8).map((a, i) => `${i+1}. "${a}"`).join(", ")}`;
-      }).join("\n\n");
+      }).join("
+
+");
 
       const prompt = `Du analysierst Schülerantworten eines Tests und schlägst konkrete Bewertungsregeln vor, die der Lehrer ein- oder ausschalten kann.
 
@@ -602,6 +605,78 @@ Gib das Ergebnis NUR als JSON-Array zurück:
   };
 
 
+  // Nach Batch-Korrektur: KI analysiert Antworten und schlägt Toggle-Regeln vor
+  const analyzeAndSuggestRules = async (submissionsData, aData) => {
+    setAnalyzingRules(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const flattenQs = (qs) => {
+        const result = [];
+        for (const q of (qs || [])) {
+          if (q.type === "section") { for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) result.push(tq); }
+          else if (q.type === "task") { for (const tq of (q.questions||[])) result.push(tq); }
+          else result.push(q);
+        }
+        return result;
+      };
+      const openQs = flattenQs(aData?.question_data || []).filter(q => q.type === "open" || q.type === "qa");
+      if (openQs.length === 0) return;
+
+      // Alle Antworten zusammenfassen
+      const answerSummary = openQs.map(q => {
+        const answers = submissionsData.filter(s => s.answers?.[q.id]?.trim()).map(s => s.answers[q.id]);
+        const corrections = submissionsData.map(s => s.ai_corrections?.[q.id]).filter(Boolean);
+        return `Frage: ${q.text || "(Fragetext)"}
+Musterlösung: ${q.solution || "(keine)"}
+Schülerantworten: ${answers.map(a => `"${a}"`).join(", ")}
+Korrekturen: ${corrections.map(c => `${c.points}Pkt: ${(c.comment||"").replace("🤖 ","")}`).join(" | ")}`;
+      }).join("
+
+");
+
+      const prompt = `Du bist ein erfahrener Schullehrer und analysierst die Antworten einer Klasse auf einen Test.
+
+${answerSummary}
+
+Analysiere die Antworten und erkenne welche Bewertungsregeln sinnvoll wären. Schlage 3-6 konkrete Toggle-Regeln vor die für DIESEN Test relevant sind.
+
+Jede Regel hat:
+- einen kurzen Label (z.B. "Groß-/Kleinschreibung ignorieren")
+- eine kurze Erklärung (z.B. "hund = Hund = HUND")
+- einen Vorschlag ob sie ein- oder ausgeschaltet sein sollte (true/false)
+- wenn "enabled: true": welche Anweisung an die KI das bedeutet
+
+Gib das Ergebnis NUR als JSON zurück:
+[
+  {
+    "id": "capitalization",
+    "label": "Groß-/Kleinschreibung ignorieren",
+    "description": "hund = Hund — Substantive müssen nicht großgeschrieben werden",
+    "enabled": true,
+    "promptIfEnabled": "Groß-/Kleinschreibung vollständig ignorieren",
+    "promptIfDisabled": "Groß-/Kleinschreibung bewerten — falsche Schreibung führt zu Punktabzug"
+  }
+]`;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const rules = JSON.parse(text.replace(/```json|```/g, "").trim());
+
+      if (Array.isArray(rules) && rules.length > 0) {
+        setDetectedRules(rules);
+        await supabase.from("assignments").update({ detected_rules: rules }).eq("id", assignment.id);
+        setAssignmentData(prev => ({ ...prev, detected_rules: rules }));
+      }
+    } catch (e) { console.error("Rule analysis failed:", e); }
+    setAnalyzingRules(false);
+  };
 
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
     const pending = pendingOverride || submissions.filter(s =>
@@ -879,6 +954,32 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
 
 
 
+
+  // Toggle einer Regel direkt im Detail-Panel
+  const toggleRuleInPanel = async (rule, newEnabled) => {
+    // Prüfen ob Regel auch bei anderen Aufgaben vorkommt (allgemeine Regel oder mehrfach)
+    const sameLabel = detectedRules.filter(r => r.label === rule.label && r.id !== rule.id);
+    if (sameLabel.length > 0) {
+      // Fragen ob auch für andere Aufgaben übernehmen
+      setRulePropagateModal({ rule, newEnabled, sameLabel });
+      return;
+    }
+    // Nur diese Regel toggeln
+    const updated = detectedRules.map(r => r.id === rule.id ? { ...r, enabled: newEnabled } : r);
+    setDetectedRules(updated);
+    await saveAllRules(updated, customRules);
+  };
+
+  const applyRulePropagation = async (propagate) => {
+    if (!rulePropagateModal) return;
+    const { rule, newEnabled, sameLabel } = rulePropagateModal;
+    const idsToUpdate = new Set([rule.id, ...(propagate ? sameLabel.map(r => r.id) : [])]);
+    const updated = detectedRules.map(r => idsToUpdate.has(r.id) ? { ...r, enabled: newEnabled } : r);
+    setDetectedRules(updated);
+    setRulePropagateModal(null);
+    await saveAllRules(updated, customRules);
+  };
+
   const applyQuickPrompt = async (promptText) => {
     if (!promptText.trim() || !selectedSubmission) return;
     setRefiningQuestion("all");
@@ -912,7 +1013,9 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
 Musterlösung: ${q.solution || "(keine)"}
 Antwort: ${ans}
 Aktuelle Bewertung: ${corr?.points ?? "–"}/${q.points} Pkt. — ${corr?.comment || ""}`;
-      }).join("\n\n");
+      }).join("
+
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest deine Korrekturen für einen Schüler.
 
@@ -990,9 +1093,11 @@ Die IDs der Fragen sind: ${openQs.map(q => q.id).join(", ")}`;
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
@@ -1505,14 +1610,24 @@ Gib das Ergebnis NUR als JSON zurück:
                               <span style={{ fontWeight: 600, color: "#94a3b8" }}>📐 </span>{correction.usedCriteria}
                             </div>
                           )}
-                          {/* Aufgabenspezifische Toggle-Regeln */}
-                          {detectedRules.filter(r => r.taskId && String(r.taskId) === String(qId)).length > 0 && (
-                            <div style={{ background: "#f8fafc", borderRadius: "6px", padding: "6px 10px", marginBottom: "6px", fontSize: "11px", border: "1px solid #e2e8f0" }}>
-                              {detectedRules.filter(r => r.taskId && String(r.taskId) === String(qId)).map(r => (
-                                <div key={r.id} style={{ color: r.enabled ? "#16a34a" : "#94a3b8" }}>{r.enabled ? "✓" : "✗"} {r.label}</div>
-                              ))}
-                            </div>
-                          )}
+                          {/* Klickbare Korrekturregeln pro Aufgabe */}
+                          {(() => {
+                            // Allgemeine Regeln + aufgabenspezifische für diese Frage
+                            const qSpecific = detectedRules.filter(r => r.taskId && String(r.taskId) === String(qId));
+                            const general = detectedRules.filter(r => !r.taskId);
+                            const allRules = [...general, ...qSpecific];
+                            if (allRules.length === 0) return null;
+                            return (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
+                                {allRules.map(r => (
+                                  <button key={r.id} onClick={() => toggleRuleInPanel(r, !r.enabled)} disabled={aiRunning}
+                                    style={{ padding: "3px 9px", borderRadius: "20px", border: `1.5px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 600, cursor: aiRunning ? "not-allowed" : "pointer", transition: "all 0.15s" }}>
+                                    {r.enabled ? "✓" : "○"} {r.label}
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           {correction.solution && (
                             <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
                               <strong>📝 Musterlösung:</strong> {correction.solution}
@@ -1625,6 +1740,38 @@ Gib das Ergebnis NUR als JSON zurück:
         )}
       </div>
 
+
+      {/* REGEL-PROPAGATION MODAL */}
+      {rulePropagateModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1002, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "16px", padding: "28px", maxWidth: "380px", width: "100%" }}>
+            <div style={{ fontSize: "20px", marginBottom: "10px" }}>🔄</div>
+            <h4 style={{ margin: "0 0 8px", fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>
+              Regel auch für andere Aufgaben?
+            </h4>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "6px", lineHeight: 1.5 }}>
+              <strong>„{rulePropagateModal.rule.label}"</strong> wurde {rulePropagateModal.newEnabled ? "aktiviert" : "deaktiviert"}.
+            </p>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px", lineHeight: 1.5 }}>
+              Diese Regel kommt auch bei {rulePropagateModal.sameLabel.length} anderen Aufgabe{rulePropagateModal.sameLabel.length !== 1 ? "n" : ""} vor. Soll die Änderung auch dort übernommen werden?
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <button onClick={() => applyRulePropagation(true)}
+                style={{ padding: "11px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                Ja, für alle Aufgaben übernehmen
+              </button>
+              <button onClick={() => applyRulePropagation(false)}
+                style={{ padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
+                Nein, nur für diese Aufgabe
+              </button>
+              <button onClick={() => setRulePropagateModal(null)}
+                style={{ padding: "8px", background: "none", color: "#94a3b8", border: "none", fontSize: "12px", cursor: "pointer" }}>
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* REGELWERK MODAL */}
       {regelwerkModal && assignmentData && (
