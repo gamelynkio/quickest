@@ -510,7 +510,7 @@ Gib das Ergebnis NUR als JSON-Array zurück:
   ...
 ]
 Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen diese Regel relevant ist — nicht alle Fragen pauschal, nur die wo es tatsächlich einen Unterschied macht.
-"enabled" ist dein Vorschlag. Verwende echte Fragen-IDs (${openQs.map(q => q.id).join(", ")}).`;
+"enabled" ist IMMER true — schlage nur Regeln vor die du tatsächlich erkennst. Der Lehrer deaktiviert was er nicht will. Verwende echte Fragen-IDs (${openQs.map(q => q.id).join(", ")}).`;
 
       const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
@@ -603,6 +603,9 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
     }
   };
 
+
+  // (analyzeAndSuggestRules ist oben bereits definiert)
+
   const runAutoBatchCorrection = async (pendingOverride = null, allSubsSnapshot = null, aDataOverride = null) => {
     const pending = pendingOverride || submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
@@ -656,15 +659,16 @@ Regeln mit scope "all" bekommen in "taskIds" die IDs ALLER Fragen bei denen dies
           .map(s => `- "${s.answers[q.id]}" → ${s.ai_corrections[q.id].points} Pkt. (${(s.ai_corrections[q.id].comment || "").replace("🤖 ", "")})`)
           .join("\n");
 
-        const toggleRules = (aData?.detected_rules || [])
-          .map(r => r.enabled ? r.promptIfEnabled : r.promptIfDisabled)
-          .filter(Boolean)
-          .join("\n- ");
-        const toggleRulesText = toggleRules ? `\nVerbindliche Bewertungsregeln (vom Lehrer festgelegt):\n- ${toggleRules}\n` : "";
-        const customRulesText = aData?.custom_rules ? `
-Zusätzliche Regeln der Lehrkraft (verbindlich):
-${aData.custom_rules}
-` : "";
+        const activeRules = (aData?.detected_rules || [])
+          .filter(r => r.enabled)
+          .map(r => `- ${r.label}${r.description ? `: ${r.description}` : ""}`)
+          .join("\n");
+        const disabledRules = (aData?.detected_rules || [])
+          .filter(r => !r.enabled)
+          .map(r => `- NICHT anwenden: ${r.label} — führt zu Punktabzug`)
+          .join("\n");
+        const toggleRulesText = (activeRules || disabledRules) ? `\nVom Lehrer festgelegte Regeln (VERBINDLICH — keine Ausnahmen):\n${activeRules}${disabledRules ? "\n" + disabledRules : ""}\n` : "";
+        const customRulesText = aData?.custom_rules ? `\nZusätzliche Regeln der Lehrkraft (verbindlich):\n${aData.custom_rules}\n` : "";
         const prompt = `Du bist ein Schullehrer und bewertest ALLE Schülerantworten auf dieselbe Frage GLEICHZEITIG und EINHEITLICH.
 
 Frage: ${q.text || "(Fragetext)"}
