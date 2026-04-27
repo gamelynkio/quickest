@@ -494,7 +494,7 @@ ${answers.map((a, i) => `Schüler ${i + 1} (${a.username}): "${a.answer}"`).join
 
 Gib deine Bewertung als JSON zurück mit zwei Feldern:
 {
-  "criteria": "<1-2 Sätze: welche inhaltlichen Kriterien du für diese Frage angewendet hast>",
+  "criteria": "<Beschreibe in 1-2 Sätzen welche inhaltlichen Maßstäbe du angewendet hast, z.B. welche Antworten akzeptiert werden>",
   "results": [{"username": "<name>", "points": <Zahl, max ${q.points}>, "comment": "<kurze Begründung, max 1 Satz>"}]
 }`;
 
@@ -506,9 +506,21 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
           });
           const data = await response.json();
           const text = data.content?.map(b => b.text || "").join("") || "";
-          const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-          const results = parsed.results || parsed;
-          const usedCriteria = parsed.criteria || null;
+          let parsed, results, usedCriteria;
+          try {
+            parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+            // Handle both {criteria, results} and plain array formats
+            if (Array.isArray(parsed)) {
+              results = parsed;
+              usedCriteria = null;
+            } else {
+              results = parsed.results || [];
+              usedCriteria = parsed.criteria || null;
+            }
+          } catch (e) {
+            console.error("Parse error:", e, text.slice(0, 200));
+            continue;
+          }
           (Array.isArray(results) ? results : []).forEach((r, i) => {
             const sub = answers[i];
             if (!sub) return;
@@ -529,10 +541,16 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
       for (const s of pending) {
         const newCorrections = batchResults[s.id] || {};
         const merged = { ...(s.ai_corrections || {}), ...newCorrections };
-        // Fehlende offene Fragen als 0 markieren
+        // Fehlende offene Fragen als 0 markieren — nur wenn wirklich keine Antwort
         for (const q of openQs) {
-          if (!merged[q.id] || (merged[q.id].needsReview && !merged[q.id].aiReviewed)) {
-            merged[q.id] = { points: 0, correct: false, comment: "Keine Antwort gegeben.", aiReviewed: true, needsReview: false, maxPoints: Number(q.points) };
+          const qIdStr = String(q.id);
+          const hasAnswer = pending.find(p => p.id === s.id)?.answers?.[q.id]?.trim() ||
+                           pending.find(p => p.id === s.id)?.answers?.[qIdStr]?.trim();
+          const alreadyMerged = merged[q.id] || merged[qIdStr];
+          if (!alreadyMerged || (alreadyMerged.needsReview && !alreadyMerged.aiReviewed)) {
+            if (!hasAnswer) {
+              merged[qIdStr] = { points: 0, correct: false, comment: "Keine Antwort gegeben.", aiReviewed: true, needsReview: false, maxPoints: Number(q.points) };
+            }
           }
         }
         let newScore = 0;
