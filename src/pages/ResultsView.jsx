@@ -166,12 +166,17 @@ Gib das Ergebnis NUR als JSON zurück:
 };
 
 
-function RegelwerkModal({ assignmentData, currentGradingMode, customRules, detectedRules, setDetectedRules, saveDetectedRules, analyzingRules, applyNewGradingMode, saveCustomRules, savingRules, onClose }) {
-  const [localRules, setLocalRules] = useState(customRules);
+function RegelwerkModal({ assignmentData, currentGradingMode, customRules, detectedRules, setDetectedRules, saveAllRules, analyzingRules, applyNewGradingMode, savingRules, onClose }) {
+  const [localRules, setLocalRules] = useState(customRules || "");
+  const [localDetected, setLocalDetected] = useState(detectedRules || []);
+
+  // Sync wenn detectedRules von außen aktualisiert werden
+  useState(() => { setLocalDetected(detectedRules || []); }, [detectedRules]);
+
   const MODES = {
     content: { label: "🎯 Nur Inhalt", desc: "Groß-/Kleinschreibung, Rechtschreibung und Grammatik werden vollständig ignoriert. Nur der inhaltliche Kern zählt." },
-    standard: { label: "⚖️ Standard", desc: "Inhalt steht im Vordergrund. Nur grobe, sinnentstellende Fehler können minimal abgezogen werden." },
-    strict: { label: "🔍 Streng", desc: "Inhalt und Sprachform werden bewertet. Rechtschreibfehler, Grammatikfehler und falsche Zeichensetzung führen zu Punktabzügen." },
+    standard: { label: "⚖️ Standard", desc: "Inhalt steht im Vordergrund. Groß-/Kleinschreibung wird ignoriert. Nur grobe Fehler können minimal abgezogen werden." },
+    strict: { label: "🔍 Streng", desc: "Inhalt und Sprachform werden konsequent bewertet. Groß-/Kleinschreibung, Rechtschreibung und Grammatik werden einheitlich bei allen Antworten bewertet." },
   };
   const mode = currentGradingMode || assignmentData?.grading_mode || "standard";
   const m = MODES[mode] || MODES.standard;
@@ -187,6 +192,27 @@ function RegelwerkModal({ assignmentData, currentGradingMode, customRules, detec
   };
   const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "open" || q.type === "qa");
 
+  // Split rules: general (no taskId) vs task-specific (has taskId)
+  const generalRules = localDetected.filter(r => !r.taskId);
+  const taskRules = localDetected.filter(r => r.taskId);
+
+  const toggleRule = (id) => {
+    setLocalDetected(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+  };
+
+  const RuleToggle = ({ rule }) => (
+    <div onClick={() => toggleRule(rule.id)}
+      style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "10px 12px", background: rule.enabled ? "#f0fdf4" : "#f8fafc", border: `2px solid ${rule.enabled ? "#16a34a" : "#e2e8f0"}`, borderRadius: "8px", cursor: "pointer", userSelect: "none", transition: "all 0.15s" }}>
+      <div style={{ width: "20px", height: "20px", borderRadius: "5px", background: rule.enabled ? "#16a34a" : "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "1px" }}>
+        {rule.enabled && <span style={{ color: "#fff", fontSize: "12px", fontWeight: 800 }}>✓</span>}
+      </div>
+      <div>
+        <div style={{ fontSize: "13px", fontWeight: 600, color: rule.enabled ? "#16a34a" : "#374151" }}>{rule.label}</div>
+        {rule.description && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>{rule.description}</div>}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001, padding: "20px" }}>
       <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "560px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
@@ -195,6 +221,7 @@ function RegelwerkModal({ assignmentData, currentGradingMode, customRules, detec
           <button onClick={onClose} style={{ background: "#f1f5f9", border: "none", borderRadius: "6px", padding: "4px 10px", cursor: "pointer", fontSize: "16px", color: "#64748b" }}>✕</button>
         </div>
 
+        {/* Rechtschreibung */}
         <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "16px", border: "1px solid #e2e8f0" }}>
           <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>RECHTSCHREIBUNG & GRAMMATIK</div>
           <div style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>{m.label}</div>
@@ -202,116 +229,82 @@ function RegelwerkModal({ assignmentData, currentGradingMode, customRules, detec
           <div style={{ display: "flex", gap: "6px" }}>
             {["content", "standard", "strict"].map(id => (
               <button key={id} onClick={() => applyNewGradingMode(id)}
-                style={{ flex: 1, padding: "6px", background: id === mode ? "#eff6ff" : "#fff", border: `2px solid ${id === mode ? "#bfdbfe" : "#e2e8f0"}`, color: id === mode ? "#2563a8" : "#94a3b8", borderRadius: "6px", fontSize: "11px", fontWeight: id === mode ? 700 : 400, cursor: "pointer" }}>
+                style={{ flex: 1, padding: "7px 4px", background: id === mode ? "#eff6ff" : "#fff", border: `2px solid ${id === mode ? "#bfdbfe" : "#e2e8f0"}`, color: id === mode ? "#2563a8" : "#94a3b8", borderRadius: "6px", fontSize: "11px", fontWeight: id === mode ? 700 : 400, cursor: "pointer" }}>
                 {MODES[id].label}
               </button>
             ))}
           </div>
         </div>
 
-        {openQs.length > 0 && (
-          <div style={{ marginBottom: "16px" }}>
-            <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>INHALTLICHE BEWERTUNG PRO AUFGABE</div>
-            {openQs.map((q, i) => (
-              <div key={q.id} style={{ background: "#f8fafc", borderRadius: "10px", padding: "12px 14px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: "12px", fontWeight: 700, color: "#374151", marginBottom: "4px" }}>Aufgabe {i + 1}</div>
-                {q.solution && (
-                  <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "4px" }}>
-                    <span style={{ fontWeight: 600 }}>Musterlösung:</span> {q.solution}
-                  </div>
-                )}
-                {(q.partialPoints || []).length > 0 ? (
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#6d28d9", fontWeight: 600, marginBottom: "4px" }}>Bewertungskriterien:</div>
-                    {q.partialPoints.map((p, pi) => (
-                      <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", marginBottom: "2px" }}>
-                        <span style={{ background: "#eff6ff", borderRadius: "4px", padding: "1px 6px", fontWeight: 700, color: "#2563a8", flexShrink: 0 }}>{p.points} Pkt.</span>
-                        <span>{p.description}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic" }}>KI bewertet nach Musterlösung ohne feste Kriterien</div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* KI-erkannte Toggle-Regeln */}
+        {/* Allgemeine Regeln */}
         <div style={{ marginBottom: "16px" }}>
           <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>
-            KI-ERKANNTE BEWERTUNGSREGELN
-            {analyzingRules && <span style={{ marginLeft: "8px", color: "#6d28d9", fontWeight: 400 }}>🔍 wird analysiert...</span>}
+            ALLGEMEINE REGELN
+            {analyzingRules && <span style={{ marginLeft: "8px", color: "#6d28d9", fontWeight: 400, fontSize: "11px" }}>⏳ KI analysiert...</span>}
           </div>
-          {detectedRules.length === 0 ? (
-            <div style={{ fontSize: "13px", color: "#94a3b8", fontStyle: "italic", padding: "8px 0" }}>
-              {analyzingRules ? "KI analysiert die Antworten..." : "Noch keine Regeln erkannt — erscheinen nach der ersten Korrektur."}
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {detectedRules.map(rule => (
-                <div key={rule.id} onClick={() => toggleDetectedRule(rule.id)}
-                  style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "12px 14px", background: rule.enabled ? "#f0fdf4" : "#f8fafc", border: `1px solid ${rule.enabled ? "#bbf7d0" : "#e2e8f0"}`, borderRadius: "10px", cursor: "pointer", transition: "all 0.15s" }}>
-                  <div style={{ width: "20px", height: "20px", borderRadius: "6px", background: rule.enabled ? "#16a34a" : "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "1px" }}>
-                    {rule.enabled && <span style={{ color: "#fff", fontSize: "12px", fontWeight: 700 }}>✓</span>}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "13px", fontWeight: 700, color: rule.enabled ? "#16a34a" : "#374151", marginBottom: "2px" }}>{rule.label}</div>
-                    <div style={{ fontSize: "12px", color: "#64748b" }}>{rule.description}</div>
-                    <div style={{ fontSize: "11px", color: rule.enabled ? "#16a34a" : "#94a3b8", marginTop: "3px", fontStyle: "italic" }}>
-                      → {rule.enabled ? rule.promptIfEnabled : rule.promptIfDisabled}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={{ marginBottom: "20px" }}>
-          <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>
-            ERKANNTE REGELN
-            {analyzingRules && <span style={{ marginLeft: "8px", color: "#6d28d9", fontWeight: 400 }}>⏳ KI analysiert...</span>}
-          </div>
-          {detectedRules.length === 0 && !analyzingRules ? (
-            <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic", padding: "8px 0" }}>
-              Noch keine Regeln erkannt — erscheinen nach der ersten KI-Korrektur.
+          {generalRules.length === 0 ? (
+            <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
+              {analyzingRules ? "Wird analysiert..." : "Erscheinen nach der ersten KI-Korrektur."}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {detectedRules.map((rule, i) => (
-                <div key={rule.id || i} onClick={() => {
-                  const updated = detectedRules.map((r, ri) => ri === i ? { ...r, enabled: !r.enabled } : r);
-                  setDetectedRules(updated);
-                }} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", background: rule.enabled ? "#f0fdf4" : "#f8fafc", border: `1px solid ${rule.enabled ? "#bbf7d0" : "#e2e8f0"}`, borderRadius: "8px", cursor: "pointer", userSelect: "none" }}>
-                  <div style={{ width: "20px", height: "20px", borderRadius: "4px", background: rule.enabled ? "#16a34a" : "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "12px", color: "#fff" }}>
-                    {rule.enabled ? "✓" : ""}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a" }}>{rule.label}</div>
-                    <div style={{ fontSize: "11px", color: "#64748b" }}>{rule.description}</div>
-                  </div>
-                </div>
-              ))}
+              {generalRules.map(rule => <RuleToggle key={rule.id} rule={rule} />)}
             </div>
           )}
         </div>
 
+        {/* Aufgabenspezifische Regeln */}
+        {openQs.length > 0 && (
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>AUFGABENSPEZIFISCHE REGELN & MUSTERLÖSUNGEN</div>
+            {openQs.map((q, i) => {
+              const qRules = taskRules.filter(r => String(r.taskId) === String(q.id));
+              return (
+                <div key={q.id} style={{ background: "#f8fafc", borderRadius: "10px", padding: "12px 14px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "#374151", marginBottom: "6px" }}>Aufgabe {i + 1}</div>
+                  {q.solution && (
+                    <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "6px" }}>
+                      <span style={{ fontWeight: 600 }}>Musterlösung:</span> {q.solution}
+                    </div>
+                  )}
+                  {(q.partialPoints || []).length > 0 && (
+                    <div style={{ marginBottom: "6px" }}>
+                      {q.partialPoints.map((p, pi) => (
+                        <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", marginBottom: "2px" }}>
+                          <span style={{ background: "#eff6ff", borderRadius: "4px", padding: "1px 6px", fontWeight: 700, color: "#2563a8", flexShrink: 0 }}>{p.points} Pkt.</span>
+                          <span>{p.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {qRules.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginTop: "6px" }}>
+                      {qRules.map(rule => <RuleToggle key={rule.id} rule={rule} />)}
+                    </div>
+                  )}
+                  {qRules.length === 0 && !q.partialPoints?.length && !q.solution && (
+                    <div style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic" }}>KI bewertet nach Musterlösung ohne feste Kriterien</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Zusatzregeln */}
         <div style={{ marginBottom: "20px" }}>
-          <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>ZUSÄTZLICHE REGELN (für alle Aufgaben)</div>
-          <textarea value={localRules} onChange={e => setLocalRules(e.target.value)} rows={4}
-            placeholder={'z.B. "Antworten auf Englisch akzeptieren" oder "Abkürzungen sind erlaubt" oder "Vergangenheitsform ist auch korrekt"'}
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", marginBottom: "8px" }}>ZUSÄTZLICHE REGELN (Freitext für alle Aufgaben)</div>
+          <textarea value={localRules} onChange={e => setLocalRules(e.target.value)} rows={3}
+            placeholder={'z.B. "Antworten auf Englisch akzeptieren" oder "Vergangenheitsform zählt auch"'}
             style={{ width: "100%", padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }} />
-          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>Diese Regeln gelten bei der nächsten KI-Korrektur und alle Abgaben werden neu bewertet.</div>
         </div>
 
         <div style={{ background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 14px", marginBottom: "16px", fontSize: "12px", color: "#92400e" }}>
-          ⚠️ Regeländerungen werden beim Speichern auf alle Abgaben angewendet und lösen eine Neu-Korrektur aus.
+          ⚠️ Änderungen werden beim Speichern auf alle Abgaben angewendet und lösen eine Neu-Korrektur aus.
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
           <button onClick={onClose} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, cursor: "pointer" }}>Schließen</button>
-          <button onClick={async () => { await saveDetectedRules(detectedRules); await saveCustomRules(localRules); onClose(); }} disabled={savingRules}
+          <button onClick={() => saveAllRules(localDetected, localRules)} disabled={savingRules}
             style={{ flex: 1, padding: "11px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, cursor: savingRules ? "not-allowed" : "pointer" }}>
             {savingRules ? "⏳ Wird gespeichert..." : "✓ Speichern & neu korrigieren"}
           </button>
@@ -320,6 +313,7 @@ function RegelwerkModal({ assignmentData, currentGradingMode, customRules, detec
     </div>
   );
 }
+
 
 export default function ResultsView({ navigate, onLogout, currentUser, assignment }) {
   const [submissions, setSubmissions] = useState([]);
@@ -346,7 +340,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [customRules, setCustomRules] = useState(""); // Zusatzregeln des Lehrers
   const [savingRules, setSavingRules] = useState(false);
   const [detectedRules, setDetectedRules] = useState([]); // KI-erkannte Toggle-Regeln
-  const [analyzingRules, setAnalyzingRules] = useState(false); // vor erstem KI-Lauf
+  const [analyzingRules, setAnalyzingRules] = useState(false);
+
+  
   const [gradingModeConfirmed, setGradingModeConfirmed] = useState(false); // wurde Modal bestätigt?
   const [currentGradingMode, setCurrentGradingMode] = useState(null); // wird aus assignmentData geladen // nach KI-Korrektur: Freigabe-Frage
   const [rubricModal, setRubricModal] = useState(null); // { question, suggested }
@@ -406,6 +402,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setCurrentGradingMode(data?.grading_mode || "standard");
     setCustomRules(data?.custom_rules || "");
     setDetectedRules(data?.detected_rules || []);
+
   };
 
   const fetchSubmissions = async () => {
@@ -493,25 +490,25 @@ Schülerantworten: ${answers.slice(0, 8).map((a, i) => `${i+1}. "${a}"`).join(",
 
 ${questionSummaries}
 
-Analysiere die Antworten und schlage 3-6 konkrete Toggle-Regeln vor, die für DIESEN Test relevant sind.
-Berücksichtige was in den Antworten tatsächlich vorkommt.
+Analysiere die Antworten und schlage 3-8 konkrete Toggle-Regeln vor.
+Unterscheide zwischen allgemeinen Regeln (gelten für alle Aufgaben) und aufgabenspezifischen Regeln.
 
-Typische Regeln (nur vorschlagen wenn relevant):
+Allgemeine Regeln (scope: "all") — Beispiele:
 - Groß-/Kleinschreibung ignorieren
-- Artikel (der/die/das/ein/eine) ignorieren
-- Infinitivpartikel "to" erforderlich (bei Englisch)
-- Beide Geschlechtsformen erforderlich (z.B. -o/-a)
+- Artikel ignorieren
 - Synonyme akzeptieren
-- Abkürzungen akzeptieren
-- Reihenfolge der Wörter ignorieren
-- Teilantworten geben Teilpunkte
+
+Aufgabenspezifische Regeln (scope: "task") — Beispiele:
+- Infinitivpartikel "to" erforderlich (nur bei Englisch-Verben)
+- Beide Geschlechtsformen erforderlich (nur bei bestimmten Aufgaben)
 
 Gib das Ergebnis NUR als JSON-Array zurück:
 [
-  {"id": "capitalize", "label": "Groß-/Kleinschreibung ignorieren", "description": "hund = Hund = HUND", "enabled": true},
+  {"id": "capitalize", "label": "Groß-/Kleinschreibung ignorieren", "description": "hund = Hund = HUND", "enabled": true, "scope": "all"},
+  {"id": "to_required_q1", "label": "Infinitivpartikel \"to\" erforderlich", "description": "Nur \"to feed\" akzeptiert, nicht \"feed\" allein", "enabled": false, "scope": "task", "taskId": "<die ID der betroffenen Frage>"},
   ...
 ]
-"enabled" ist dein Vorschlag basierend auf den Antworten (true = empfehle an, false = empfehle aus).`;
+"enabled" ist dein Vorschlag (true = empfehle an). Verwende die echten Fragen-IDs für taskId.`;
 
       const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
@@ -542,6 +539,27 @@ Gib das Ergebnis NUR als JSON-Array zurück:
       reviewed: false,
     }));
     await runAutoBatchCorrection(toReset, submissions, { ...assignmentData, detected_rules: rules });
+  };
+
+
+  const saveAllRules = async (newDetected, newCustom) => {
+    setSavingRules(true);
+    setDetectedRules(newDetected);
+    setCustomRules(newCustom);
+    await supabase.from("assignments").update({
+      detected_rules: newDetected,
+      custom_rules: newCustom,
+    }).eq("id", assignment.id);
+    const updatedAData = { ...assignmentData, detected_rules: newDetected, custom_rules: newCustom };
+    setAssignmentData(updatedAData);
+    // Alle Abgaben neu korrigieren
+    const toReset = submissions.map(s => ({
+      ...s,
+      ai_corrections: Object.fromEntries(Object.entries(s.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }])),
+      reviewed: false,
+    }));
+    await runAutoBatchCorrection(toReset, submissions, updatedAData);
+    setSavingRules(false);
   };
 
   const saveGradingMode = async (mode) => {
@@ -1395,6 +1413,23 @@ Gib das Ergebnis NUR als JSON zurück:
                     );
                   })()}
 
+                    {/* Regelwerk-Zusammenfassung im Detail-Panel */}
+                    {(detectedRules.length > 0 || customRules) && (
+                      <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 14px", marginBottom: "14px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                          <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8" }}>AKTIVE REGELN</div>
+                          <button onClick={() => setRegelwerkModal(true)} style={{ fontSize: "10px", color: "#6d28d9", background: "none", border: "none", cursor: "pointer", fontWeight: 600, padding: 0 }}>📋 Bearbeiten</button>
+                        </div>
+                        {detectedRules.filter(r => r.enabled && !r.taskId).map(r => (
+                          <div key={r.id} style={{ fontSize: "11px", color: "#16a34a", marginBottom: "2px" }}>✓ {r.label}</div>
+                        ))}
+                        {detectedRules.filter(r => !r.enabled && !r.taskId).map(r => (
+                          <div key={r.id} style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>✗ {r.label}</div>
+                        ))}
+                        {customRules && <div style={{ fontSize: "11px", color: "#6d28d9", marginTop: "4px", borderTop: "1px solid #e2e8f0", paddingTop: "4px" }}>+ {customRules}</div>}
+                      </div>
+                    )}
+
                     {/* Meta-Infos für Ausdruck */}
                     <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px 16px", marginBottom: "18px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", fontSize: "13px" }}>
                       <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>SCHÜLER/IN</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{selectedSubmission.username}</span></div>
@@ -1466,8 +1501,16 @@ Gib das Ergebnis NUR als JSON zurück:
                             </div>
                           )}
                           {correction.usedCriteria && (
-                            <div style={{ background: "#f8fafc", borderRadius: "6px", padding: "6px 10px", marginBottom: "8px", fontSize: "11px", color: "#64748b", border: "1px solid #e2e8f0" }}>
-                              <span style={{ fontWeight: 600, color: "#94a3b8" }}>📐 Angewendete Kriterien: </span>{correction.usedCriteria}
+                            <div style={{ background: "#f8fafc", borderRadius: "6px", padding: "6px 10px", marginBottom: "6px", fontSize: "11px", color: "#64748b", border: "1px solid #e2e8f0" }}>
+                              <span style={{ fontWeight: 600, color: "#94a3b8" }}>📐 </span>{correction.usedCriteria}
+                            </div>
+                          )}
+                          {/* Aufgabenspezifische Toggle-Regeln */}
+                          {detectedRules.filter(r => r.taskId && String(r.taskId) === String(qId)).length > 0 && (
+                            <div style={{ background: "#f8fafc", borderRadius: "6px", padding: "6px 10px", marginBottom: "6px", fontSize: "11px", border: "1px solid #e2e8f0" }}>
+                              {detectedRules.filter(r => r.taskId && String(r.taskId) === String(qId)).map(r => (
+                                <div key={r.id} style={{ color: r.enabled ? "#16a34a" : "#94a3b8" }}>{r.enabled ? "✓" : "✗"} {r.label}</div>
+                              ))}
                             </div>
                           )}
                           {correction.solution && (
@@ -1589,13 +1632,13 @@ Gib das Ergebnis NUR als JSON zurück:
           assignmentData={assignmentData}
           currentGradingMode={currentGradingMode}
           customRules={customRules}
-          detectedRules={detectedRules}
-          analyzingRules={analyzingRules}
-          toggleDetectedRule={toggleDetectedRule}
           applyNewGradingMode={applyNewGradingMode}
-          saveCustomRules={saveCustomRules}
+          saveAllRules={saveAllRules}
           savingRules={savingRules}
           onClose={() => setRegelwerkModal(false)}
+          detectedRules={detectedRules}
+          setDetectedRules={setDetectedRules}
+          analyzingRules={analyzingRules}
         />
       )}
 
