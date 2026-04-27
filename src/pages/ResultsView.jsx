@@ -306,11 +306,21 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   // Beim Laden: unreviewte Submissions — erst Bewertungsmodus bestätigen lassen
   useEffect(() => {
     if (!assignmentData || submissions.length === 0 || aiRunning) return;
+
+    // Nur Abgaben die wirklich noch nicht bewertet wurden
     const pending = submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
     if (pending.length === 0) return;
-    // Modal anzeigen bis Lehrer Modus bestätigt
+
+    // Wenn bereits andere Abgaben reviewed sind → Modus ist bereits gesetzt, einfach korrigieren
+    const alreadyReviewed = submissions.some(s => s.reviewed);
+    if (alreadyReviewed) {
+      runAutoBatchCorrection(pending, submissions);
+      return;
+    }
+
+    // Beim ersten Mal: Modal anzeigen
     if (!gradingModeConfirmed) {
       setGradingModeModal(true);
       return;
