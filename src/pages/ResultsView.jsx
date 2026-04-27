@@ -722,9 +722,7 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
 Musterlösung: ${q.solution || "(keine)"}
 Antwort: ${ans}
 Aktuelle Bewertung: ${corr?.points ?? "–"}/${q.points} Pkt. — ${corr?.comment || ""}`;
-      }).join("
-
-");
+      }).join("\n\n");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest deine Korrekturen für einen Schüler.
 
