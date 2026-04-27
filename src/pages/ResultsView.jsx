@@ -306,11 +306,21 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   // Beim Laden: unreviewte Submissions — erst Bewertungsmodus bestätigen lassen
   useEffect(() => {
     if (!assignmentData || submissions.length === 0 || aiRunning) return;
+
+    // Nur Abgaben die wirklich noch nicht bewertet wurden
     const pending = submissions.filter(s =>
       !s.reviewed && Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed)
     );
     if (pending.length === 0) return;
-    // Modal anzeigen bis Lehrer Modus bestätigt
+
+    // Wenn bereits andere Abgaben reviewed sind → Modus ist bereits gesetzt, einfach korrigieren
+    const alreadyReviewed = submissions.some(s => s.reviewed);
+    if (alreadyReviewed) {
+      runAutoBatchCorrection(pending, submissions);
+      return;
+    }
+
+    // Beim ersten Mal: Modal anzeigen
     if (!gradingModeConfirmed) {
       setGradingModeModal(true);
       return;
@@ -712,7 +722,9 @@ Gib deine Bewertung als JSON zurück mit zwei Feldern:
 Musterlösung: ${q.solution || "(keine)"}
 Antwort: ${ans}
 Aktuelle Bewertung: ${corr?.points ?? "–"}/${q.points} Pkt. — ${corr?.comment || ""}`;
-      }).join("\n\n");
+      }).join("
+
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest deine Korrekturen für einen Schüler.
 
@@ -790,9 +802,11 @@ Die IDs der Fragen sind: ${openQs.map(q => q.id).join(", ")}`;
 
       const answers = submissions.filter(s => s.answers?.[qId]?.trim()).map(s => s.answers[qId]);
       const currentCorrections = submissions.map(s => s.ai_corrections?.[qId]).filter(Boolean);
-      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const currentCriteria = (question.partialPoints || []).map(p => `- ${p.points} Pkt.: ${p.description}`).join("
+");
       const exampleCorrections = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed).slice(0, 3)
-        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("\n");
+        .map(s => `"${s.answers?.[qId]}" → ${s.ai_corrections[qId].points} Pkt. (${s.ai_corrections[qId].comment?.replace("🤖 ", "")})`).join("
+");
 
       const prompt = `Du bist ein Schullehrer und überarbeitest einen Bewertungsmaßstab basierend auf dem Feedback der Lehrkraft.
 
