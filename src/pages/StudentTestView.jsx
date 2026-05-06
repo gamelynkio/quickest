@@ -197,7 +197,63 @@ function DebugBar({ assignmentRef, serverOffsetRef }) {
   );
 }
 
-export default function StudentTestView({ currentUser, assignment: assignmentProp, onFinish }) {
+// Zeigt Korrekturen nach Freigabe direkt auf dem Abgabe-Screen
+function SubmissionDetails({ submissionId }) {
+  const [details, setDetails] = useState(null);
+
+  useEffect(() => {
+    if (!submissionId) return;
+    supabase.from("submissions").select("answers, ai_corrections, manual_overrides")
+      .eq("id", submissionId).single()
+      .then(({ data }) => { if (data) setDetails(data); });
+    // Auch bei Änderungen neu laden
+    const poll = setInterval(async () => {
+      const { data } = await supabase.from("submissions")
+        .select("answers, ai_corrections, manual_overrides")
+        .eq("id", submissionId).single();
+      if (data) setDetails(data);
+    }, 5000);
+    return () => clearInterval(poll);
+  }, [submissionId]);
+
+  if (!details) return null;
+  const corrections = details.ai_corrections || {};
+  const keys = Object.keys(corrections);
+  if (keys.length === 0) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {keys.map((qId, i) => {
+        const c = corrections[qId];
+        const points = (details.manual_overrides || {})[qId] !== undefined
+          ? details.manual_overrides[qId] : c.points;
+        const ans = details.answers?.[qId] ?? details.answers?.[Number(qId)];
+        return (
+          <div key={qId} style={{ background: "#fff", borderRadius: "16px", padding: "18px 20px", boxShadow: "0 4px 16px rgba(0,0,0,0.1)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#374151" }}>Aufgabe {i + 1}</span>
+              <span style={{ fontSize: "13px", fontWeight: 800, color: c.correct ? "#16a34a" : "#dc2626" }}>
+                {points} / {c.maxPoints} Pkt.
+              </span>
+            </div>
+            {ans !== undefined && ans !== "" && (
+              <div style={{ fontSize: "13px", color: "#64748b", marginBottom: "8px" }}>
+                <em>Deine Antwort:</em> {Array.isArray(ans) ? ans.join(", ") : String(ans)}
+              </div>
+            )}
+            {c.comment && (
+              <div style={{ background: c.correct ? "#f0fdf4" : "#fef2f2", borderRadius: "8px", padding: "8px 12px", fontSize: "13px", color: c.correct ? "#16a34a" : "#dc2626", lineHeight: 1.5 }}>
+                {c.comment.replace("🤖 ", "")}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+{ currentUser, assignment: assignmentProp, onFinish }) {
   const [assignment, setAssignment] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -334,7 +390,11 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (asgn) {
         setIsPaused(!!asgn.paused_at);
         if (asgn.status === "beendet" && !isEndedRef.current) { isEndedRef.current = true; setIsEnded(true); handleSubmitRef.current?.(); }
-        // Lobby zurückgesetzt: lobby_started_at hat sich geändert → Seite neu laden
+        // Lobby zurückgesetzt: lobby_started_at wurde auf null gesetzt
+        if (assignment?.lobby_started_at && !asgn.lobby_started_at) {
+          window.location.reload();
+        }
+        // Neue Lobby gestartet: lobby_started_at hat sich geändert
         if (asgn.lobby_started_at && assignment?.lobby_started_at && asgn.lobby_started_at !== assignment.lobby_started_at) {
           window.location.reload();
         }
@@ -633,36 +693,34 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const result = submissionResult;
     const isReleased = result?.released;
     return (
-      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-        <div style={{ background: "#fff", borderRadius: "24px", padding: "40px 32px", maxWidth: "400px", width: "100%", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-          {isReleased ? (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%)", padding: "20px", overflowY: "auto" }}>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ maxWidth: "520px", margin: "0 auto", paddingTop: "40px" }}>
+          {!isReleased ? (
+            <div style={{ background: "#fff", borderRadius: "24px", padding: "40px 32px", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+              <div style={{ fontSize: "64px", marginBottom: "16px" }}>✅</div>
+              <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 12px" }}>Test abgegeben!</h2>
+              <p style={{ color: "#64748b", marginBottom: "20px", fontSize: "15px", lineHeight: 1.6 }}>Deine Antworten wurden gespeichert.</p>
+              <div style={{ background: "#f0f7ff", borderRadius: "12px", padding: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "18px", height: "18px", border: "3px solid #bfdbfe", borderTop: "3px solid #2563a8", borderRadius: "50%", animation: "spin 1s linear infinite", flexShrink: 0 }} />
+                <p style={{ color: "#2563a8", fontSize: "13px", margin: 0, textAlign: "left", lineHeight: 1.5 }}>
+                  Warte auf Auswertung — deine Note erscheint hier automatisch.
+                </p>
+              </div>
+            </div>
+          ) : (
             <>
-              <div style={{ fontSize: "64px", marginBottom: "12px" }}>🎉</div>
-              <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 20px" }}>Ergebnis freigegeben!</h2>
-              <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "24px", marginBottom: "24px" }}>
-                <div style={{ fontSize: "72px", fontWeight: 900, color: GRADE_COLOR[result.grade] || "#374151", lineHeight: 1, marginBottom: "8px" }}>{result.grade}</div>
+              {/* Note */}
+              <div style={{ background: "#fff", borderRadius: "24px", padding: "32px", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)", marginBottom: "16px" }}>
+                <div style={{ fontSize: "48px", marginBottom: "8px" }}>🎉</div>
+                <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", margin: "0 0 16px" }}>Ergebnis</h2>
+                <div style={{ fontSize: "80px", fontWeight: 900, color: GRADE_COLOR[result.grade] || "#374151", lineHeight: 1, marginBottom: "8px" }}>{result.grade}</div>
                 <div style={{ fontSize: "16px", color: "#64748b" }}>
                   {result.score} / {result.total_points} Punkte · {Math.round((result.score / (result.total_points || 1)) * 100)}%
                 </div>
               </div>
-              <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>
-                Details ansehen →
-              </button>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: "64px", marginBottom: "16px" }}>✅</div>
-              <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 12px" }}>Test abgegeben!</h2>
-              <p style={{ color: "#64748b", marginBottom: "20px", fontSize: "15px", lineHeight: 1.6 }}>
-                Deine Antworten wurden gespeichert.
-              </p>
-              <div style={{ background: "#f0f7ff", borderRadius: "12px", padding: "16px", marginBottom: "24px", display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{ width: "16px", height: "16px", border: "3px solid #bfdbfe", borderTop: "3px solid #2563a8", borderRadius: "50%", animation: "spin 1s linear infinite", flexShrink: 0 }} />
-                <p style={{ color: "#2563a8", fontSize: "13px", margin: 0, textAlign: "left", lineHeight: 1.5 }}>
-                  Warte auf Auswertung durch deinen Lehrer — deine Note erscheint hier automatisch.
-                </p>
-              </div>
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              {/* Korrekturen pro Aufgabe */}
+              <SubmissionDetails submissionId={submissionId} />
             </>
           )}
         </div>
