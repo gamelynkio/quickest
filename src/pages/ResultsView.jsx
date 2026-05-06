@@ -458,9 +458,12 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         const gs = [...(aData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
         let newGrade = "6";
         for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
-        await supabase.from("submissions").update({ ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true }).eq("id", s.id);
-        setSubmissions(prev => prev.map(sub => sub.id === s.id ? { ...sub, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true } : sub));
-        if (selectedSubmission?.id === s.id) setSelectedSubmission(prev => ({ ...prev, ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true }));
+        const updatePayload = { ai_corrections: merged, score: newScore, grade: newGrade, reviewed: true };
+        if (s.released) updatePayload.released = true;
+        await supabase.from("submissions").update(updatePayload).eq("id", s.id);
+        const updatedSub = { ...s, ...updatePayload };
+        setSubmissions(prev => prev.map(sub => sub.id === s.id ? updatedSub : sub));
+        if (selectedSubmission?.id === s.id) setSelectedSubmission(prev => ({ ...prev, ...updatePayload }));
       }
 
       setAiProgress("✅ Korrektur abgeschlossen!");
@@ -556,11 +559,28 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     const gs = [...(aData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
     let newGrade = "6";
     for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
-    await supabase.from("submissions").update({ manual_overrides: updatedOverrides, score: newScore, grade: newGrade, reviewed: true }).eq("id", selectedSubmission.id);
-    setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? { ...s, manual_overrides: updatedOverrides, score: newScore, grade: newGrade, reviewed: true } : s));
+
+    // Wenn bereits freigegeben: Änderung sofort für Schüler sichtbar (released bleibt true)
+    const wasReleased = selectedSubmission.released;
+    await supabase.from("submissions").update({
+      manual_overrides: updatedOverrides,
+      score: newScore,
+      grade: newGrade,
+      reviewed: true,
+      ...(wasReleased ? { released: true } : {}),
+    }).eq("id", selectedSubmission.id);
+
+    const updated = { ...selectedSubmission, manual_overrides: updatedOverrides, score: newScore, grade: newGrade, reviewed: true };
+    setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? updated : s));
     setOverrides({});
     setSaving(false);
     setSelectedSubmission(null);
+
+    // Kurze Bestätigung wenn bereits freigegeben
+    if (wasReleased) {
+      setAiProgress("✅ Gespeichert — Schüler sieht die aktualisierte Bewertung sofort.");
+      setTimeout(() => setAiProgress(""), 3000);
+    }
   };
 
   const releaseSubmissions = async (ids) => {
@@ -685,8 +705,10 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
       const gs = [...(assignmentData?.grading_scale || [])].sort((a, b) => b.minPercent - a.minPercent);
       let newGrade = "6";
       for (const g of gs) { if (percent >= Number(g.minPercent)) { newGrade = g.grade; break; } }
-      await supabase.from("submissions").update({ ai_corrections: newCorrections, score: newScore, grade: newGrade, reviewed: true }).eq("id", selectedSubmission.id);
-      const updated = { ...selectedSubmission, ai_corrections: newCorrections, score: newScore, grade: newGrade };
+      const quickUpdatePayload = { ai_corrections: newCorrections, score: newScore, grade: newGrade, reviewed: true };
+      if (selectedSubmission.released) quickUpdatePayload.released = true;
+      await supabase.from("submissions").update(quickUpdatePayload).eq("id", selectedSubmission.id);
+      const updated = { ...selectedSubmission, ...quickUpdatePayload };
       setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? updated : s));
       setSelectedSubmission(updated);
       setQuickPrompt("");
