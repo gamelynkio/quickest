@@ -203,6 +203,7 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   const [answers, setAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState(null); // { released, grade, score, total_points }
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -335,6 +336,43 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     window.addEventListener("beforeunload", cleanup);
     return () => { clearInterval(heartbeat); window.removeEventListener("beforeunload", cleanup); };
   }, [assignment?.id, submitted]);
+
+
+  // === ECHTZEIT: Freigabe + Note automatisch aktualisieren ===
+  useEffect(() => {
+    if (!submissionIdRef.current) return;
+    const subChannel = supabase
+      .channel(`submission-result-${submissionIdRef.current}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "submissions",
+        filter: `id=eq.${submissionIdRef.current}`
+      }, (payload) => {
+        const { released, grade, score, total_points } = payload.new;
+        setSubmissionResult({ released, grade, score, total_points });
+      })
+      .subscribe();
+    return () => supabase.removeChannel(subChannel);
+  }, [submissionIdRef.current, submitted]);
+
+  // === ECHTZEIT: Lobby-Reset / Assignment-Status-Änderung ===
+  useEffect(() => {
+    if (!currentUser?.group_id) return;
+    const asgChannel = supabase
+      .channel(`assignment-status-${currentUser.group_id}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "assignments",
+        filter: `group_id=eq.${currentUser.group_id}`
+      }, (payload) => {
+        const newStatus = payload.new?.status;
+        const newLobbyStarted = payload.new?.lobby_started_at;
+        // Lobby wurde zurückgesetzt oder neuer Test aktiv → Seite neu laden
+        if (newStatus === "aktiv" || newStatus === "lobby" || newLobbyStarted !== assignment?.lobby_started_at) {
+          window.location.reload();
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(asgChannel);
+  }, [currentUser?.group_id, assignment?.id]);
 
   // === KERN-FIX: Rekursiver Poll für paused_at + status ===
   // Verwendet rekursives setTimeout statt setInterval um Closure-Probleme zu vermeiden
@@ -501,6 +539,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     safeStorage.removeItem(`qt_start_${assignment.id}_${currentUser.id}`);
     await supabase.from("lobby_presence").delete().eq("assignment_id", assignment.id).eq("username", currentUser.username);
     setSubmitted(true);
+    // Initiales Ergebnis setzen (noch nicht freigegeben)
+    setSubmissionResult({ released: false, grade: null, score: null, total_points: null });
     setShowConfirm(false);
     setSubmitting(false);
   };
@@ -579,16 +619,37 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     </div>
   );
 
-  if (submitted) return (
-    <div style={S.center}>
-      <div style={S.card}>
-        <div style={{ fontSize: "72px", marginBottom: "16px" }}>✅</div>
-        <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Test abgegeben!</h2>
-        <p style={{ color: "#64748b", marginBottom: "28px", fontSize: "15px", lineHeight: 1.5 }}>Deine Antworten wurden gespeichert.</p>
-        <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Fertig</button>
+  if (submitted) {
+    const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97316", "5": "#ef4444", "6": "#dc2626" };
+    const result = submissionResult;
+    return (
+      <div style={S.center}>
+        <div style={S.card}>
+          {result?.released ? (
+            <>
+              <div style={{ fontSize: "64px", marginBottom: "12px", textAlign: "center" }}>🎉</div>
+              <h2 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", margin: "0 0 6px", textAlign: "center" }}>Ergebnis freigegeben!</h2>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: "10px", margin: "16px 0 8px" }}>
+                <span style={{ fontSize: "64px", fontWeight: 900, color: GRADE_COLOR[result.grade] || "#374151", lineHeight: 1 }}>{result.grade}</span>
+              </div>
+              <div style={{ textAlign: "center", fontSize: "16px", color: "#64748b", marginBottom: "24px" }}>
+                {result.score} / {result.total_points} Punkte · {Math.round((result.score / (result.total_points || 1)) * 100)}%
+              </div>
+              <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Details ansehen</button>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: "72px", marginBottom: "16px", textAlign: "center" }}>✅</div>
+              <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px", textAlign: "center" }}>Test abgegeben!</h2>
+              <p style={{ color: "#64748b", marginBottom: "8px", fontSize: "15px", lineHeight: 1.5, textAlign: "center" }}>Deine Antworten wurden gespeichert.</p>
+              <p style={{ color: "#94a3b8", marginBottom: "28px", fontSize: "13px", textAlign: "center" }}>⏳ Dein Lehrer wertet gerade aus — deine Note erscheint hier automatisch wenn sie freigegeben wird.</p>
+              <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "15px", cursor: "pointer", width: "100%" }}>Fertig</button>
+            </>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   const realQuestions = flattenQuestions(questions).filter(q => q.type !== "section");
   const answeredCount = realQuestions.filter(q => {
