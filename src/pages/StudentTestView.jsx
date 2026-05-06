@@ -255,7 +255,6 @@ function SubmissionDetails({ submissionId }) {
 
 export default function StudentTestView({ currentUser, assignment: assignmentProp, onFinish }) {
 
-  const [assignment, setAssignment] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(null);
@@ -391,12 +390,13 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (asgn) {
         setIsPaused(!!asgn.paused_at);
         if (asgn.status === "beendet" && !isEndedRef.current) { isEndedRef.current = true; setIsEnded(true); handleSubmitRef.current?.(); }
-        // Lobby zurückgesetzt: lobby_started_at wurde auf null gesetzt
-        if (assignment?.lobby_started_at && !asgn.lobby_started_at) {
+        // Lobby zurückgesetzt: lobby_started_at auf null gesetzt
+        const currentLobbyStart = assignmentRef.current?.lobby_started_at;
+        if (currentLobbyStart && !asgn.lobby_started_at) {
           window.location.reload();
         }
-        // Neue Lobby gestartet: lobby_started_at hat sich geändert
-        if (asgn.lobby_started_at && assignment?.lobby_started_at && asgn.lobby_started_at !== assignment.lobby_started_at) {
+        // Neue Lobby gestartet
+        if (asgn.lobby_started_at && currentLobbyStart && asgn.lobby_started_at !== currentLobbyStart) {
           window.location.reload();
         }
       }
@@ -722,6 +722,12 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
               </div>
               {/* Korrekturen pro Aufgabe */}
               <SubmissionDetails submissionId={submissionId} />
+              {/* Navigation zurück */}
+              <div style={{ marginTop: "16px", paddingBottom: "40px" }}>
+                <button onClick={() => onFinish()} style={{ width: "100%", padding: "16px", background: "#fff", color: "#2563a8", border: "none", borderRadius: "16px", fontWeight: 700, fontSize: "16px", cursor: "pointer", boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}>
+                  Zurück zur Übersicht →
+                </button>
+              </div>
             </>
           )}
         </div>
