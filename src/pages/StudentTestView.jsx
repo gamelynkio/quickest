@@ -253,7 +253,7 @@ function SubmissionDetails({ submissionId }) {
   );
 }
 
-{ currentUser, assignment: assignmentProp, onFinish }) {
+export default function StudentTestView({ currentUser, assignment: assignmentProp, onFinish }) {
   const [assignment, setAssignment] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
