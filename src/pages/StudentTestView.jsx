@@ -338,41 +338,43 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   }, [assignment?.id, submitted]);
 
 
-  // === ECHTZEIT: Freigabe + Note automatisch aktualisieren ===
-  useEffect(() => {
-    if (!submissionIdRef.current) return;
-    const subChannel = supabase
-      .channel(`submission-result-${submissionIdRef.current}`)
-      .on("postgres_changes", {
-        event: "UPDATE", schema: "public", table: "submissions",
-        filter: `id=eq.${submissionIdRef.current}`
-      }, (payload) => {
-        const { released, grade, score, total_points } = payload.new;
-        setSubmissionResult({ released, grade, score, total_points });
-      })
-      .subscribe();
-    return () => supabase.removeChannel(subChannel);
-  }, [submissionIdRef.current, submitted]);
 
-  // === ECHTZEIT: Lobby-Reset / Assignment-Status-Änderung ===
+  // === POLL: Nach Abgabe — Note + Freigabe alle 3 Sek. prüfen ===
   useEffect(() => {
-    if (!currentUser?.group_id) return;
-    const asgChannel = supabase
-      .channel(`assignment-status-${currentUser.group_id}`)
-      .on("postgres_changes", {
-        event: "UPDATE", schema: "public", table: "assignments",
-        filter: `group_id=eq.${currentUser.group_id}`
-      }, (payload) => {
-        const newStatus = payload.new?.status;
-        const newLobbyStarted = payload.new?.lobby_started_at;
-        // Lobby wurde zurückgesetzt oder neuer Test aktiv → Seite neu laden
-        if (newStatus === "aktiv" || newStatus === "lobby" || newLobbyStarted !== assignment?.lobby_started_at) {
-          window.location.reload();
-        }
-      })
-      .subscribe();
-    return () => supabase.removeChannel(asgChannel);
-  }, [currentUser?.group_id, assignment?.id]);
+    if (!submitted || !submissionIdRef.current) return;
+    const poll = setInterval(async () => {
+      const { data } = await supabase
+        .from("submissions")
+        .select("released, grade, score, total_points")
+        .eq("id", submissionIdRef.current)
+        .single();
+      if (data) setSubmissionResult(data);
+    }, 3000);
+    return () => clearInterval(poll);
+  }, [submitted]);
+
+  // === POLL: Auf neuen Test / Lobby-Reset warten (alle 4 Sek.) ===
+  useEffect(() => {
+    if (!currentUser?.group_id || (assignment && !submitted)) return;
+    const assignmentLobbyStarted = assignment?.lobby_started_at;
+    const assignmentId = assignment?.id;
+    const poll = setInterval(async () => {
+      const { data } = await supabase
+        .from("assignments")
+        .select("id, status, lobby_started_at")
+        .eq("group_id", currentUser.group_id)
+        .eq("status", "aktiv")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data) return;
+      // Neuer Test oder Lobby zurückgesetzt
+      if (data.id !== assignmentId || data.lobby_started_at !== assignmentLobbyStarted) {
+        window.location.reload();
+      }
+    }, 4000);
+    return () => clearInterval(poll);
+  }, [currentUser?.group_id, assignment?.id, assignment?.lobby_started_at, submitted]);
 
   // === KERN-FIX: Rekursiver Poll für paused_at + status ===
   // Verwendet rekursives setTimeout statt setInterval um Closure-Probleme zu vermeiden
