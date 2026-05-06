@@ -631,28 +631,38 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   if (submitted) {
     const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97316", "5": "#ef4444", "6": "#dc2626" };
     const result = submissionResult;
+    const isReleased = result?.released;
     return (
-      <div style={S.center}>
-        <div style={S.card}>
-          {result?.released ? (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+        <div style={{ background: "#fff", borderRadius: "24px", padding: "40px 32px", maxWidth: "400px", width: "100%", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+          {isReleased ? (
             <>
-              <div style={{ fontSize: "64px", marginBottom: "12px", textAlign: "center" }}>🎉</div>
-              <h2 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", margin: "0 0 6px", textAlign: "center" }}>Ergebnis freigegeben!</h2>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: "10px", margin: "16px 0 8px" }}>
-                <span style={{ fontSize: "64px", fontWeight: 900, color: GRADE_COLOR[result.grade] || "#374151", lineHeight: 1 }}>{result.grade}</span>
+              <div style={{ fontSize: "64px", marginBottom: "12px" }}>🎉</div>
+              <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 20px" }}>Ergebnis freigegeben!</h2>
+              <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "24px", marginBottom: "24px" }}>
+                <div style={{ fontSize: "72px", fontWeight: 900, color: GRADE_COLOR[result.grade] || "#374151", lineHeight: 1, marginBottom: "8px" }}>{result.grade}</div>
+                <div style={{ fontSize: "16px", color: "#64748b" }}>
+                  {result.score} / {result.total_points} Punkte · {Math.round((result.score / (result.total_points || 1)) * 100)}%
+                </div>
               </div>
-              <div style={{ textAlign: "center", fontSize: "16px", color: "#64748b", marginBottom: "24px" }}>
-                {result.score} / {result.total_points} Punkte · {Math.round((result.score / (result.total_points || 1)) * 100)}%
-              </div>
-              <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>Details ansehen</button>
+              <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer", width: "100%" }}>
+                Details ansehen →
+              </button>
             </>
           ) : (
             <>
-              <div style={{ fontSize: "72px", marginBottom: "16px", textAlign: "center" }}>✅</div>
-              <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px", textAlign: "center" }}>Test abgegeben!</h2>
-              <p style={{ color: "#64748b", marginBottom: "8px", fontSize: "15px", lineHeight: 1.5, textAlign: "center" }}>Deine Antworten wurden gespeichert.</p>
-              <p style={{ color: "#94a3b8", marginBottom: "28px", fontSize: "13px", textAlign: "center" }}>⏳ Dein Lehrer wertet gerade aus — deine Note erscheint hier automatisch wenn sie freigegeben wird.</p>
-              <button onClick={() => onFinish()} style={{ padding: "14px 32px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "12px", fontWeight: 600, fontSize: "15px", cursor: "pointer", width: "100%" }}>Fertig</button>
+              <div style={{ fontSize: "64px", marginBottom: "16px" }}>✅</div>
+              <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 12px" }}>Test abgegeben!</h2>
+              <p style={{ color: "#64748b", marginBottom: "20px", fontSize: "15px", lineHeight: 1.6 }}>
+                Deine Antworten wurden gespeichert.
+              </p>
+              <div style={{ background: "#f0f7ff", borderRadius: "12px", padding: "16px", marginBottom: "24px", display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "16px", height: "16px", border: "3px solid #bfdbfe", borderTop: "3px solid #2563a8", borderRadius: "50%", animation: "spin 1s linear infinite", flexShrink: 0 }} />
+                <p style={{ color: "#2563a8", fontSize: "13px", margin: 0, textAlign: "left", lineHeight: 1.5 }}>
+                  Warte auf Auswertung durch deinen Lehrer — deine Note erscheint hier automatisch.
+                </p>
+              </div>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </>
           )}
         </div>
