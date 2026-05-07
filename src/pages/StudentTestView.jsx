@@ -255,6 +255,7 @@ function SubmissionDetails({ submissionId }) {
 
 export default function StudentTestView({ currentUser, assignment: assignmentProp, onFinish }) {
 
+  const [assignment, setAssignment] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(null);
