@@ -6,7 +6,6 @@ const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97
 function SubmissionDetailModal({ submission, onClose }) {
   const corrections = submission.ai_corrections || {};
 
-  // Originalreihenfolge aus question_data rekonstruieren
   const [orderedCorrections, setOrderedCorrections] = useState([]);
 
   useEffect(() => {
@@ -24,7 +23,6 @@ function SubmissionDetailModal({ submission, onClose }) {
     const ordered = flat
       .map(q => ({ q, correction: corrections[String(q.id)] }))
       .filter(({ correction }) => correction !== undefined);
-    // Fallback: alle corrections in DB-Reihenfolge
     if (ordered.length === 0) {
       setOrderedCorrections(Object.entries(corrections).map(([qId, correction]) => ({ qId, correction })));
     } else {
@@ -39,7 +37,6 @@ function SubmissionDetailModal({ submission, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 1000, padding: "20px", overflowY: "auto" }}>
       <div style={{ background: "#fff", borderRadius: "20px", width: "100%", maxWidth: "560px", marginTop: "20px", marginBottom: "20px" }}>
-        {/* Header */}
         <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "20px 20px 0 0", padding: "22px 24px", color: "#fff" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
@@ -50,8 +47,6 @@ function SubmissionDetailModal({ submission, onClose }) {
             </div>
             <button onClick={onClose} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px", fontWeight: 700 }}>✕</button>
           </div>
-
-          {/* Score summary */}
           <div style={{ display: "flex", gap: "16px", marginTop: "16px", alignItems: "center" }}>
             {submission.grade && (
               <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: "12px", padding: "10px 18px", textAlign: "center" }}>
@@ -62,7 +57,6 @@ function SubmissionDetailModal({ submission, onClose }) {
             <div>
               <div style={{ fontSize: "22px", fontWeight: 800 }}>{score} / {totalPoints} Pkt.</div>
               <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)", marginTop: "2px" }}>{percent}% erreicht</div>
-              {/* Progress bar */}
               <div style={{ height: "6px", background: "rgba(255,255,255,0.2)", borderRadius: "4px", width: "180px", marginTop: "8px" }}>
                 <div style={{ height: "6px", borderRadius: "4px", background: "#fff", width: `${percent}%` }} />
               </div>
@@ -70,9 +64,7 @@ function SubmissionDetailModal({ submission, onClose }) {
           </div>
         </div>
 
-        {/* Corrections */}
         <div style={{ padding: "20px 24px" }}>
-          {/* Meta-Infos */}
           <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px 16px", marginBottom: "18px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", fontSize: "13px" }}>
             <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>SCHÜLER/IN</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{submission.username}</span></div>
             <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>DATUM</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{new Date(submission.submitted_at).toLocaleDateString("de-DE")}</span></div>
@@ -88,7 +80,6 @@ function SubmissionDetailModal({ submission, onClose }) {
 
             return (
               <div key={qId} style={{ marginBottom: "14px", background: "#f8fafc", borderRadius: "12px", padding: "14px 16px", border: `1px solid ${isCorrect ? "#bbf7d0" : isWrong ? "#fecaca" : "#e2e8f0"}` }}>
-                {/* Question header */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <span style={{ fontSize: "13px", fontWeight: 700, color: "#374151" }}>Aufgabe {i + 1}</span>
@@ -101,33 +92,23 @@ function SubmissionDetailModal({ submission, onClose }) {
                     {pts} / {correction.maxPoints} Pkt.
                   </span>
                 </div>
-
-                {/* Student answer */}
                 <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
                   <span style={{ color: "#94a3b8" }}>Deine Antwort: </span>
                   {correction.studentAnswer ?? "–"}
                 </div>
-
-                {/* AI/teacher comment */}
                 {correction.comment && (
                   <div style={{ background: isCorrect ? "#dcfce7" : isAi ? "#eff6ff" : isWrong ? "#fef2f2" : "#fef9c3", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isCorrect ? "#16a34a" : isAi ? "#1e40af" : isWrong ? "#dc2626" : "#92400e" }}>
                     {correction.comment}
                   </div>
                 )}
-
-                {/* Solution */}
                 {correction.solution && (
                   <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
                     <strong>📝 Musterlösung:</strong> {correction.solution}
                   </div>
                 )}
-
-                {/* Partial points / rubric */}
                 {(correction.partialPoints?.length > 0) && (
                   <details>
-                    <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "2px 0" }}>
-                      📋 Bewertungsmaßstab
-                    </summary>
+                    <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "2px 0" }}>📋 Bewertungsmaßstab</summary>
                     <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "3px" }}>
                       {correction.partialPoints.map((p, pi) => (
                         <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", alignItems: "center" }}>
@@ -141,7 +122,6 @@ function SubmissionDetailModal({ submission, onClose }) {
               </div>
             );
           })}
-
           <button onClick={onClose} style={{ width: "100%", padding: "13px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", marginTop: "4px" }}>
             Schließen
           </button>
@@ -161,13 +141,11 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
   useEffect(() => { fetchData(); }, []);
 
-  // Automatisch aktualisieren solange Abgaben ohne Note vorhanden
+  // Permanentes Polling alle 4 Sek. — neue Tests, Lobbys, Notenänderungen
   useEffect(() => {
-    const hasUngraded = submissions.some(s => !s.released);
-    if (!hasUngraded) return;
-    const poll = setInterval(fetchData, 5000);
+    const poll = setInterval(fetchData, 4000);
     return () => clearInterval(poll);
-  }, [submissions]);
+  }, []);
 
   const fetchData = async () => {
     const [{ data: asgn }, { data: subs }, { data: allMakeups }] = await Promise.all([
@@ -180,7 +158,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
         .eq("group_id", currentUser.group_id)
         .not("parent_assignment_id", "is", null),
     ]);
-
     setAssignments(asgn || []);
     setSubmissions(subs || []);
     setAllMakeupAssignments(allMakeups || []);
@@ -231,12 +208,10 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
   });
 
   const handleOpenSubmission = async (s) => {
-    // Frische Daten aus DB laden damit manuelle Korrekturen aktuell sind
     const [{ data: freshSubmission }, { data: assignmentData }] = await Promise.all([
       supabase.from("submissions").select("*").eq("id", s.id).single(),
       supabase.from("assignments").select("question_data, teacher_id").eq("id", s.assignment_id).single(),
     ]);
-    // Lehrername laden
     let teacherName = "–";
     if (assignmentData?.teacher_id) {
       const { data: profile } = await supabase.from("profiles").select("name").eq("id", assignmentData.teacher_id).single();
@@ -265,7 +240,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
         <div style={{ fontSize: "52px", marginBottom: "12px" }}>🔒</div>
         <h3 style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Safe Exam Browser erforderlich</h3>
         <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px", lineHeight: 1.6 }}>
-          Dieser Test muss mit dem <strong>Safe Exam Browser</strong> geöffnet werden. Er verhindert Autokorrektur, Tab-Wechsel und andere Apps während der Prüfung.
+          Dieser Test muss mit dem <strong>Safe Exam Browser</strong> geöffnet werden.
         </p>
         <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "20px", textAlign: "left" }}>
           <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "10px" }}>So geht's:</div>
@@ -311,13 +286,12 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
     </div>
   );
 
-  const hasUngraded = submissions.some(s => !s.released);
-
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 50%, #1e3a5f 100%)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px 16px 40px" }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
       <div style={{ maxWidth: "500px", margin: "0 auto" }}>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px", paddingTop: "8px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", paddingTop: "8px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "26px" }}>⚡</span>
             <div>
@@ -325,21 +299,17 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
               <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)" }}>{currentUser.username}</div>
             </div>
           </div>
-          <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.8)", borderRadius: "8px", padding: "8px 14px", fontSize: "13px", cursor: "pointer", fontWeight: 600 }}>
-            Abmelden
-          </button>
-        </div>
-
-        {/* Hinweis wenn Note noch aussteht */}
-        {hasUngraded && !loading && (
-          <div style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "12px", padding: "12px 16px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid #fff", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
-            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>
-              Deine Korrektur steht noch aus — diese Seite aktualisiert sich automatisch.
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            {/* Live-Indikator */}
+            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
+              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>Live</span>
+            </div>
+            <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.8)", borderRadius: "8px", padding: "8px 14px", fontSize: "13px", cursor: "pointer", fontWeight: 600 }}>
+              Abmelden
+            </button>
           </div>
-        )}
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
 
         {loading ? (
           <div style={{ textAlign: "center", color: "rgba(255,255,255,0.6)", padding: "48px" }}>Wird geladen...</div>
@@ -366,7 +336,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                     <div style={{ fontWeight: 700, fontSize: "16px", color: "#fff", marginBottom: "4px" }}>{a.title}</div>
                     <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", marginBottom: "14px" }}>
                       ⏱ {Math.round((a.time_limit || 0) / 60)} Min.
-                      {a.timing_mode === "window" && <span style={{ marginLeft: "8px" }}>📅 {timeLabel(a)}</span>}
                     </div>
                     <button onClick={() => handleStartTest(a)} style={{ width: "100%", padding: "14px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer" }}>
                       Test starten →
@@ -408,7 +377,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                         <div style={{ fontWeight: 600, fontSize: "15px", color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.assignments?.title || "Test"}</div>
                         <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)", marginTop: "3px" }}>
                           {new Date(s.submitted_at).toLocaleDateString("de-DE")}{s.released ? ` · ${s.score ?? "–"}/${s.total_points} Pkt. · ${percent}%` : ""}
-                          {s.released ? <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.4)" }}>· Tippen für Details</span> : s.grade ? <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.3)", fontSize: "11px" }}>· Korrektur ausstehend</span> : null}
+                          {s.released ? <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.4)" }}>· Tippen für Details</span> : <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.3)", fontSize: "11px" }}>· Korrektur ausstehend</span>}
                         </div>
                       </div>
                       <div style={{ textAlign: "center", flexShrink: 0, marginLeft: "14px" }}>
@@ -417,7 +386,10 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                         ) : s.released ? (
                           <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>wird<br/>bewertet</div>
                         ) : (
-                          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}>⏳ ausstehend</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                            <div style={{ width: "8px", height: "8px", border: "2px solid rgba(255,255,255,0.2)", borderTop: "2px solid rgba(255,255,255,0.6)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>ausstehend</span>
+                          </div>
                         )}
                       </div>
                     </div>
