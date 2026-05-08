@@ -21,7 +21,7 @@ const runBatchCorrection = async ({ pending, allSubs, aData, supabaseUrl, supaba
 
   const rules = aData?.detected_rules || [];
   const activeRules = rules.filter(r => r.enabled).map(r => `- ${r.label}${r.description ? `: ${r.description}` : ""}`).join("\n");
-  const disabledRules = rules.filter(r => !r.enabled).map(r => `- NICHT anwenden: ${r.label}`).join("\n");
+  const disabledRules = rules.filter(r => !r.enabled).map(r => `- DEAKTIVIERT — überschreibt alle Kriterien: "${r.label}" DARF NICHT angewendet werden, auch nicht mit Teilpunkten. Ignoriere alle Bewertungskriterien die dieser Regel entsprechen.`).join("\n");
   const customRulesText = aData?.custom_rules ? `\nZusatzregeln:\n${aData.custom_rules}` : "";
   const rulesBlock = (activeRules || disabledRules) ? `\nVerbindliche Regeln:\n${activeRules}${disabledRules ? "\n" + disabledRules : ""}${customRulesText}\n` : customRulesText;
 
@@ -527,13 +527,31 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setSavingRules(false);
   };
 
-  const toggleRuleInPanel = (rule, newEnabled) => {
+  const toggleRuleInPanel = async (rule, newEnabled) => {
     const sameLabel = detectedRules.filter(r => r.label === rule.label && r.id !== rule.id);
     if (sameLabel.length > 0) {
       setRulePropagateModal({ rule, newEnabled, sameLabel });
       return;
     }
-    setDetectedRules(prev => prev.map(r => r.id === rule.id ? { ...r, enabled: newEnabled } : r));
+    const updatedRules = detectedRules.map(r => r.id === rule.id ? { ...r, enabled: newEnabled } : r);
+    setDetectedRules(updatedRules);
+
+    // Wenn eine Lehrer-Regel deaktiviert wird: die zugehörigen partialPoints aus question_data entfernen
+    if (!newEnabled && rule.source === "teacher" && rule.taskId) {
+      const removeFromQd = (qs) => (qs || []).map(q => {
+        if (String(q.id) === String(rule.taskId)) return { ...q, partialPoints: [] };
+        if (q.tasks) return { ...q, tasks: q.tasks.map(t => ({ ...t, questions: (t.questions||[]).map(tq => String(tq.id) === String(rule.taskId) ? { ...tq, partialPoints: [] } : tq) })) };
+        if (q.questions) return { ...q, questions: removeFromQd(q.questions) };
+        return q;
+      });
+      const updatedQd = removeFromQd(assignmentData?.question_data || []);
+      await supabase.from("assignments").update({ question_data: updatedQd, detected_rules: updatedRules }).eq("id", assignmentData.id);
+      if (assignmentData?.template_id) {
+        const { data: tmpl } = await supabase.from("templates").select("question_data").eq("id", assignmentData.template_id).single();
+        if (tmpl) await supabase.from("templates").update({ question_data: removeFromQd(tmpl.question_data) }).eq("id", assignmentData.template_id);
+      }
+      setAssignmentData(prev => ({ ...prev, question_data: updatedQd, detected_rules: updatedRules }));
+    }
   };
 
   const applyRulePropagation = (propagate) => {
