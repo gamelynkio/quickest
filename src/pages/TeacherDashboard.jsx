@@ -27,6 +27,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const [lobbySubmissions, setLobbySubmissions] = useState([]);
   const [lobbyTimeLeft, setLobbyTimeLeft] = useState(null);
   const [starting, setStarting] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -160,12 +161,9 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
     setStarting(false);
   };
 
-  const resetLobby = async () => {
+  const doResetLobby = async () => {
     if (!lobbyModal) return;
-    const confirmed = window.confirm(
-      "Lobby zurücksetzen?\n\nDadurch werden alle Abgaben dieses Tests gelöscht, sodass Schüler ihn erneut machen können.\n\nFortfahren?"
-    );
-    if (!confirmed) return;
+    setResetConfirm(false);
     await supabase.from("assignments").update({ lobby_started_at: null, lobby_end_at: null, status: "aktiv", paused_at: null }).eq("id", lobbyModal.id);
     await supabase.from("lobby_presence").delete().eq("assignment_id", lobbyModal.id);
     await supabase.from("submissions").delete().eq("assignment_id", lobbyModal.id);
@@ -466,10 +464,30 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                 {starting ? "Wird gestartet..." : lobbyStudents.length === 0 ? "Warte auf Schüler..." : `🚀 Test jetzt starten (${lobbyStudents.length} Schüler)`}
               </button>
             ) : (
-              <button onClick={resetLobby} style={{ width: "100%", padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+              <button onClick={() => setResetConfirm(true)} style={{ width: "100%", padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
                 🔄 Lobby zurücksetzen
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* RESET LOBBY confirm modal */}
+      {resetConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: "40px", marginBottom: "12px" }}>🔄</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 10px", color: "#0f172a" }}>Lobby zurücksetzen?</h3>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "8px", lineHeight: 1.6 }}>
+              Alle Abgaben dieses Tests werden gelöscht — Schüler können ihn danach erneut machen.
+            </p>
+            <p style={{ color: "#dc2626", fontSize: "13px", fontWeight: 600, marginBottom: "24px" }}>
+              ⚠️ Diese Aktion kann nicht rückgängig gemacht werden.
+            </p>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setResetConfirm(false)} style={{ flex: 1, padding: "12px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>Abbrechen</button>
+              <button onClick={doResetLobby} style={{ flex: 1, padding: "12px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>Ja, zurücksetzen</button>
+            </div>
           </div>
         </div>
       )}
