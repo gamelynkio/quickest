@@ -811,12 +811,6 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
           </p>
         </div>
 
-        {aiProgress && (
-          <div style={{ background: aiProgress.startsWith("✅") ? "#f0fdf4" : "#f0f7ff", border: `1px solid ${aiProgress.startsWith("✅") ? "#bbf7d0" : "#bfdbfe"}`, borderRadius: "10px", padding: "10px 16px", marginBottom: "16px", fontSize: "13px", color: aiProgress.startsWith("✅") ? "#16a34a" : "#1e3a5f", fontWeight: 600, display: "flex", alignItems: "center", gap: "10px" }}>
-            {!aiProgress.startsWith("✅") && <div style={{ width: "14px", height: "14px", border: "2px solid #bfdbfe", borderTop: "2px solid #2563a8", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />}
-            {aiProgress}
-          </div>
-        )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
         {loading ? (
@@ -872,7 +866,12 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               {s.grade ? <span style={{ fontWeight: 800, fontSize: "18px", color: GRADE_COLOR[s.grade] || "#374151" }}>{s.grade}</span> : <span style={{ color: "#94a3b8" }}>–</span>}
                             </td>
                             <td style={{ padding: "13px 16px" }}>
-                              {s.reviewed
+                              {aiRunning && !s.reviewed
+                                ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "5px" }}>
+                                    <div style={{ width: "10px", height: "10px", border: "2px solid #bfdbfe", borderTop: "2px solid #2563a8", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+                                    KI korrigiert
+                                  </span>
+                                : s.reviewed
                                 ? <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>✓ Geprüft</span>
                                 : hasAiPending
                                 ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }} onClick={() => startBatchCorrection([s])}>🤖 KI wiederholen</span>
