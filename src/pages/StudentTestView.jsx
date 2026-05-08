@@ -241,9 +241,12 @@ function SubmissionDetails({ submissionId }) {
                 <em>Deine Antwort:</em> {Array.isArray(ans) ? ans.join(", ") : String(ans)}
               </div>
             )}
-            {c.comment && (
+            {(c.comment || c.usedCriteria) && (
               <div style={{ background: c.correct ? "#f0fdf4" : "#fef2f2", borderRadius: "8px", padding: "8px 12px", fontSize: "13px", color: c.correct ? "#16a34a" : "#dc2626", lineHeight: 1.5 }}>
-                {c.comment.replace("🤖 ", "")}
+                <span style={{ marginRight: "4px" }}>🤖</span>
+                {c.comment?.replace("🤖 ", "")}
+                {c.comment && c.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
+                {c.usedCriteria && <span style={{ opacity: 0.8 }}>{c.usedCriteria}</span>}
               </div>
             )}
           </div>
