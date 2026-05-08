@@ -979,14 +979,12 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 return String(ans);
                               })()}
                             </div>
-                            {correction.comment && (
+                            {(correction.comment || correction.usedCriteria) && (
                               <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "6px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
-                                {correction.comment}
-                              </div>
-                            )}
-                            {correction.usedCriteria && (
-                              <div style={{ background: "#f8fafc", borderRadius: "6px", padding: "6px 10px", marginBottom: "6px", fontSize: "11px", color: "#64748b", border: "1px solid #e2e8f0" }}>
-                                <span style={{ fontWeight: 600, color: "#94a3b8" }}>📐 </span>{correction.usedCriteria}
+                                <span style={{ marginRight: "4px" }}>🤖</span>
+                                {correction.comment?.replace("🤖 ", "")}
+                                {correction.comment && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
+                                {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
                               </div>
                             )}
 
