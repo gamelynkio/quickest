@@ -1119,8 +1119,8 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
             <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" }}>Korrektur abgeschlossen</h3>
             <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.6 }}>Korrekturen jetzt für alle Schüler freigeben?</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <button onClick={() => { releaseAll(); setReleaseModal(false); }} style={{ padding: "12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>✓ Ja, alle freigeben</button>
-              <button onClick={() => setReleaseModal(false)} style={{ padding: "12px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>Nein, ich schaue zuerst drüber</button>
+              <button onClick={() => setReleaseModal(false)} style={{ padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>Ich schaue zuerst drüber</button>
+              <button onClick={() => { releaseAll(); setReleaseModal(false); }} style={{ padding: "12px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "10px", fontWeight: 500, fontSize: "13px", cursor: "pointer" }}>Alle freigeben</button>
             </div>
           </div>
         </div>
