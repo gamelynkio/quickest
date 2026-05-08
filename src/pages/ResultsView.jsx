@@ -659,13 +659,30 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
       const updatedAsgn = updateQd(assignmentData?.question_data || []);
       await supabase.from("assignments").update({ question_data: updatedAsgn }).eq("id", assignmentData.id);
       setAssignmentData(prev => ({ ...prev, question_data: updatedAsgn }));
+
+      // Regel als Toggle-Chip in detected_rules speichern
+      const newRule = {
+        id: `teacher_${Date.now()}`,
+        label: feedbackText.length > 50 ? feedbackText.slice(0, 47) + "…" : feedbackText,
+        description: feedbackText,
+        enabled: true,
+        scope: "task",
+        taskId: String(qId),
+        taskIds: [String(qId)],
+        source: "teacher",
+      };
+      const updatedRules = [...detectedRules, newRule];
+      setDetectedRules(updatedRules);
+      await supabase.from("assignments").update({ detected_rules: updatedRules }).eq("id", assignmentData.id);
+      setAssignmentData(prev => ({ ...prev, detected_rules: updatedRules }));
+
       setQuestionFeedback(prev => ({ ...prev, [qId]: "" }));
       const toReset = submissions.map(s => ({
         ...s,
         ai_corrections: Object.fromEntries(Object.entries(s.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }])),
         reviewed: false,
       }));
-      await startBatchCorrection(toReset, { ...assignmentData, question_data: updatedAsgn });
+      await startBatchCorrection(toReset, { ...assignmentData, question_data: updatedAsgn, detected_rules: updatedRules });
     } catch (e) { console.error("Refine failed", e); }
     setRefiningQuestion(null);
   };
@@ -711,6 +728,21 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
       const updated = { ...selectedSubmission, ...quickUpdatePayload };
       setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? updated : s));
       setSelectedSubmission(updated);
+
+      // Schnell-Prompt als globale Toggle-Regel speichern
+      const newGlobalRule = {
+        id: `teacher_global_${Date.now()}`,
+        label: promptText.length > 50 ? promptText.slice(0, 47) + "…" : promptText,
+        description: promptText,
+        enabled: true,
+        scope: "all",
+        taskIds: flattenQs(assignmentData?.question_data || []).filter(q => q.type === "open" || q.type === "qa").map(q => String(q.id)),
+        source: "teacher",
+      };
+      const updatedRulesGlobal = [...detectedRules, newGlobalRule];
+      setDetectedRules(updatedRulesGlobal);
+      await supabase.from("assignments").update({ detected_rules: updatedRulesGlobal }).eq("id", assignmentData.id);
+
       setQuickPrompt("");
     } catch (e) { console.error("Quick prompt failed", e); }
     setRefiningQuestion(null);
