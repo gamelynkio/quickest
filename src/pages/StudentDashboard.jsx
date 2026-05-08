@@ -96,9 +96,12 @@ function SubmissionDetailModal({ submission, onClose }) {
                   <span style={{ color: "#94a3b8" }}>Deine Antwort: </span>
                   {correction.studentAnswer ?? "–"}
                 </div>
-                {correction.comment && (
+                {(correction.comment || correction.usedCriteria) && (
                   <div style={{ background: isCorrect ? "#dcfce7" : isAi ? "#eff6ff" : isWrong ? "#fef2f2" : "#fef9c3", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isCorrect ? "#16a34a" : isAi ? "#1e40af" : isWrong ? "#dc2626" : "#92400e" }}>
-                    {correction.comment}
+                    <span style={{ marginRight: "4px" }}>🤖</span>
+                    {correction.comment?.replace("🤖 ", "")}
+                    {correction.comment && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
+                    {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
                   </div>
                 )}
                 {correction.solution && (
