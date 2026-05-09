@@ -513,19 +513,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           setAssignmentData(prev => ({ ...prev, detected_rules: rules }));
           setRulesConfirmed(true);
 
-          // Regeln in Vorlage übertragen — pro Frage die erkannten Regeln als tq.rules speichern
-          if (aData.template_id) {
-            const { data: tmpl } = await supabase.from("templates").select("question_data").eq("id", aData.template_id).single();
-            if (tmpl?.question_data) {
-              const updateRulesInQd = (qs) => (qs || []).map(q => {
-                if (q.type === "section") return { ...q, tasks: q.tasks?.map(t => ({ ...t, questions: updateRulesInQd(t.questions) })) };
-                if (q.type === "task") return { ...q, questions: updateRulesInQd(q.questions) };
-                const qRules = rules.filter(r => isRuleRelevantForQuestion(r, String(q.id)));
-                return qRules.length > 0 ? { ...q, rules: qRules } : q;
-              });
-              await supabase.from("templates").update({ question_data: updateRulesInQd(tmpl.question_data) }).eq("id", aData.template_id);
-            }
-          }
+          // Regeln in Vorlage übertragen — entfernt (Regeln bleiben im Assignment)
         }
         setAnalyzingRules(false);
       }
