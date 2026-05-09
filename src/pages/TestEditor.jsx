@@ -141,13 +141,13 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const fullTextRef = useRef(null);
 
   const localRef = useRef({});
-  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localPairs, localPartialPoints };
+  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localPairs };
   useEffect(() => {
     return () => {
       const s = localRef.current;
       onUpdate("text", s.localText); onUpdate("solution", s.localSolution); onUpdate("options", s.localOptions);
       onUpdate("fullText", s.localFullText); onUpdate("blanks", s.localBlanks); onUpdate("points", s.localPoints);
-      onUpdate("pairs", s.localPairs); onUpdate("partialPoints", s.localPartialPoints);
+      onUpdate("pairs", s.localPairs);
     };
   }, []);
 
