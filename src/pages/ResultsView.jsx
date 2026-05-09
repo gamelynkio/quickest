@@ -1017,6 +1017,10 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               {correction.correct === false && <span style={{ color: "#dc2626" }}>✗</span>}
                               {isAiReviewed && <span style={{ fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>🤖 KI</span>}
                             </div>
+                            {(() => {
+                              const q = flattenQs(assignmentData?.question_data || []).find(q => String(q.id) === qId);
+                              return q?.text ? <div style={{ fontSize: "13px", color: "#0f172a", fontWeight: 600, marginBottom: "6px", padding: "6px 8px", background: "#fff", borderRadius: "6px", border: "1px solid #e2e8f0" }} dangerouslySetInnerHTML={{ __html: q.text }} /> : null;
+                            })()}
                             <div style={{ fontSize: "13px", color: "#374151", marginBottom: "8px" }}>
                               <em style={{ color: "#94a3b8" }}>Antwort:</em> {(() => {
                                 const ans = selectedSubmission.answers?.[qId] ?? selectedSubmission.answers?.[Number(qId)];
@@ -1083,6 +1087,8 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                     {r.enabled ? "✓" : "○"} {r.label}
                                   </button>
                                 ))}
+                              </div>
+
                               </div>
                             )}
 
