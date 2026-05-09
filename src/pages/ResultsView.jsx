@@ -338,6 +338,14 @@ function RubricModal({ rubricModal, setRubricModal, savingRubric, setSavingRubri
 }
 
 // ─── ResultsView ─────────────────────────────────────────────────────────────
+const DEFAULT_RULES_FALLBACK = [
+  { id: "capitalize", label: "Groß-/Kleinschreibung ignorieren", enabled: true },
+  { id: "typo", label: "Einzelne Tippfehler tolerieren", enabled: true },
+  { id: "synonym", label: "Synonyme akzeptieren", enabled: true },
+  { id: "article", label: "Artikel ignorieren", enabled: false },
+  { id: "to", label: "Infinitivpartikel 'to' optional", enabled: false },
+];
+
 export default function ResultsView({ navigate, onLogout, currentUser, assignment }) {
   const [submissions, setSubmissions] = useState([]);
   const [groupUsernames, setGroupUsernames] = useState([]);
@@ -504,6 +512,20 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
           setDetectedRules(rules);
           setAssignmentData(prev => ({ ...prev, detected_rules: rules }));
           setRulesConfirmed(true);
+
+          // Regeln in Vorlage übertragen — pro Frage die erkannten Regeln als tq.rules speichern
+          if (aData.template_id) {
+            const { data: tmpl } = await supabase.from("templates").select("question_data").eq("id", aData.template_id).single();
+            if (tmpl?.question_data) {
+              const updateRulesInQd = (qs) => (qs || []).map(q => {
+                if (q.type === "section") return { ...q, tasks: q.tasks?.map(t => ({ ...t, questions: updateRulesInQd(t.questions) })) };
+                if (q.type === "task") return { ...q, questions: updateRulesInQd(q.questions) };
+                const qRules = rules.filter(r => isRuleRelevantForQuestion(r, String(q.id)));
+                return qRules.length > 0 ? { ...q, rules: qRules } : q;
+              });
+              await supabase.from("templates").update({ question_data: updateRulesInQd(tmpl.question_data) }).eq("id", aData.template_id);
+            }
+          }
         }
         setAnalyzingRules(false);
       }
@@ -1049,6 +1071,22 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                             )}
 
                             {/* Klickbare Regeln pro Aufgabe */}
+                            {relevantRules.length === 0 && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
+                                {DEFAULT_RULES_FALLBACK.map(r => {
+                                  const newRule = { ...r, id: `default_${r.id}_${qId}`, scope: "task", taskId: String(qId), taskIds: [String(qId)], source: "default" };
+                                  return (
+                                    <button key={r.id} onClick={async () => {
+                                      const updated = [...detectedRules, newRule];
+                                      setDetectedRules(updated);
+                                      await supabase.from("assignments").update({ detected_rules: updated }).eq("id", assignmentData.id);
+                                    }} style={{ padding: "3px 9px", borderRadius: "20px", border: `1.5px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
+                                      {r.enabled ? "✓" : "○"} {r.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                             {relevantRules.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
                                 {relevantRules.map(r => (
@@ -1075,7 +1113,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                             {/* Maßstab anpassen */}
                             {isAiReviewed && (
                               <div style={{ background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px" }}>
-                                <div style={{ fontSize: "11px", fontWeight: 600, color: "#6d28d9", marginBottom: "5px" }}>💬 Maßstab anpassen</div>
+                                <div style={{ fontSize: "11px", fontWeight: 600, color: "#6d28d9", marginBottom: "5px" }}>Bewertungsmaßstab verfeinern</div>
                                 <div style={{ display: "flex", gap: "6px" }}>
                                   <input value={questionFeedback[qId] || ""} onChange={e => setQuestionFeedback(prev => ({ ...prev, [qId]: e.target.value }))}
                                     onKeyDown={e => { if (e.key === "Enter" && questionFeedback[qId]?.trim()) refineQuestionWithFeedback(qId, questionFeedback[qId]); }}
