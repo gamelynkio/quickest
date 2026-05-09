@@ -367,6 +367,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [creatingMakeup, setCreatingMakeup] = useState(false);
   const [questionFeedback, setQuestionFeedback] = useState({});
   const [solutionEdits, setSolutionEdits] = useState({});
+  const [maxPointEdits, setMaxPointEdits] = useState({});
   const [savingSolution, setSavingSolution] = useState(null);
 
   const [refiningQuestion, setRefiningQuestion] = useState(null);
@@ -569,7 +570,13 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     if (!selectedSubmission) return;
     setSaving(true);
     const updatedOverrides = { ...selectedSubmission.manual_overrides, ...overrides };
-    const corrections = selectedSubmission.ai_corrections || {};
+    // Apply maxPoint edits to corrections
+    const corrections = { ...(selectedSubmission.ai_corrections || {}) };
+    if (Object.keys(maxPointEdits).length > 0) {
+      for (const [qId, newMax] of Object.entries(maxPointEdits)) {
+        if (corrections[qId]) corrections[qId] = { ...corrections[qId], maxPoints: newMax };
+      }
+    }
     let newScore = 0;
     for (const [qId, correction] of Object.entries(corrections)) {
       if (updatedOverrides[qId] !== undefined) newScore += Number(updatedOverrides[qId]);
@@ -583,17 +590,20 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
 
     // Wenn bereits freigegeben: Änderung sofort für Schüler sichtbar (released bleibt true)
     const wasReleased = selectedSubmission.released;
+    const updatedCorrections = Object.keys(maxPointEdits).length > 0 ? corrections : undefined;
     await supabase.from("submissions").update({
       manual_overrides: updatedOverrides,
       score: newScore,
       grade: newGrade,
       reviewed: true,
       ...(wasReleased ? { released: true } : {}),
+      ...(updatedCorrections ? { ai_corrections: updatedCorrections } : {}),
     }).eq("id", selectedSubmission.id);
 
-    const updated = { ...selectedSubmission, manual_overrides: updatedOverrides, score: newScore, grade: newGrade, reviewed: true };
+    const updated = { ...selectedSubmission, manual_overrides: updatedOverrides, score: newScore, grade: newGrade, reviewed: true, ai_corrections: corrections };
     setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? updated : s));
     setOverrides({});
+    setMaxPointEdits({});
     setSaving(false);
     setSelectedSubmission(null);
 
@@ -1098,7 +1108,13 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               <input type="number" min={0} max={correction.maxPoints} step={0.5}
                                 value={currentPoints ?? ""} onChange={e => setOverrides(prev => ({ ...prev, [qId]: Number(e.target.value) }))}
                                 style={{ width: "64px", padding: "4px 8px", border: "2px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontWeight: 700, textAlign: "center" }} />
-                              <span style={{ fontSize: "12px", color: "#94a3b8" }}>/ {correction.maxPoints}</span>
+                              <span style={{ fontSize: "12px", color: "#94a3b8" }}>/</span>
+                              <input type="number" min={0.5} step={0.5}
+                                value={maxPointEdits[qId] !== undefined ? maxPointEdits[qId] : (correction.maxPoints ?? 1)}
+                                onChange={e => setMaxPointEdits(prev => ({ ...prev, [qId]: Number(e.target.value) }))}
+                                title="Maximale Punktzahl anpassen"
+                                style={{ width: "55px", padding: "4px 8px", border: `1px solid ${maxPointEdits[qId] !== undefined ? "#f97316" : "#e2e8f0"}`, borderRadius: "6px", fontSize: "13px", textAlign: "center", background: maxPointEdits[qId] !== undefined ? "#fff7ed" : "#fff" }} />
+                              <span style={{ fontSize: "12px", color: "#94a3b8" }}>Pkt. max.</span>
                               {overrides[qId] !== undefined && <span style={{ fontSize: "11px", background: "#fef9c3", color: "#ca8a04", borderRadius: "5px", padding: "2px 6px" }}>✏️ Geändert</span>}
                             </div>
                           </div>
