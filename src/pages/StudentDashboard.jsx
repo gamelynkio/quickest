@@ -94,9 +94,19 @@ function SubmissionDetailModal({ submission, onClose }) {
                     {pts} / {correction.maxPoints} Pkt.
                   </span>
                 </div>
+                {question?.text && (
+                  <div style={{ fontSize: "13px", color: "#0f172a", fontWeight: 600, marginBottom: "6px" }}>
+                    {question.text}
+                  </div>
+                )}
                 <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
                   <span style={{ color: "#94a3b8" }}>Deine Antwort: </span>
-                  {correction.studentAnswer ?? "–"}
+                  {(() => {
+                    const ans = submission.answers?.[qId] ?? submission.answers?.[Number(qId)];
+                    if (ans === undefined || ans === null || ans === "") return "–";
+                    if (Array.isArray(ans)) return ans.join(", ");
+                    return String(ans);
+                  })()}
                 </div>
                 {(correction.comment || correction.usedCriteria) && (
                   <div style={{ background: isCorrect ? "#dcfce7" : isAi ? "#eff6ff" : isWrong ? "#fef2f2" : "#fef9c3", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isCorrect ? "#16a34a" : isAi ? "#1e40af" : isWrong ? "#dc2626" : "#92400e" }}>
