@@ -58,7 +58,14 @@ function SpecialCharBar({ inputRef, value, onChange }) {
   );
 }
 
-// Aufgabe — jetzt top-level (kein Abschnitt mehr)
+const DEFAULT_RULES = [
+  { id: "capitalize", label: "Groß-/Kleinschreibung ignorieren", enabled: true },
+  { id: "typo", label: "Einzelne Tippfehler tolerieren", enabled: true },
+  { id: "synonym", label: "Synonyme akzeptieren", enabled: true },
+  { id: "article", label: "Artikel ignorieren", enabled: false },
+  { id: "to", label: "Infinitivpartikel 'to' optional", enabled: false },
+];
+
 const newTask = () => ({ id: Date.now() + Math.random(), type: "task", taskTitle: "", taskText: "", questions: [] });
 
 const newTaskQuestion = (type) => ({
@@ -68,6 +75,7 @@ const newTaskQuestion = (type) => ({
   correctAnswer: null, correctAnswers: [],
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
   solution: "", partialPoints: [], blanks: [], fullText: "",
+  rules: (type === "qa" || type === "open") ? DEFAULT_RULES.map(r => ({ ...r })) : [],
 });
 
 const suggestRubric = async (questionText, points, solution, supabaseUrl) => {
@@ -78,14 +86,12 @@ ${solution ? `Musterlösung/Hinweis: ${solution}` : ""}
 Maximale Punktzahl: ${points}
 
 Erstelle einen sinnvollen Bewertungsmaßstab mit Teilpunkten (in 0.5-Schritten, Summe = ${points} Punkte).
-Typische Kriterien sind z.B.: korrekte Zeilenangabe, inhaltliche Richtigkeit, Vollständigkeit, Fachbegriffe, Begründung.
 
-Gib das Ergebnis NUR als JSON zurück, ohne Markdown oder Text drumherum:
+Gib das Ergebnis NUR als JSON zurück:
 {
-  "solution": "<kurze Musterlösung oder Erwartungshorizont, 1-2 Sätze>",
+  "solution": "<kurze Musterlösung, 1-2 Sätze>",
   "partialPoints": [
-    {"points": <Zahl>, "description": "<Kriterium>"},
-    ...
+    {"points": <Zahl>, "description": "<Kriterium>"}
   ]
 }
 Die Summe der partialPoints muss exakt ${points} ergeben.`;
@@ -122,7 +128,6 @@ function TaskEditor({ task, tIdx, onUpdate, onRemove, onAddQuestion, onUpdateQue
         </div>
         <button onClick={onRemove} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "7px", padding: "5px 12px", cursor: "pointer", fontSize: "13px" }}>✕ Entfernen</button>
       </div>
-
       <div style={{ marginBottom: "12px" }}>
         <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>Aufgabentitel (optional)</label>
         <input ref={titleRef} value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={() => onUpdate("taskTitle", localTitle)}
@@ -130,13 +135,10 @@ function TaskEditor({ task, tIdx, onUpdate, onRemove, onAddQuestion, onUpdateQue
           style={{ width: "100%", padding: "9px 12px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit", background: "rgba(255,255,255,0.1)", color: "#fff" }} />
         <SpecialCharBar inputRef={titleRef} value={localTitle} onChange={val => { setLocalTitle(val); onUpdate("taskTitle", val); }} />
       </div>
-
       <div style={{ marginBottom: "14px" }}>
         <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.8)", display: "block", marginBottom: "5px" }}>📝 Aufgabentext / Lesetext (optional)</label>
         <RichTextEditor value={localTaskText} onChange={val => { setLocalTaskText(val); onUpdate("taskText", val); }} placeholder="z.B. Lesetext, Erklärung, Beispielsatz..." />
       </div>
-
-      {/* Unteraufgaben */}
       <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "14px" }}>
         {(task.questions || []).map((tq, tqIdx) => (
           <TaskQuestionEditor key={tq.id} tq={tq} tIdx={tIdx} tqIdx={tqIdx}
@@ -168,9 +170,12 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [localFullText, setLocalFullText] = useState(tq.fullText || "");
   const [localBlanks, setLocalBlanks] = useState(tq.blanks || []);
   const [localPoints, setLocalPoints] = useState(tq.points || 1);
-  const originalPointsRef = useRef(tq.partialPoints?.length ? null : (tq.points || 1)); // Punktzahl vor Teilpunkten
+  const originalPointsRef = useRef(tq.partialPoints?.length ? null : (tq.points || 1));
   const [localPairs, setLocalPairs] = useState(tq.pairs?.length ? tq.pairs : [{ left: "", right: "" }]);
   const [localPartialPoints, setLocalPartialPoints] = useState(tq.partialPoints || []);
+  const [localRules, setLocalRules] = useState(tq.rules?.length ? tq.rules : DEFAULT_RULES.map(r => ({ ...r })));
+  const [rubricPrompt, setRubricPrompt] = useState("");
+  const [refiningRubric, setRefiningRubric] = useState(false);
   const [suggestingRubric, setSuggestingRubric] = useState(false);
   const rubricDebounceRef = useRef(null);
   const textRef = useRef(null);
@@ -178,13 +183,13 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const fullTextRef = useRef(null);
 
   const localRef = useRef({});
-  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localPairs, localPartialPoints };
+  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localPairs, localPartialPoints, localRules };
   useEffect(() => {
     return () => {
       const s = localRef.current;
       onUpdate("text", s.localText); onUpdate("solution", s.localSolution); onUpdate("options", s.localOptions);
       onUpdate("fullText", s.localFullText); onUpdate("blanks", s.localBlanks); onUpdate("points", s.localPoints);
-      onUpdate("pairs", s.localPairs); onUpdate("partialPoints", s.localPartialPoints);
+      onUpdate("pairs", s.localPairs); onUpdate("partialPoints", s.localPartialPoints); onUpdate("rules", s.localRules);
     };
   }, []);
 
@@ -205,6 +210,31 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
     }, 1500);
     return () => clearTimeout(rubricDebounceRef.current);
   }, [localSolution]);
+
+  const refineRubricWithPrompt = async (promptText) => {
+    if (!promptText.trim()) return;
+    setRefiningRubric(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const currentCriteria = localPartialPoints.map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
+      const prompt = `Überarbeite den Bewertungsmaßstab basierend auf dem Feedback.
+Frage: ${localText || tq.text || "(Fragetext)"}
+Musterlösung: ${localSolution || "(keine)"}
+Maximale Punktzahl: ${localPoints}
+${currentCriteria ? `Aktueller Maßstab:\n${currentCriteria}` : ""}
+Feedback: ${promptText}
+Summe muss ${localPoints} Punkte ergeben. Gib NUR JSON zurück: {"partialPoints": [{"points": <Zahl>, "description": "<Kriterium>"}]}`;
+      const res = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await res.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const result = JSON.parse(text.replace(/```json|```/g, "").trim());
+      if (result?.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); setRubricPrompt(""); }
+    } catch (e) {}
+    setRefiningRubric(false);
+  };
 
   const isQaType = tq.type === "qa" || tq.type === "open";
 
@@ -348,11 +378,45 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
               </button>
             )}
           </div>
+
+          {/* Musterlösung */}
           <textarea ref={solutionRef} value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
             placeholder="Musterlösung / Erwartungshorizont..." rows={2}
             style={{ width: "100%", padding: "6px 10px", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "4px" }} />
           <SpecialCharBar inputRef={solutionRef} value={localSolution} onChange={val => { setLocalSolution(val); onUpdate("solution", val); }} />
-          <div style={{ marginTop: "4px" }}>
+
+          {/* Korrektur-Regeln Toggle-Chips */}
+          <div style={{ marginTop: "10px", marginBottom: "6px" }}>
+            <div style={{ fontSize: "10px", fontWeight: 700, color: "#2563a8", letterSpacing: "0.4px", marginBottom: "5px" }}>KORREKTURREGELN</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+              {localRules.map(r => (
+                <button key={r.id} type="button" onClick={() => {
+                  const updated = localRules.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x);
+                  setLocalRules(updated); onUpdate("rules", updated);
+                }} style={{ padding: "3px 9px", borderRadius: "20px", border: `1.5px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                  {r.enabled ? "✓" : "○"} {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Maßstab verfeinern per Prompt */}
+          <div style={{ marginBottom: "8px" }}>
+            <div style={{ fontSize: "10px", fontWeight: 700, color: "#2563a8", letterSpacing: "0.4px", marginBottom: "5px" }}>MASSTAB VERFEINERN</div>
+            <div style={{ display: "flex", gap: "5px" }}>
+              <input value={rubricPrompt} onChange={e => setRubricPrompt(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && rubricPrompt.trim()) refineRubricWithPrompt(rubricPrompt); }}
+                placeholder='z.B. "strenger bei Grammatik" oder "Vergangenheitsform akzeptieren"'
+                style={{ flex: 1, padding: "5px 8px", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "11px", fontFamily: "inherit" }} />
+              <button type="button" onClick={() => refineRubricWithPrompt(rubricPrompt)} disabled={!rubricPrompt.trim() || refiningRubric}
+                style={{ padding: "5px 9px", background: rubricPrompt.trim() ? "#2563a8" : "#e2e8f0", color: rubricPrompt.trim() ? "#fff" : "#94a3b8", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: rubricPrompt.trim() ? "pointer" : "not-allowed", flexShrink: 0, fontFamily: "inherit" }}>
+                {refiningRubric ? "⏳" : "↩"}
+              </button>
+            </div>
+          </div>
+
+          {/* Teilpunkte */}
+          <div>
             {localPartialPoints.map((p, i) => (
               <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "5px" }}>
                 <input type="number" value={p.points} min={0} step={0.5} onChange={e => { const pp = [...localPartialPoints]; pp[i] = { ...pp[i], points: Number(e.target.value) }; setLocalPartialPoints(pp); onUpdate("partialPoints", pp); const sum = pp.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }} style={{ width: "50px", padding: "4px 6px", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "12px", textAlign: "center" }} />
@@ -370,10 +434,8 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
 }
 
 export default function TestEditor({ navigate, onLogout, currentUser, editingTest }) {
-  // Bestehende Tests können sections haben — wir normalisieren sie zu tasks
   const normalizeQuestions = (data) => {
     if (!data || data.length === 0) return [];
-    // Wenn erstes Element ein section ist, flatten
     if (data[0]?.type === "section") {
       const tasks = [];
       for (const section of data) {
@@ -431,7 +493,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
     try {
       const ext = file.name.split(".").pop().toLowerCase();
       let contentBlocks = [];
-      const PROMPT = `Analysiere diesen Test/diese Prüfungsarbeit und extrahiere alle Aufgaben. Gib das Ergebnis als reines JSON-Array zurück (keine Markdown-Backticks, kein Text drumherum). Jede Aufgabe hat folgende Felder: type, text, points, options, correctAnswer, pairs, solution, partialPoints:[]. Erkenne den Typ automatisch. Verwende 'qa' statt 'open' für offene Antworten.`;
+      const PROMPT = `Analysiere diesen Test und extrahiere alle Aufgaben als reines JSON-Array. Felder: type, text, points, options, correctAnswer, pairs, solution, partialPoints:[]. Verwende 'qa' für offene Antworten.`;
       if (ext === "docx") {
         const arrayBuffer = await file.arrayBuffer();
         const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
@@ -439,7 +501,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
         const xmlFile = zip.file("word/document.xml"); if (!xmlFile) throw new Error("Ungültige DOCX-Datei");
         const xml = await xmlFile.async("string");
         const text = xml.replace(/<w:p[ >]/g, "\n<w:p ").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\n{3,}/g, "\n\n").trim();
-        if (!text.trim()) throw new Error("Kein Text extrahiert");
         contentBlocks = [{ type: "text", text: `${PROMPT}\n\nInhalt:\n\n${text}` }];
       } else if (ext === "pdf" || ["jpg","jpeg","png","webp"].includes(ext)) {
         const base64 = await new Promise((res, rej) => { const reader = new FileReader(); reader.onload = () => res(reader.result.split(",")[1]); reader.onerror = rej; reader.readAsDataURL(file); });
@@ -447,11 +508,10 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
         contentBlocks = [ext === "pdf" ? { type: "document", source: { type: "base64", media_type: mediaType, data: base64 } } : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: PROMPT }];
       } else { throw new Error("Nicht unterstütztes Format"); }
       const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 4000, messages: [{ role: "user", content: contentBlocks }] }) });
-      const rawText = await response.text(); if (!response.ok) throw new Error(`Edge Function Fehler ${response.status}`);
+      const rawText = await response.text();
       const data = JSON.parse(rawText); const text = data.content?.find(b => b.type === "text")?.text || "";
-      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); if (!Array.isArray(parsed)) throw new Error("Kein Array erhalten");
-      // Importierte Fragen als eine Aufgabe mit Unteraufgaben einfügen
-      const importedTask = { ...newTask(), taskTitle: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "), questions: parsed.map(q => ({ id: Date.now() + Math.random(), type: q.type || "qa", text: q.text || "", points: Number(q.points) || 1, options: q.options || [], correctAnswer: q.correctAnswer ?? null, pairs: q.pairs || [], solution: q.solution || "", partialPoints: [], blanks: [], fullText: "" })) };
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+      const importedTask = { ...newTask(), taskTitle: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "), questions: parsed.map(q => ({ id: Date.now() + Math.random(), type: q.type || "qa", text: q.text || "", points: Number(q.points) || 1, options: q.options || [], correctAnswer: q.correctAnswer ?? null, pairs: q.pairs || [], solution: q.solution || "", partialPoints: [], blanks: [], fullText: "", rules: DEFAULT_RULES.map(r => ({ ...r })) })) };
       setQuestions(prev => [...prev, importedTask]);
       if (!title) setTitle(file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
     } catch (err) { setImportError(`Fehler beim Importieren: ${err.message}`); }
@@ -492,7 +552,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
         {importError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", fontSize: "13px", color: "#dc2626" }}>⚠️ {importError}</div>}
         {importing && <div style={{ background: "#f0f7ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "16px", marginBottom: "16px", fontSize: "13px", color: "#2563a8", textAlign: "center" }}><div style={{ fontSize: "24px", marginBottom: "8px" }}>🤖</div><strong>Claude analysiert die Datei...</strong></div>}
 
-        {/* Meta */}
         <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
             <div>
@@ -515,9 +574,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
             <input type="checkbox" checked={antiCheat} onChange={e => setAntiCheat(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
             🛡️ Anti-Cheat als Standard aktivieren
           </label>
-
-
-
           <details>
             <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#374151", userSelect: "none" }}>📊 Notenschlüssel anpassen</summary>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
@@ -530,7 +586,6 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
           </details>
         </div>
 
-        {/* Aufgaben */}
         {questions.map((task, index) => (
           <TaskEditor key={task.id} task={task} tIdx={index}
             onUpdate={(field, val) => updateTask(task.id, field, val)}
@@ -555,11 +610,11 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "400px", width: "100%", textAlign: "center" }}>
             <div style={{ fontSize: "48px", marginBottom: "12px" }}>💾</div>
             <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Entwurf speichern?</h3>
-            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.5 }}>Du hast ungespeicherte Änderungen. Möchtest du die Vorlage speichern bevor du die Seite verlässt?</p>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.5 }}>Du hast ungespeicherte Änderungen.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <button onClick={async () => { await handleSave(); setShowLeaveModal(false); if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data); }} style={{ padding: "12px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>💾 Speichern und verlassen</button>
               <button onClick={() => { setShowLeaveModal(false); if (pendingNavTarget) navigate(pendingNavTarget.target, pendingNavTarget.data); }} style={{ padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>Ohne Speichern verlassen</button>
-              <button onClick={() => setShowLeaveModal(false)} style={{ padding: "12px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>Abbrechen — weiter bearbeiten</button>
+              <button onClick={() => setShowLeaveModal(false)} style={{ padding: "12px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>Abbrechen</button>
             </div>
           </div>
         </div>
