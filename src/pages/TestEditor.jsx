@@ -58,14 +58,6 @@ function SpecialCharBar({ inputRef, value, onChange }) {
   );
 }
 
-const DEFAULT_RULES = [
-  { id: "capitalize", label: "Groß-/Kleinschreibung ignorieren", enabled: true },
-  { id: "typo", label: "Einzelne Tippfehler tolerieren", enabled: true },
-  { id: "synonym", label: "Synonyme akzeptieren", enabled: true },
-  { id: "article", label: "Artikel ignorieren", enabled: false },
-  { id: "to", label: "Infinitivpartikel 'to' optional", enabled: false },
-];
-
 const newTask = () => ({ id: Date.now() + Math.random(), type: "task", taskTitle: "", taskText: "", questions: [] });
 
 const newTaskQuestion = (type) => ({
@@ -75,35 +67,7 @@ const newTaskQuestion = (type) => ({
   correctAnswer: null, correctAnswers: [],
   pairs: type === "assignment" ? [{ left: "", right: "" }] : [],
   solution: "", partialPoints: [], blanks: [], fullText: "",
-  rules: (type === "qa" || type === "open") ? DEFAULT_RULES.map(r => ({ ...r })) : [],
 });
-
-const suggestRubric = async (questionText, points, solution, supabaseUrl) => {
-  const prompt = `Du bist ein erfahrener Schullehrer und erstellst einen Bewertungsmaßstab für die folgende offene Aufgabe.
-
-Aufgabe: ${questionText}
-${solution ? `Musterlösung/Hinweis: ${solution}` : ""}
-Maximale Punktzahl: ${points}
-
-Erstelle einen sinnvollen Bewertungsmaßstab mit Teilpunkten (in 0.5-Schritten, Summe = ${points} Punkte).
-
-Gib das Ergebnis NUR als JSON zurück:
-{
-  "solution": "<kurze Musterlösung, 1-2 Sätze>",
-  "partialPoints": [
-    {"points": <Zahl>, "description": "<Kriterium>"}
-  ]
-}
-Die Summe der partialPoints muss exakt ${points} ergeben.`;
-  const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
-  });
-  const data = await response.json();
-  const text = data.content?.map(b => b.text || "").join("") || "";
-  return JSON.parse(text.replace(/```json|```/g, "").trim());
-};
 
 function TaskEditor({ task, tIdx, onUpdate, onRemove, onAddQuestion, onUpdateQuestion, onRemoveQuestion, onMoveUp, onMoveDown }) {
   const [localTitle, setLocalTitle] = useState(task.taskTitle || "");
@@ -170,71 +134,24 @@ function TaskQuestionEditor({ tq, tIdx, tqIdx, onUpdate, onRemove }) {
   const [localFullText, setLocalFullText] = useState(tq.fullText || "");
   const [localBlanks, setLocalBlanks] = useState(tq.blanks || []);
   const [localPoints, setLocalPoints] = useState(tq.points || 1);
-  const originalPointsRef = useRef(tq.partialPoints?.length ? null : (tq.points || 1));
   const [localPairs, setLocalPairs] = useState(tq.pairs?.length ? tq.pairs : [{ left: "", right: "" }]);
-  const [localPartialPoints, setLocalPartialPoints] = useState(tq.partialPoints || []);
-  const [localRules, setLocalRules] = useState(tq.rules?.length ? tq.rules : DEFAULT_RULES.map(r => ({ ...r })));
-  const [rubricPrompt, setRubricPrompt] = useState("");
-  const [refiningRubric, setRefiningRubric] = useState(false);
-  const [suggestingRubric, setSuggestingRubric] = useState(false);
-  const rubricDebounceRef = useRef(null);
+
   const textRef = useRef(null);
   const solutionRef = useRef(null);
   const fullTextRef = useRef(null);
 
   const localRef = useRef({});
-  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localPairs, localPartialPoints, localRules };
+  localRef.current = { localText, localSolution, localOptions, localFullText, localBlanks, localPoints, localPairs, localPartialPoints };
   useEffect(() => {
     return () => {
       const s = localRef.current;
       onUpdate("text", s.localText); onUpdate("solution", s.localSolution); onUpdate("options", s.localOptions);
       onUpdate("fullText", s.localFullText); onUpdate("blanks", s.localBlanks); onUpdate("points", s.localPoints);
-      onUpdate("pairs", s.localPairs); onUpdate("partialPoints", s.localPartialPoints); onUpdate("rules", s.localRules);
+      onUpdate("pairs", s.localPairs); onUpdate("partialPoints", s.localPartialPoints);
     };
   }, []);
 
-  useEffect(() => {
-    if (tq.type !== "qa" && tq.type !== "open") return;
-    if (!localSolution.trim()) return;
-    if (localPartialPoints.length > 0) return;
-    clearTimeout(rubricDebounceRef.current);
-    rubricDebounceRef.current = setTimeout(async () => {
-      setSuggestingRubric(true);
-      try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
-        if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); const sum = result.partialPoints.reduce((s, p) => s + Number(p.points || 0), 0); setLocalPoints(sum); onUpdate("points", sum); }
-        if (result.solution && !localSolution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
-      } catch (e) {}
-      setSuggestingRubric(false);
-    }, 1500);
-    return () => clearTimeout(rubricDebounceRef.current);
-  }, [localSolution]);
 
-  const refineRubricWithPrompt = async (promptText) => {
-    if (!promptText.trim()) return;
-    setRefiningRubric(true);
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const currentCriteria = localPartialPoints.map(p => `- ${p.points} Pkt.: ${p.description}`).join("\n");
-      const prompt = `Überarbeite den Bewertungsmaßstab basierend auf dem Feedback.
-Frage: ${localText || tq.text || "(Fragetext)"}
-Musterlösung: ${localSolution || "(keine)"}
-Maximale Punktzahl: ${localPoints}
-${currentCriteria ? `Aktueller Maßstab:\n${currentCriteria}` : ""}
-Feedback: ${promptText}
-Summe muss ${localPoints} Punkte ergeben. Gib NUR JSON zurück: {"partialPoints": [{"points": <Zahl>, "description": "<Kriterium>"}]}`;
-      const res = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, messages: [{ role: "user", content: prompt }] }),
-      });
-      const data = await res.json();
-      const text = data.content?.map(b => b.text || "").join("") || "";
-      const result = JSON.parse(text.replace(/```json|```/g, "").trim());
-      if (result?.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); setRubricPrompt(""); }
-    } catch (e) {}
-    setRefiningRubric(false);
-  };
 
   const isQaType = tq.type === "qa" || tq.type === "open";
 
@@ -350,63 +267,11 @@ Summe muss ${localPoints} Punkte ergeben. Gib NUR JSON zurück: {"partialPoints"
 
       {isQaType && (
         <div style={{ marginTop: "10px", background: "#f0f7ff", borderRadius: "8px", padding: "10px", border: "1px solid #bfdbfe" }}>
-          <div style={{ marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "11px", color: "#2563a8", fontWeight: 600 }}>
-              📝 {suggestingRubric ? "⏳ KI erstellt Maßstab..." : localPartialPoints.length > 0 ? "✓ Bewertungsmaßstab hinterlegt" : "Musterlösung & Bewertungsmaßstab"}
-            </span>
-            {localPartialPoints.length > 0 && !suggestingRubric && (
-              <button onClick={async () => {
-                setSuggestingRubric(true);
-                try {
-                  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-                  const result = await suggestRubric(localText || tq.text, localPoints, localSolution, supabaseUrl);
-                  if (result.partialPoints?.length) { setLocalPartialPoints(result.partialPoints); onUpdate("partialPoints", result.partialPoints); }
-                  if (result.solution) { setLocalSolution(result.solution); onUpdate("solution", result.solution); }
-                } catch (e) {}
-                setSuggestingRubric(false);
-              }} style={{ padding: "3px 8px", background: "none", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "5px", fontSize: "10px", fontWeight: 600, cursor: "pointer" }}>
-                🔄 Neu vorschlagen
-              </button>
-            )}
-          </div>
-
-          {/* Musterlösung */}
+          <label style={{ fontSize: "11px", fontWeight: 600, color: "#2563a8", display: "block", marginBottom: "5px" }}>📝 Musterlösung</label>
           <textarea ref={solutionRef} value={localSolution} onChange={e => setLocalSolution(e.target.value)} onBlur={() => onUpdate("solution", localSolution)}
             placeholder="Musterlösung / Erwartungshorizont..." rows={2}
             style={{ width: "100%", padding: "6px 10px", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "4px" }} />
           <SpecialCharBar inputRef={solutionRef} value={localSolution} onChange={val => { setLocalSolution(val); onUpdate("solution", val); }} />
-
-          {/* Korrektur-Regeln Toggle-Chips */}
-          <div style={{ marginTop: "10px", marginBottom: "6px" }}>
-            <div style={{ fontSize: "10px", fontWeight: 700, color: "#2563a8", letterSpacing: "0.4px", marginBottom: "5px" }}>KORREKTURREGELN</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
-              {localRules.map(r => (
-                <button key={r.id} type="button" onClick={() => {
-                  const updated = localRules.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x);
-                  setLocalRules(updated); onUpdate("rules", updated);
-                }} style={{ padding: "3px 9px", borderRadius: "20px", border: `1.5px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                  {r.enabled ? "✓" : "○"} {r.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Maßstab verfeinern per Prompt */}
-          <div style={{ marginBottom: "8px" }}>
-            <div style={{ fontSize: "11px", fontWeight: 700, color: "#2563a8", marginBottom: "5px" }}>Bewertungsmaßstab verfeinern</div>
-            <div style={{ display: "flex", gap: "5px" }}>
-              <input value={rubricPrompt} onChange={e => setRubricPrompt(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && rubricPrompt.trim()) refineRubricWithPrompt(rubricPrompt); }}
-                placeholder='z.B. "strenger bei Grammatik" oder "Vergangenheitsform akzeptieren"'
-                style={{ flex: 1, padding: "5px 8px", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "11px", fontFamily: "inherit" }} />
-              <button type="button" onClick={() => refineRubricWithPrompt(rubricPrompt)} disabled={!rubricPrompt.trim() || refiningRubric}
-                style={{ padding: "5px 9px", background: rubricPrompt.trim() ? "#2563a8" : "#e2e8f0", color: rubricPrompt.trim() ? "#fff" : "#94a3b8", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: rubricPrompt.trim() ? "pointer" : "not-allowed", flexShrink: 0, fontFamily: "inherit" }}>
-                {refiningRubric ? "⏳" : "↩"}
-              </button>
-            </div>
-          </div>
-
-
         </div>
       )}
     </div>
@@ -491,7 +356,7 @@ export default function TestEditor({ navigate, onLogout, currentUser, editingTes
       const rawText = await response.text();
       const data = JSON.parse(rawText); const text = data.content?.find(b => b.type === "text")?.text || "";
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      const importedTask = { ...newTask(), taskTitle: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "), questions: parsed.map(q => ({ id: Date.now() + Math.random(), type: q.type || "qa", text: q.text || "", points: Number(q.points) || 1, options: q.options || [], correctAnswer: q.correctAnswer ?? null, pairs: q.pairs || [], solution: q.solution || "", partialPoints: [], blanks: [], fullText: "", rules: DEFAULT_RULES.map(r => ({ ...r })) })) };
+      const importedTask = { ...newTask(), taskTitle: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "), questions: parsed.map(q => ({ id: Date.now() + Math.random(), type: q.type || "qa", text: q.text || "", points: Number(q.points) || 1, options: q.options || [], correctAnswer: q.correctAnswer ?? null, pairs: q.pairs || [], solution: q.solution || "", partialPoints: [], blanks: [], fullText: "" })) };
       setQuestions(prev => [...prev, importedTask]);
       if (!title) setTitle(file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
     } catch (err) { setImportError(`Fehler beim Importieren: ${err.message}`); }
