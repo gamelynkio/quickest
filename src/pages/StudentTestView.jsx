@@ -714,46 +714,18 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
   );
 
   if (submitted) {
-    const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97316", "5": "#ef4444", "6": "#dc2626" };
-    const result = submissionResult;
-    const isReleased = result?.released;
     return (
-      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%)", padding: "20px", overflowY: "auto" }}>
+      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div style={{ maxWidth: "520px", margin: "0 auto", paddingTop: "40px" }}>
-          {!isReleased ? (
-            <div style={{ background: "#fff", borderRadius: "24px", padding: "40px 32px", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-              <div style={{ fontSize: "64px", marginBottom: "16px" }}>✅</div>
-              <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 12px" }}>Test abgegeben!</h2>
-              <p style={{ color: "#64748b", marginBottom: "20px", fontSize: "15px", lineHeight: 1.6 }}>Deine Antworten wurden gespeichert.</p>
-              <div style={{ background: "#f0f7ff", borderRadius: "12px", padding: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{ width: "18px", height: "18px", border: "3px solid #bfdbfe", borderTop: "3px solid #2563a8", borderRadius: "50%", animation: "spin 1s linear infinite", flexShrink: 0 }} />
-                <p style={{ color: "#2563a8", fontSize: "13px", margin: 0, textAlign: "left", lineHeight: 1.5 }}>
-                  Warte auf Auswertung — deine Note erscheint hier automatisch.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Note */}
-              <div style={{ background: "#fff", borderRadius: "24px", padding: "32px", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)", marginBottom: "16px" }}>
-                <div style={{ fontSize: "48px", marginBottom: "8px" }}>🎉</div>
-                <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", margin: "0 0 16px" }}>Ergebnis</h2>
-                <div style={{ fontSize: "80px", fontWeight: 900, color: GRADE_COLOR[result.grade] || "#374151", lineHeight: 1, marginBottom: "8px" }}>{result.grade}</div>
-                <div style={{ fontSize: "16px", color: "#64748b" }}>
-                  {result.score} / {result.total_points} Punkte · {Math.round((result.score / (result.total_points || 1)) * 100)}%
-                </div>
-              </div>
-              {/* Korrekturen pro Aufgabe */}
-              <SubmissionDetails submissionId={submissionId} />
-              {/* Navigation zurück */}
-              <div style={{ marginTop: "16px", paddingBottom: "40px" }}>
-                <button onClick={() => onFinish()} style={{ width: "100%", padding: "16px", background: "#fff", color: "#2563a8", border: "none", borderRadius: "16px", fontWeight: 700, fontSize: "16px", cursor: "pointer", boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}>
-                  Zurück zur Übersicht →
-                </button>
-              </div>
-            </>
-          )}
+        <div style={{ background: "#fff", borderRadius: "24px", padding: "40px 32px", maxWidth: "400px", width: "100%", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+          <div style={{ fontSize: "64px", marginBottom: "16px" }}>✅</div>
+          <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 12px" }}>Test abgegeben!</h2>
+          <p style={{ color: "#64748b", fontSize: "15px", lineHeight: 1.7, marginBottom: "28px" }}>
+            Deine Antworten wurden gespeichert. Deine Lehrkraft korrigiert den Test — sobald die Note freigegeben wird, siehst du sie in deiner Übersicht.
+          </p>
+          <button onClick={() => onFinish()} style={{ width: "100%", padding: "14px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "16px", cursor: "pointer" }}>
+            Zur Übersicht →
+          </button>
         </div>
       </div>
     );
