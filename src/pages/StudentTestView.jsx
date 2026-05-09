@@ -200,16 +200,25 @@ function DebugBar({ assignmentRef, serverOffsetRef }) {
 // Zeigt Korrekturen nach Freigabe direkt auf dem Abgabe-Screen
 function SubmissionDetails({ submissionId }) {
   const [details, setDetails] = useState(null);
+  const [questionData, setQuestionData] = useState([]);
 
   useEffect(() => {
     if (!submissionId) return;
-    supabase.from("submissions").select("answers, ai_corrections, manual_overrides")
-      .eq("id", submissionId).single()
-      .then(({ data }) => { if (data) setDetails(data); });
-    // Auch bei Änderungen neu laden
+    const load = async () => {
+      const { data: sub } = await supabase.from("submissions")
+        .select("answers, ai_corrections, manual_overrides, assignment_id")
+        .eq("id", submissionId).single();
+      if (sub) {
+        setDetails(sub);
+        const { data: asgn } = await supabase.from("assignments")
+          .select("question_data").eq("id", sub.assignment_id).single();
+        if (asgn?.question_data) setQuestionData(asgn.question_data);
+      }
+    };
+    load();
     const poll = setInterval(async () => {
       const { data } = await supabase.from("submissions")
-        .select("answers, ai_corrections, manual_overrides")
+        .select("answers, ai_corrections, manual_overrides, assignment_id")
         .eq("id", submissionId).single();
       if (data) setDetails(data);
     }, 5000);
@@ -218,24 +227,35 @@ function SubmissionDetails({ submissionId }) {
 
   if (!details) return null;
   const corrections = details.ai_corrections || {};
-  const keys = Object.keys(corrections);
-  if (keys.length === 0) return null;
+  if (Object.keys(corrections).length === 0) return null;
+
+  // Reihenfolge aus question_data
+  const orderedQs = flattenQuestions(questionData).filter(q => corrections[String(q.id)] !== undefined);
+  const orderedKeys = orderedQs.length > 0
+    ? orderedQs.map(q => ({ qId: String(q.id), question: q }))
+    : Object.keys(corrections).map(qId => ({ qId, question: null }));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-      {keys.map((qId, i) => {
+      {orderedKeys.map(({ qId, question }, i) => {
         const c = corrections[qId];
+        if (!c) return null;
         const points = (details.manual_overrides || {})[qId] !== undefined
           ? details.manual_overrides[qId] : c.points;
         const ans = details.answers?.[qId] ?? details.answers?.[Number(qId)];
         return (
           <div key={qId} style={{ background: "#fff", borderRadius: "16px", padding: "18px 20px", boxShadow: "0 4px 16px rgba(0,0,0,0.1)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
               <span style={{ fontSize: "13px", fontWeight: 700, color: "#374151" }}>Aufgabe {i + 1}</span>
               <span style={{ fontSize: "13px", fontWeight: 800, color: c.correct ? "#16a34a" : "#dc2626" }}>
                 {points} / {c.maxPoints} Pkt.
               </span>
             </div>
+            {question?.text && (
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a", marginBottom: "6px" }}>
+                {question.text}
+              </div>
+            )}
             {ans !== undefined && ans !== "" && (
               <div style={{ fontSize: "13px", color: "#64748b", marginBottom: "8px" }}>
                 <em>Deine Antwort:</em> {Array.isArray(ans) ? ans.join(", ") : String(ans)}
