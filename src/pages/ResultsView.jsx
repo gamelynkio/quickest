@@ -366,6 +366,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [makeupRequireSeb, setMakeupRequireSeb] = useState(true);
   const [creatingMakeup, setCreatingMakeup] = useState(false);
   const [questionFeedback, setQuestionFeedback] = useState({});
+  const [answerEdits, setAnswerEdits] = useState({}); // { qId: editedAnswer }
+  const [savingAnswer, setSavingAnswer] = useState(null);
   const [refiningQuestion, setRefiningQuestion] = useState(null);
   const [quickPrompt, setQuickPrompt] = useState("");
   const [rulePropagateModal, setRulePropagateModal] = useState(null);
@@ -639,6 +641,22 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       reviewed: false,
     }));
     await startBatchCorrection(toReset, { ...assignmentData, question_data: updatedAsgn });
+  };
+
+
+  const saveEditedAnswer = async (qId, newAnswer) => {
+    if (!selectedSubmission) return;
+    setSavingAnswer(qId);
+    const updatedAnswers = { ...(selectedSubmission.answers || {}), [qId]: newAnswer };
+    await supabase.from("submissions").update({ answers: updatedAnswers }).eq("id", selectedSubmission.id);
+    const updated = { ...selectedSubmission, answers: updatedAnswers };
+    setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? updated : s));
+    setSelectedSubmission(updated);
+    setAnswerEdits(prev => { const next = { ...prev }; delete next[qId]; return next; });
+    setSavingAnswer(null);
+    // Neu korrigieren mit der geänderten Antwort
+    const toReset = [{ ...updated, ai_corrections: Object.fromEntries(Object.entries(updated.ai_corrections || {}).map(([k, v]) => [k, { ...v, aiReviewed: false, needsReview: true }])), reviewed: false }];
+    startBatchCorrection(toReset);
   };
 
   const refineQuestionWithFeedback = async (qId, feedbackText) => {
@@ -970,14 +988,28 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               {correction.correct === false && <span style={{ color: "#dc2626" }}>✗</span>}
                               {isAiReviewed && <span style={{ fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>🤖 KI</span>}
                             </div>
-                            <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
-                              <em style={{ color: "#94a3b8" }}>Antwort:</em> {(() => {
-                                const ans = selectedSubmission.answers?.[qId] ?? selectedSubmission.answers?.[Number(qId)];
-                                if (ans === undefined || ans === null || ans === "") return "–";
-                                if (Array.isArray(ans)) return ans.join(", ");
-                                return String(ans);
-                              })()}
-                            </div>
+                            {/* Editierbares Antwortfeld */}
+                            {(() => {
+                              const ans = selectedSubmission.answers?.[qId] ?? selectedSubmission.answers?.[Number(qId)];
+                              const currentVal = answerEdits[qId] !== undefined ? answerEdits[qId] : (Array.isArray(ans) ? ans.join(", ") : String(ans ?? ""));
+                              const isDirty = answerEdits[qId] !== undefined && answerEdits[qId] !== (Array.isArray(ans) ? ans.join(", ") : String(ans ?? ""));
+                              return (
+                                <div style={{ marginBottom: "8px" }}>
+                                  <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600, marginBottom: "4px" }}>ANTWORT DES SCHÜLERS</div>
+                                  <div style={{ display: "flex", gap: "6px", alignItems: "flex-start" }}>
+                                    <input value={currentVal} onChange={e => setAnswerEdits(prev => ({ ...prev, [qId]: e.target.value }))}
+                                      style={{ flex: 1, padding: "6px 10px", border: `1.5px solid ${isDirty ? "#f97316" : "#e2e8f0"}`, borderRadius: "6px", fontSize: "13px", fontFamily: "inherit", background: isDirty ? "#fff7ed" : "#fff" }} />
+                                    {isDirty && (
+                                      <button onClick={() => saveEditedAnswer(qId, answerEdits[qId])} disabled={savingAnswer === qId}
+                                        style={{ padding: "6px 10px", background: "#f97316", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
+                                        {savingAnswer === qId ? "⏳" : "✓ Speichern"}
+                                      </button>
+                                    )}
+                                  </div>
+                                  {isDirty && <div style={{ fontSize: "10px", color: "#f97316", marginTop: "3px" }}>Änderung löst Neu-Korrektur aus</div>}
+                                </div>
+                              );
+                            })()}
                             {(correction.comment || correction.usedCriteria) && (
                               <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "6px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
                                 <span style={{ marginRight: "4px" }}>🤖</span>
