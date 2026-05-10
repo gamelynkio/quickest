@@ -468,8 +468,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         for (const q of openQs) {
           const qId = String(q.id);
           const hasAnswer = s.answers?.[q.id]?.trim() || s.answers?.[qId]?.trim();
-          if (!merged[q.id] && !merged[qId] && !hasAnswer) {
-            merged[qId] = { points: 0, correct: false, comment: "Keine Antwort gegeben.", aiReviewed: true, needsReview: false, maxPoints: Number(q.points) };
+          const existingNeedsReview = merged[qId]?.needsReview && !merged[qId]?.aiReviewed;
+          if ((!merged[qId] || existingNeedsReview) && !hasAnswer) {
+            merged[qId] = { ...(merged[qId] || {}), points: 0, correct: false, comment: "Keine Antwort gegeben.", aiReviewed: true, needsReview: false, maxPoints: Number(q.points) };
           }
         }
         let newScore = 0;
@@ -1069,14 +1070,24 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 </div>
                               );
                             })()}
-                            {(correction.comment || correction.usedCriteria) && (
-                              <div style={{ background: isStillOpen ? "#fef9c3" : isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "6px", fontSize: "12px", color: isStillOpen ? "#92400e" : isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
-                                <span style={{ marginRight: "4px" }}>🤖</span>
-                                {correction.comment?.replace("🤖 ", "")}
-                                {correction.comment && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
-                                {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
+                            {isStillOpen && (
+                              <div style={{ background: "#fef9c3", borderRadius: "8px", padding: "8px 10px", marginBottom: "6px", fontSize: "12px", color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <div style={{ width: "10px", height: "10px", border: "2px solid #fde68a", borderTop: "2px solid #92400e", borderRadius: "50%", animation: "spin 1s linear infinite", flexShrink: 0 }} />
+                                Wird bewertet...
                               </div>
                             )}
+                            {!isStillOpen && (correction.comment || correction.usedCriteria) && (() => {
+                              const commentText = correction.comment?.replace("🤖 ", "").replace("⏳ Wartet auf Bewertung", "").trim();
+                              if (!commentText && !correction.usedCriteria) return null;
+                              return (
+                                <div style={{ background: isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", marginBottom: "6px", fontSize: "12px", color: isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
+                                  <span style={{ marginRight: "4px" }}>🤖</span>
+                                  {commentText}
+                                  {commentText && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
+                                  {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
+                                </div>
+                              );
+                            })()}
 
                             {/* Klickbare Regeln pro Aufgabe */}
                             {relevantRules.length === 0 && (
@@ -1103,7 +1114,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                     {r.enabled ? "✓" : "○"} {r.label}
                                   </button>
                                 ))}
-                              </div>
+                               </div>
                             )}
 
                             {/* Maßstab vorschlagen */}
