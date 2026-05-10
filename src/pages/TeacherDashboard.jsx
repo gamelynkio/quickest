@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import TeacherLayout from "../components/TeacherLayout";
 
 const STATUS_STYLE = {
-  aktiv:   { bg: "#dcfce7", color: "#16a34a", label: "Aktiv" },
-  beendet: { bg: "#f1f5f9", color: "#64748b", label: "Beendet" },
-  entwurf: { bg: "#fef9c3", color: "#ca8a04", label: "Entwurf" },
+  aktiv:       { bg: "#dcfce7", color: "#16a34a", label: "Aktiv" },
+  beendet:     { bg: "#f1f5f9", color: "#64748b", label: "Beendet" },
+  archiviert:  { bg: "#f3f4f6", color: "#9ca3af", label: "Archiviert" },
+  entwurf:     { bg: "#fef9c3", color: "#ca8a04", label: "Entwurf" },
 };
 
 const QRCode = ({ url, size = 140 }) => (
@@ -22,6 +23,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [endConfirm, setEndConfirm] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [lobbyModal, setLobbyModal] = useState(null);
   const [lobbyStudents, setLobbyStudents] = useState([]);
   const [lobbySubmissions, setLobbySubmissions] = useState([]);
@@ -55,6 +57,8 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
         try { usernames = JSON.parse(usernames); } catch { usernames = []; }
       }
       if (usernames.length > 0) {
+        // Kurz warten damit laufende Auto-Submits zuerst landen
+        await new Promise(r => setTimeout(r, 2000));
         const { data: existing } = await supabase
           .from("submissions").select("username").eq("assignment_id", id);
         const submittedNames = new Set((existing || []).map(s => s.username));
@@ -99,6 +103,16 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const reactivateAssignment = async (id) => {
     await supabase.from("assignments").update({ status: "aktiv" }).eq("id", id);
     setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "aktiv" } : a));
+  };
+
+  const archiveAssignment = async (id) => {
+    await supabase.from("assignments").update({ status: "archiviert" }).eq("id", id);
+    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "archiviert" } : a));
+  };
+
+  const unarchiveAssignment = async (id) => {
+    await supabase.from("assignments").update({ status: "beendet" }).eq("id", id);
+    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "beendet" } : a));
   };
 
   const pauseAssignment = async (id) => {
@@ -207,8 +221,9 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
 
   // Sort: parents first, children below
   const getSorted = () => {
-    const parents = assignments.filter(a => !a.parent_assignment_id);
-    const children = assignments.filter(a => !!a.parent_assignment_id);
+    const visible = assignments.filter(a => showArchived ? a.status === "archiviert" : a.status !== "archiviert");
+    const parents = visible.filter(a => !a.parent_assignment_id);
+    const children = visible.filter(a => !!a.parent_assignment_id);
     const sorted = [];
     parents.forEach(p => {
       sorted.push({ ...p, isChild: false });
@@ -242,7 +257,12 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
         {/* Assignments table */}
         <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
           <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Testzuweisungen</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Testzuweisungen</h2>
+              <button onClick={() => setShowArchived(v => !v)} style={{ padding: "5px 12px", background: showArchived ? "#f3f4f6" : "#fff", color: showArchived ? "#6b7280" : "#64748b", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                {showArchived ? "📂 Archiv" : "📁 Archiv"}
+              </button>
+            </div>
             <button onClick={() => navigate("library")} style={{ padding: "9px 18px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📚 Test-Vorlagen</button>
           </div>
 
@@ -272,9 +292,10 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                   const mins = Math.round((a.time_limit || 0) / 60);
                   const isLobby = a.timing_mode === "lobby";
                   const lobbyStarted = isLobby && !!a.lobby_started_at;
-                  const isEnded = a.status === "beendet";
+                  const isEnded = a.status === "beendet" || a.status === "archiviert";
+                  const isArchived = a.status === "archiviert";
                   return (
-                    <tr key={a.id} style={{ borderBottom: i < arr.length - 1 ? "1px solid #f8fafc" : "none", background: isEnded ? "#f8fafc" : a.isChild ? "#fafbff" : "transparent", opacity: isEnded ? 0.75 : 1 }}>
+                    <tr key={a.id} style={{ borderBottom: i < arr.length - 1 ? "1px solid #f8fafc" : "none", background: isEnded ? "#f8fafc" : a.isChild ? "#fafbff" : "transparent", opacity: isArchived ? 0.6 : isEnded ? 0.75 : 1 }}>
                       <td style={{ padding: a.isChild ? "10px 20px 10px 40px" : "14px 20px", fontWeight: 600, fontSize: "14px", color: a.isChild ? "#4b5563" : "#0f172a" }}>
                         {a.isChild && <span style={{ color: "#94a3b8", marginRight: "8px", fontSize: "16px" }}>↳</span>}
                         {a.title}
@@ -315,10 +336,19 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                           <button onClick={() => navigate("results", a)} style={{ padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151" }}>
                             📊 Ergebnisse
                           </button>
-                          {isEnded ? (
-                            <button onClick={() => reactivateAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #bbf7d0", borderRadius: "7px", background: "#f0fdf4", fontSize: "12px", cursor: "pointer", color: "#16a34a", fontWeight: 600 }}>
-                              ▶ Reaktivieren
+                          {a.status === "archiviert" ? (
+                            <button onClick={() => unarchiveAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#f8fafc", fontSize: "12px", cursor: "pointer", color: "#64748b", fontWeight: 600 }}>
+                              📂 Aus Archiv
                             </button>
+                          ) : a.status === "beendet" ? (
+                            <>
+                              <button onClick={() => reactivateAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #bbf7d0", borderRadius: "7px", background: "#f0fdf4", fontSize: "12px", cursor: "pointer", color: "#16a34a", fontWeight: 600 }}>
+                                ▶ Reaktivieren
+                              </button>
+                              <button onClick={() => archiveAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#f8fafc", fontSize: "12px", cursor: "pointer", color: "#94a3b8", fontWeight: 600 }}>
+                                📁 Archivieren
+                              </button>
+                            </>
                           ) : a.paused_at ? (
                             <button onClick={() => resumeAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #bbf7d0", borderRadius: "7px", background: "#f0fdf4", fontSize: "12px", cursor: "pointer", color: "#16a34a", fontWeight: 600 }}>
                               ▶ Fortsetzen
@@ -328,7 +358,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                               ⏸ Pausieren
                             </button>
                           )}
-                          {!isEnded && (
+                          {!isEnded && a.status !== "archiviert" && (
                             <button onClick={() => setEndConfirm(a)} style={{ padding: "5px 10px", border: "1px solid #fde68a", borderRadius: "7px", background: "#fefce8", fontSize: "12px", cursor: "pointer", color: "#92400e", fontWeight: 600 }}>
                               ✓ Beenden
                             </button>
