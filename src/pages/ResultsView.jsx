@@ -352,6 +352,15 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
+
+  // Detail-Panel automatisch aktualisieren wenn KI die Korrektur abschließt
+  useEffect(() => {
+    if (!selectedSubmission) return;
+    const fresh = submissions.find(s => s.id === selectedSubmission.id);
+    if (fresh && JSON.stringify(fresh.ai_corrections) !== JSON.stringify(selectedSubmission.ai_corrections)) {
+      setSelectedSubmission(prev => ({ ...prev, ...fresh }));
+    }
+  }, [submissions]);
   const [overrides, setOverrides] = useState({});
   const [saving, setSaving] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
