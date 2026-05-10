@@ -396,7 +396,9 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                         </div>
                       </div>
                       <div style={{ textAlign: "center", flexShrink: 0, marginLeft: "14px" }}>
-                        {s.released && s.grade ? (
+                        {s.not_participated ? (
+                          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textAlign: "center", fontStyle: "italic" }}>nicht<br/>teilgenommen</div>
+                        ) : s.released && s.grade ? (
                           <div style={{ fontSize: "30px", fontWeight: 900, color: GRADE_COLOR[s.grade] || "#fff", lineHeight: 1 }}>{s.grade}</div>
                         ) : s.released ? (
                           <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>wird<br/>bewertet</div>
