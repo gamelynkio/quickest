@@ -45,7 +45,8 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
 
   const endAssignment = async (id) => {
     // Status auf beendet setzen
-    await supabase.from("assignments").update({ status: "beendet" }).eq("id", id);
+    const endedAt = new Date().toISOString();
+    await supabase.from("assignments").update({ status: "beendet", lobby_end_at: endedAt }).eq("id", id);
 
     // Für alle Schüler ohne Abgabe eine leere Submission erstellen
     const assignment = assignments.find(a => a.id === id);
@@ -95,7 +96,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
       }
     }
 
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "beendet" } : a));
+    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "beendet", lobby_end_at: endedAt } : a));
     setEndConfirm(null);
   };
 
@@ -110,7 +111,8 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   };
 
   const unarchiveAssignment = async (id) => {
-    await supabase.from("assignments").update({ status: "beendet" }).eq("id", id);
+    const endedAt = new Date().toISOString();
+    await supabase.from("assignments").update({ status: "beendet", lobby_end_at: endedAt }).eq("id", id);
     setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "beendet" } : a));
   };
 
@@ -379,25 +381,42 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
-                  {["Test", "Gruppe", "Aktionen"].map(h => (
+                  {["Test", "Zeitraum", "Aktionen"].map(h => (
                     <th key={h} style={{ padding: "10px 20px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {assignments.filter(a => a.status === "archiviert").map((a, i, arr) => (
-                  <tr key={a.id} style={{ borderBottom: i < arr.length - 1 ? "1px solid #f8fafc" : "none", opacity: 0.7 }}>
-                    <td style={{ padding: "12px 20px", fontWeight: 600, fontSize: "13px", color: "#64748b" }}>{a.title}</td>
-                    <td style={{ padding: "12px 20px", fontSize: "12px", color: "#94a3b8" }}>{a.groups?.name || "–"}</td>
-                    <td style={{ padding: "12px 20px" }}>
-                      <div style={{ display: "flex", gap: "6px" }}>
-                        <button onClick={() => navigate("results", a)} style={{ padding: "4px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151" }}>📊 Ergebnisse</button>
-                        <button onClick={() => unarchiveAssignment(a.id)} style={{ padding: "4px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#f8fafc", fontSize: "12px", cursor: "pointer", color: "#64748b", fontWeight: 600 }}>📂 Wiederherstellen</button>
-                        <button onClick={() => setDeleteConfirm(a.id)} style={{ padding: "4px 10px", border: "1px solid #fecaca", borderRadius: "6px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#dc2626" }}>🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {[...assignments.filter(a => a.status === "archiviert")]
+                  .sort((a, b) => new Date(b.lobby_started_at || b.created_at) - new Date(a.lobby_started_at || a.created_at))
+                  .map((a, i, arr) => {
+                    const fmt = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "–";
+                    const startStr = fmt(a.lobby_started_at);
+                    const endStr = fmt(a.lobby_end_at);
+                    return (
+                      <tr key={a.id} style={{ borderBottom: i < arr.length - 1 ? "1px solid #f8fafc" : "none", opacity: 0.75 }}>
+                        <td style={{ padding: "12px 20px" }}>
+                          <div style={{ fontWeight: 600, fontSize: "13px", color: "#64748b" }}>{a.title}</div>
+                          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "3px" }}>{a.groups?.name || "–"}</div>
+                        </td>
+                        <td style={{ padding: "12px 20px" }}>
+                          <div style={{ fontSize: "12px", color: "#64748b" }}>
+                            <span style={{ color: "#94a3b8" }}>Start:</span> {startStr}
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+                            <span style={{ color: "#94a3b8" }}>Ende:</span> {endStr}
+                          </div>
+                        </td>
+                        <td style={{ padding: "12px 20px" }}>
+                          <div style={{ display: "flex", gap: "6px" }}>
+                            <button onClick={() => navigate("results", a)} style={{ padding: "4px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151" }}>📊 Ergebnisse</button>
+                            <button onClick={() => unarchiveAssignment(a.id)} style={{ padding: "4px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#f8fafc", fontSize: "12px", cursor: "pointer", color: "#64748b", fontWeight: 600 }}>📂 Wiederherstellen</button>
+                            <button onClick={() => setDeleteConfirm(a.id)} style={{ padding: "4px 10px", border: "1px solid #fecaca", borderRadius: "6px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#dc2626" }}>🗑</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
