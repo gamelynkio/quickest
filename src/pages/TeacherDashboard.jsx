@@ -388,25 +388,35 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                 </tr>
               </thead>
               <tbody>
-                {[...assignments.filter(a => a.status === "archiviert")]
-                  .sort((a, b) => new Date(b.lobby_started_at || b.created_at) - new Date(a.lobby_started_at || a.created_at))
-                  .map((a, i, arr) => {
+                {(() => {
                     const fmt = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "–";
-                    const startStr = fmt(a.lobby_started_at);
-                    const endStr = fmt(a.lobby_end_at);
-                    return (
-                      <tr key={a.id} style={{ borderBottom: i < arr.length - 1 ? "1px solid #f8fafc" : "none", opacity: 0.75 }}>
-                        <td style={{ padding: "12px 20px" }}>
-                          <div style={{ fontWeight: 600, fontSize: "13px", color: "#64748b" }}>{a.title}</div>
-                          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "3px" }}>{a.groups?.name || "–"}</div>
+                    const archived = assignments.filter(a => a.status === "archiviert");
+                    const parents = archived.filter(a => !a.parent_assignment_id)
+                      .sort((a, b) => new Date(b.lobby_started_at || b.created_at) - new Date(a.lobby_started_at || a.created_at));
+                    const children = archived.filter(a => !!a.parent_assignment_id);
+                    const sorted = [];
+                    parents.forEach(p => {
+                      sorted.push({ ...p, isChild: false });
+                      children.filter(c => c.parent_assignment_id === p.id)
+                        .sort((a, b) => new Date(b.lobby_started_at || b.created_at) - new Date(a.lobby_started_at || a.created_at))
+                        .forEach(c => sorted.push({ ...c, isChild: true }));
+                    });
+                    // orphaned children
+                    children.filter(c => !parents.find(p => p.id === c.parent_assignment_id))
+                      .forEach(c => sorted.push({ ...c, isChild: true }));
+                    return sorted.map((a, i, arr) => (
+                      <tr key={a.id} style={{ borderBottom: i < arr.length - 1 ? "1px solid #f8fafc" : "none", opacity: 0.75, background: a.isChild ? "#fafbff" : "transparent" }}>
+                        <td style={{ padding: a.isChild ? "10px 20px 10px 40px" : "12px 20px" }}>
+                          <div style={{ fontWeight: 600, fontSize: "13px", color: "#64748b", display: "flex", alignItems: "center", gap: "6px" }}>
+                            {a.isChild && <span style={{ color: "#94a3b8", fontSize: "16px" }}>↳</span>}
+                            {a.title}
+                            {a.isChild && <span style={{ fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>Nachtest</span>}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "3px", paddingLeft: a.isChild ? "22px" : "0" }}>{a.groups?.name || "–"}</div>
                         </td>
                         <td style={{ padding: "12px 20px" }}>
-                          <div style={{ fontSize: "12px", color: "#64748b" }}>
-                            <span style={{ color: "#94a3b8" }}>Start:</span> {startStr}
-                          </div>
-                          <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
-                            <span style={{ color: "#94a3b8" }}>Ende:</span> {endStr}
-                          </div>
+                          <div style={{ fontSize: "12px", color: "#64748b" }}><span style={{ color: "#94a3b8" }}>Start:</span> {fmt(a.lobby_started_at)}</div>
+                          <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}><span style={{ color: "#94a3b8" }}>Ende:</span> {fmt(a.lobby_end_at)}</div>
                         </td>
                         <td style={{ padding: "12px 20px" }}>
                           <div style={{ display: "flex", gap: "6px" }}>
@@ -416,8 +426,8 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                           </div>
                         </td>
                       </tr>
-                    );
-                  })}
+                    ));
+                  })()}
               </tbody>
             </table>
           </div>
