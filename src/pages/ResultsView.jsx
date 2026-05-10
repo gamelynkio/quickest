@@ -401,7 +401,9 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     const channel = supabase.channel(`submissions-${assignment.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "submissions", filter: `assignment_id=eq.${assignment.id}` }, () => fetchSubmissions())
       .subscribe();
-    return () => supabase.removeChannel(channel);
+    // Polling als Backup — alle 5 Sek. neue Abgaben laden
+    const poll = setInterval(() => { if (!aiRunning) fetchSubmissions(); }, 5000);
+    return () => { supabase.removeChannel(channel); clearInterval(poll); };
   }, [assignment]);
 
   // Auto-Batch wenn neue unkorrigierte Abgaben da sind
@@ -1101,6 +1103,8 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                     {r.enabled ? "✓" : "○"} {r.label}
                                   </button>
                                 ))}
+                              </div>
+
                               </div>
                             )}
 
