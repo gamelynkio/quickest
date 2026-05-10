@@ -83,10 +83,11 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
               answers: {},
               score: 0,
               total_points: totalPoints,
-              grade,
+              grade: null,
               ai_corrections: {},
               reviewed: true,
               cheat_log: [],
+              not_participated: true,
             };
           });
           if (inserts.length > 0) {
