@@ -23,7 +23,6 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [endConfirm, setEndConfirm] = useState(null);
-  const [showArchived, setShowArchived] = useState(false);
   const [lobbyModal, setLobbyModal] = useState(null);
   const [lobbyStudents, setLobbyStudents] = useState([]);
   const [lobbySubmissions, setLobbySubmissions] = useState([]);
@@ -219,9 +218,9 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
     { label: "Abgeschlossen", value: assignments.filter(a => a.status === "beendet").length, icon: "✅", color: "#64748b" },
   ];
 
-  // Sort: parents first, children below
+  // Sort: parents first, children below (non-archived only)
   const getSorted = () => {
-    const visible = assignments.filter(a => showArchived ? a.status === "archiviert" : a.status !== "archiviert");
+    const visible = assignments.filter(a => a.status !== "archiviert");
     const parents = visible.filter(a => !a.parent_assignment_id);
     const children = visible.filter(a => !!a.parent_assignment_id);
     const sorted = [];
@@ -257,12 +256,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
         {/* Assignments table */}
         <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
           <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Testzuweisungen</h2>
-              <button onClick={() => setShowArchived(v => !v)} style={{ padding: "5px 12px", background: showArchived ? "#f3f4f6" : "#fff", color: showArchived ? "#6b7280" : "#64748b", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
-                {showArchived ? "📂 Archiv" : "📁 Archiv"}
-              </button>
-            </div>
+            <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Testzuweisungen</h2>
             <button onClick={() => navigate("library")} style={{ padding: "9px 18px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📚 Test-Vorlagen</button>
           </div>
 
@@ -373,6 +367,41 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
             </table>
           )}
         </div>
+
+        {/* Archiv */}
+        {assignments.some(a => a.status === "archiviert") && (
+          <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden", marginTop: "20px" }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid #f1f5f9", background: "#f8fafc", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "16px" }}>📁</span>
+              <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#64748b" }}>Archiv</h3>
+              <span style={{ fontSize: "12px", color: "#94a3b8" }}>— archivierte Tests, nur für Lehrer sichtbar</span>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  {["Test", "Gruppe", "Aktionen"].map(h => (
+                    <th key={h} style={{ padding: "10px 20px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {assignments.filter(a => a.status === "archiviert").map((a, i, arr) => (
+                  <tr key={a.id} style={{ borderBottom: i < arr.length - 1 ? "1px solid #f8fafc" : "none", opacity: 0.7 }}>
+                    <td style={{ padding: "12px 20px", fontWeight: 600, fontSize: "13px", color: "#64748b" }}>{a.title}</td>
+                    <td style={{ padding: "12px 20px", fontSize: "12px", color: "#94a3b8" }}>{a.groups?.name || "–"}</td>
+                    <td style={{ padding: "12px 20px" }}>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button onClick={() => navigate("results", a)} style={{ padding: "4px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151" }}>📊 Ergebnisse</button>
+                        <button onClick={() => unarchiveAssignment(a.id)} style={{ padding: "4px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#f8fafc", fontSize: "12px", cursor: "pointer", color: "#64748b", fontWeight: 600 }}>📂 Wiederherstellen</button>
+                        <button onClick={() => setDeleteConfirm(a.id)} style={{ padding: "4px 10px", border: "1px solid #fecaca", borderRadius: "6px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#dc2626" }}>🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "20px" }}>
           <div onClick={() => navigate("groups")} style={{ background: "#fff", borderRadius: "14px", padding: "20px", border: "2px dashed #e2e8f0", cursor: "pointer", textAlign: "center" }}
