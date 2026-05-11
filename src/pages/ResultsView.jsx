@@ -621,7 +621,10 @@ Die offenen Aufgaben des Tests sind:
 ${qList}
 
 Extrahiere für jeden Schüler die handgeschriebenen Antworten auf diese Aufgaben.
-Transkribiere die Handschrift so genau wie möglich.
+WICHTIG: Transkribiere EXAKT was handschriftlich steht — Buchstabe für Buchstabe.
+Korrigiere KEINE Rechtschreibfehler, Grammatikfehler oder unleserliche Stellen.
+Wenn etwas unleserlich ist, schreibe "[unleserlich]".
+Wenn eine Aufgabe nicht beantwortet wurde, schreibe "".
 
 Gib NUR dieses JSON zurück (kein Text drumherum):
 [
@@ -706,11 +709,27 @@ Gib NUR dieses JSON zurück (kein Text drumherum):
         }
       }
 
-      // Submissions neu laden und Batch-Korrektur starten
-      await fetchSubmissions();
-      setScanModal(false);
-      setScanFile(null);
-      setScanResult(null);
+      // Submissions neu laden
+      const { data: freshSubs } = await supabase
+        .from("submissions").select("*")
+        .eq("assignment_id", assignmentData.id);
+      const updated = freshSubs || [];
+      setSubmissions(updated);
+
+      // Batch-Korrektur direkt starten
+      const toCorrect = updated.filter(s =>
+        !s.reviewed && Object.keys(s.ai_corrections || {}).length === 0
+      );
+      if (toCorrect.length > 0) {
+        setScanModal(false);
+        setScanFile(null);
+        setScanResult(null);
+        startBatchCorrection(toCorrect);
+      } else {
+        setScanModal(false);
+        setScanFile(null);
+        setScanResult(null);
+      }
     } catch (e) {
       setScanError(`Fehler beim Speichern: ${e.message}`);
     }
@@ -1468,15 +1487,34 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
               </>
             ) : (
               <>
-                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#16a34a", marginBottom: "8px" }}>✓ {scanResult.length} Schüler/innen erkannt</div>
-                  {scanResult.map((s, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#374151", padding: "3px 0", borderBottom: i < scanResult.length - 1 ? "1px solid #dcfce7" : "none" }}>
-                      <span style={{ fontWeight: 600 }}>{s.student}</span>
-                      <span style={{ color: "#64748b" }}>{Object.keys(s.answers).length} Antworten</span>
-                    </div>
-                  ))}
-                </div>
+                {(() => {
+                  const knownNames = new Set((submissions || []).map(s => s.username));
+                  const unrecognized = scanResult.filter(s => !knownNames.has(s.student));
+                  return (
+                    <>
+                      <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "14px 16px", marginBottom: unrecognized.length > 0 ? "10px" : "16px" }}>
+                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#16a34a", marginBottom: "8px" }}>✓ {scanResult.length} Schüler/innen erkannt</div>
+                        {scanResult.map((s, i) => {
+                          const known = knownNames.has(s.student);
+                          return (
+                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13px", color: "#374151", padding: "4px 0", borderBottom: i < scanResult.length - 1 ? "1px solid #dcfce7" : "none" }}>
+                              <span style={{ fontWeight: 600, color: known ? "#374151" : "#dc2626" }}>
+                                {!known && "⚠️ "}{s.student}
+                                {!known && <span style={{ fontSize: "11px", color: "#dc2626", marginLeft: "6px" }}>nicht in Gruppe gefunden</span>}
+                              </span>
+                              <span style={{ color: "#64748b" }}>{Object.keys(s.answers).length} Antworten</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {unrecognized.length > 0 && (
+                        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px 14px", fontSize: "12px", color: "#dc2626", marginBottom: "16px" }}>
+                          ⚠️ {unrecognized.length} Schüler/in konnte keiner Gruppe zugeordnet werden. Bitte Namen manuell prüfen.
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 {scanError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#dc2626", marginBottom: "12px" }}>⚠️ {scanError}</div>}
                 <div style={{ display: "flex", gap: "10px" }}>
                   <button onClick={() => { setScanResult(null); setScanError(""); }} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>← Zurück</button>
