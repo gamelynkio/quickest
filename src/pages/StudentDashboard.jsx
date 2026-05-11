@@ -108,6 +108,14 @@ function SubmissionDetailModal({ submission, onClose }) {
                     return String(ans);
                   })()}
                 </div>
+                {correction.solution && (
+                  <div style={{ marginBottom: "8px" }}>
+                    <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>MUSTERLÖSUNG</div>
+                    <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
+                      {correction.solution}
+                    </div>
+                  </div>
+                )}
                 {(correction.comment || correction.usedCriteria) && (() => {
                   const commentText = correction.comment?.replace("🤖 ", "").replace("⏳ Wartet auf Bewertung", "").trim();
                   if (!commentText && !correction.usedCriteria) return null;
@@ -129,11 +137,6 @@ function SubmissionDetailModal({ submission, onClose }) {
                     <div style={{ background: "#fefce8", border: "1px solid #fde68a", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#92400e" }}>
                       ✏️ {correction.teacherComment}
                     </div>
-                  </div>
-                )}
-                {correction.solution && (
-                  <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
-                    <strong>📝 Musterlösung:</strong> {correction.solution}
                   </div>
                 )}
                 {(correction.partialPoints?.length > 0) && (
