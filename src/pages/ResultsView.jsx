@@ -1154,8 +1154,6 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                   </button>
                                 ))}
                               </div>
-
-                              </div>
                             )}
 
                             {/* Maßstab vorschlagen */}
