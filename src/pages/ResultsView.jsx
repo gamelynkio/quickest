@@ -407,9 +407,22 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     const channel = supabase.channel(`submissions-${assignment.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "submissions", filter: `assignment_id=eq.${assignment.id}` }, () => fetchSubmissions())
       .subscribe();
+
+    // Assignment-Änderungen beobachten — bei Lobby-Reset sofort Submissions leeren
+    const assignmentChannel = supabase.channel(`assignment-reset-${assignment.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "assignments", filter: `id=eq.${assignment.id}` }, (payload) => {
+        const wasReset = !payload.new.lobby_started_at && assignment.lobby_started_at;
+        if (wasReset) {
+          setSubmissions([]);
+          setSelectedSubmission(null);
+          setDetectedRules([]);
+        }
+      })
+      .subscribe();
+
     // Polling als Backup — alle 5 Sek. neue Abgaben laden
     const poll = setInterval(() => { if (!aiRunning) fetchSubmissions(); }, 5000);
-    return () => { supabase.removeChannel(channel); clearInterval(poll); };
+    return () => { supabase.removeChannel(channel); supabase.removeChannel(assignmentChannel); clearInterval(poll); };
   }, [assignment]);
 
   // Auto-Batch wenn neue unkorrigierte Abgaben da sind
