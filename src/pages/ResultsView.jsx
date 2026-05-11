@@ -384,6 +384,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [creatingMakeup, setCreatingMakeup] = useState(false);
   const [questionFeedback, setQuestionFeedback] = useState({});
   const [solutionEdits, setSolutionEdits] = useState({});
+  const [teacherComments, setTeacherComments] = useState({});
   const [maxPointEdits, setMaxPointEdits] = useState({});
   const [savingSolution, setSavingSolution] = useState(null);
 
@@ -612,7 +613,13 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
 
     // Wenn bereits freigegeben: Änderung sofort für Schüler sichtbar (released bleibt true)
     const wasReleased = selectedSubmission.released;
-    const updatedCorrections = Object.keys(maxPointEdits).length > 0 ? corrections : undefined;
+    // Lehrer-Kommentare in Korrekturen einarbeiten
+    if (Object.keys(teacherComments).length > 0) {
+      for (const [qId, tc] of Object.entries(teacherComments)) {
+        if (corrections[qId]) corrections[qId] = { ...corrections[qId], teacherComment: tc || null };
+      }
+    }
+    const updatedCorrections = (Object.keys(maxPointEdits).length > 0 || Object.keys(teacherComments).length > 0) ? corrections : undefined;
     await supabase.from("submissions").update({
       manual_overrides: updatedOverrides,
       score: newScore,
@@ -626,6 +633,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? updated : s));
     setOverrides({});
     setMaxPointEdits({});
+    setTeacherComments({});
     setSaving(false);
     setSelectedSubmission(null);
 
@@ -946,7 +954,17 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                             </td>
                             <td style={{ padding: "13px 16px" }}>
                               {!s.not_participated && (
-                                <button onClick={() => { setSelectedSubmission(s); setOverrides({}); }} style={{ padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer" }}>Details</button>
+                                <button onClick={() => {
+                                  setSelectedSubmission(s);
+                                  setOverrides({});
+                                  setMaxPointEdits({});
+                                  // Bestehende Lehrer-Kommentare laden
+                                  const initComments = {};
+                                  Object.entries(s.ai_corrections || {}).forEach(([qId, c]) => {
+                                    if (c.teacherComment) initComments[qId] = c.teacherComment;
+                                  });
+                                  setTeacherComments(initComments);
+                                }} style={{ padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer" }}>Details</button>
                               )}
                             </td>
                           </tr>
@@ -1046,6 +1064,22 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 return String(ans);
                               })()}
                             </div>
+                            {/* Lehrer-Kommentar */}
+                            {(() => {
+                              const current = teacherComments[qId] !== undefined ? teacherComments[qId] : (correction.teacherComment || "");
+                              const isDirty = teacherComments[qId] !== undefined;
+                              return (
+                                <div style={{ marginBottom: "8px" }}>
+                                  <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600, marginBottom: "4px" }}>KOMMENTAR FÜR SCHÜLER</div>
+                                  <textarea value={current} rows={2}
+                                    onChange={e => setTeacherComments(prev => ({ ...prev, [qId]: e.target.value }))}
+                                    placeholder="Eigener Kommentar für den Schüler (optional)..."
+                                    style={{ width: "100%", padding: "6px 10px", border: `1.5px solid ${isDirty && current ? "#2563a8" : "#e2e8f0"}`, borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", background: isDirty && current ? "#f0f7ff" : "#fff" }} />
+                                  {isDirty && <div style={{ fontSize: "10px", color: "#2563a8", marginTop: "2px" }}>Wird beim Speichern für den Schüler sichtbar</div>}
+                                </div>
+                              );
+                            })()}
+
                             {/* Editierbare Musterlösung */}
                             {(() => {
                               const q = flattenQs(assignmentData?.question_data || []).find(q => String(q.id) === qId);
@@ -1114,7 +1148,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                     {r.enabled ? "✓" : "○"} {r.label}
                                   </button>
                                 ))}
-                               </div>
+                              </div>
                             )}
 
                             {/* Maßstab vorschlagen */}
