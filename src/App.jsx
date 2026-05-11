@@ -80,7 +80,7 @@ export default function App() {
     if (page === "testEditor") { setEditingTest(data); persistPage(page, data); }
     else if (page === "testPreview") { setEditingTest(data); persistPage(page, data); }
     else if (page === "results") { setViewingResults(data); persistPage(page, null); }
-    else if (page === "testPrint") { setPrintAssignment(data); persistPage(page, null); }
+    else if (page === "testPrint") { setPrintAssignment(data); persistPage("dashboard", null); }
     else { persistPage(page, null); }
     setCurrentPage(page);
   };
@@ -162,6 +162,6 @@ export default function App() {
   if (currentPage === "testPreview") return <TestPreview {...teacherNav} editingTest={editingTest} questions={editingTest?.question_data || []} />;
   if (currentPage === "share") return <SharePage token={null} currentUser={profile} onImported={() => navigate("library")} />;
   if (currentPage === "results") return <ResultsView {...teacherNav} assignment={viewingResults} />;
-  if (currentPage === "testPrint") return <TestPrintView assignment={printAssignment} navigate={navigate} />;
+  if (currentPage === "testPrint") return printAssignment ? <TestPrintView assignment={printAssignment} navigate={navigate} /> : null;
   return <TeacherDashboard {...teacherNav} />;
 }
