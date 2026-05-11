@@ -139,19 +139,6 @@ function SubmissionDetailModal({ submission, onClose }) {
                     </div>
                   </div>
                 )}
-                {(correction.partialPoints?.length > 0) && (
-                  <details>
-                    <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none", padding: "2px 0" }}>📋 Bewertungsmaßstab</summary>
-                    <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "3px" }}>
-                      {correction.partialPoints.map((p, pi) => (
-                        <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", alignItems: "center" }}>
-                          <span style={{ background: "#eff6ff", borderRadius: "4px", padding: "1px 6px", fontWeight: 700, color: "#2563a8", flexShrink: 0 }}>{p.points} Pkt.</span>
-                          <span>{p.description}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                )}
               </div>
             );
           })}
