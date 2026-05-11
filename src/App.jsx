@@ -10,20 +10,20 @@ import GroupManager from "./pages/GroupManager";
 import ResultsView from "./pages/ResultsView";
 import SharePage from "./pages/SharePage";
 import TestPreview from "./pages/TestPreview";
+import TestPrintView from "./pages/TestPrintView";
 import AdminDashboard from "./pages/AdminDashboard";
-import OnboardingTour from "./components/OnboardingTour";
-import StatsView from "./pages/StatsView";
 
 export default function App() {
   const [session, setSession] = useState(undefined);
   const [profile, setProfile] = useState(null);
   const [studentUser, setStudentUser] = useState(() => {
+    // Restore student session from sessionStorage on reload
     try {
       const stored = sessionStorage.getItem("qt_student");
       return stored ? JSON.parse(stored) : null;
     } catch { return null; }
   });
-  const [studentPage, setStudentPage] = useState("dashboard");
+  const [studentPage, setStudentPage] = useState("dashboard"); // "dashboard" | "test"
   const [currentPage, setCurrentPage] = useState(() => {
     try { return sessionStorage.getItem("qt_page") || "dashboard"; } catch { return "dashboard"; }
   });
@@ -33,12 +33,8 @@ export default function App() {
       return stored ? JSON.parse(stored) : null;
     } catch { return null; }
   });
-  const [viewingResults, setViewingResults] = useState(() => {
-    try {
-      const stored = sessionStorage.getItem("qt_viewing_results");
-      return stored ? JSON.parse(stored) : null;
-    } catch { return null; }
-  });
+  const [printAssignment, setPrintAssignment] = useState(null);
+  const [viewingResults, setViewingResults] = useState(null);
 
   const persistPage = (page, test = editingTest) => {
     try {
@@ -60,6 +56,7 @@ export default function App() {
       setSession(session ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
+        // Only reset to dashboard on a real new login, not on token refresh or tab return
         if (_event === "SIGNED_IN" && initialLoadDone.current) {
           const currentStored = sessionStorage.getItem("qt_page");
           if (!currentStored || currentStored === "login") {
@@ -82,11 +79,8 @@ export default function App() {
   const navigate = (page, data = null) => {
     if (page === "testEditor") { setEditingTest(data); persistPage(page, data); }
     else if (page === "testPreview") { setEditingTest(data); persistPage(page, data); }
-    else if (page === "results") {
-      setViewingResults(data);
-      try { sessionStorage.setItem("qt_viewing_results", JSON.stringify(data)); } catch {}
-      persistPage(page, null);
-    }
+    else if (page === "results") { setViewingResults(data); persistPage(page, null); }
+    else if (page === "testPrint") { setPrintAssignment(data); persistPage(page, null); }
     else { persistPage(page, null); }
     setCurrentPage(page);
   };
@@ -112,7 +106,6 @@ export default function App() {
     try {
       sessionStorage.removeItem("qt_page");
       sessionStorage.removeItem("qt_editing_test");
-      sessionStorage.removeItem("qt_viewing_results");
     } catch {}
     if (studentUser) {
       sessionStorage.removeItem("qt_student");
@@ -131,7 +124,7 @@ export default function App() {
     return <AdminDashboard />;
   }
 
-  // Share route
+  // Check for share route: /share/[token] or /share (code import)
   const shareMatch = window.location.pathname.match(/^\/share\/([a-zA-Z0-9]+)$/);
   const shareCodePage = window.location.pathname === "/share";
   if (shareMatch || shareCodePage) {
@@ -162,29 +155,13 @@ export default function App() {
   if (!session || currentPage === "login") return <LoginPage onLogin={handleLogin} />;
 
   const teacherNav = { navigate, onLogout: handleLogout, currentUser: profile };
-
-  const teacherPage = (() => {
-    if (currentPage === "stats") return <StatsView {...teacherNav} />;
-    if (currentPage === "dashboard") return <TeacherDashboard {...teacherNav} />;
-    if (currentPage === "testEditor") return <TestEditor {...teacherNav} editingTest={editingTest} />;
-    if (currentPage === "library") return <TestLibrary {...teacherNav} />;
-    if (currentPage === "groups") return <GroupManager {...teacherNav} />;
-    if (currentPage === "testPreview") return <TestPreview {...teacherNav} editingTest={editingTest} questions={editingTest?.question_data || []} />;
-    if (currentPage === "share") return <SharePage token={null} currentUser={profile} onImported={() => navigate("library")} />;
-    if (currentPage === "results") return <ResultsView {...teacherNav} assignment={viewingResults} />;
-    return <TeacherDashboard {...teacherNav} />;
-  })();
-
-  return (
-    <>
-      {teacherPage}
-      {profile?.id && (
-        <OnboardingTour
-          userId={profile.id}
-          navigate={navigate}
-          currentPage={currentPage}
-        />
-      )}
-    </>
-  );
+  if (currentPage === "dashboard") return <TeacherDashboard {...teacherNav} />;
+  if (currentPage === "testEditor") return <TestEditor {...teacherNav} editingTest={editingTest} />;
+  if (currentPage === "library") return <TestLibrary {...teacherNav} />;
+  if (currentPage === "groups") return <GroupManager {...teacherNav} />;
+  if (currentPage === "testPreview") return <TestPreview {...teacherNav} editingTest={editingTest} questions={editingTest?.question_data || []} />;
+  if (currentPage === "share") return <SharePage token={null} currentUser={profile} onImported={() => navigate("library")} />;
+  if (currentPage === "results") return <ResultsView {...teacherNav} assignment={viewingResults} />;
+  if (currentPage === "testPrint") return <TestPrintView assignment={printAssignment} navigate={navigate} />;
+  return <TeacherDashboard {...teacherNav} />;
 }
