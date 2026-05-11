@@ -547,6 +547,12 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
               </div>
             )}
 
+            {/* Testblätter drucken */}
+            <button onClick={() => { setLobbyModal(null); navigate("testPrint", lobbyModal); }}
+              style={{ width: "100%", padding: "10px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer", marginBottom: "8px" }}>
+              🖨️ Testblätter drucken
+            </button>
+
             {!lobbyModal.lobby_started_at ? (
               <button onClick={startLobby} disabled={starting || lobbyStudents.length === 0}
                 style={{ width: "100%", padding: "16px", background: lobbyStudents.length > 0 ? "#16a34a" : "#e2e8f0", color: lobbyStudents.length > 0 ? "#fff" : "#94a3b8", border: "none", borderRadius: "12px", fontWeight: 800, fontSize: "16px", cursor: lobbyStudents.length > 0 ? "pointer" : "not-allowed" }}>
