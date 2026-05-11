@@ -25,7 +25,11 @@ export default function App() {
   });
   const [studentPage, setStudentPage] = useState("dashboard"); // "dashboard" | "test"
   const [currentPage, setCurrentPage] = useState(() => {
-    try { return sessionStorage.getItem("qt_page") || "dashboard"; } catch { return "dashboard"; }
+    try {
+      const saved = sessionStorage.getItem("qt_page") || "dashboard";
+      // testPrint braucht Live-Daten — nie aus sessionStorage wiederherstellen
+      return saved === "testPrint" ? "dashboard" : saved;
+    } catch { return "dashboard"; }
   });
   const [editingTest, setEditingTest] = useState(() => {
     try {
