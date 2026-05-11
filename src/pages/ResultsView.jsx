@@ -1064,46 +1064,8 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 return String(ans);
                               })()}
                             </div>
-                            {/* KI-Kommentar */}
-                            {isStillOpen && (
-                              <div style={{ background: "#fef9c3", borderRadius: "8px", padding: "8px 10px", marginBottom: "6px", fontSize: "12px", color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
-                                <div style={{ width: "10px", height: "10px", border: "2px solid #fde68a", borderTop: "2px solid #92400e", borderRadius: "50%", animation: "spin 1s linear infinite", flexShrink: 0 }} />
-                                Wird bewertet...
-                              </div>
-                            )}
-                            {!isStillOpen && (correction.comment || correction.usedCriteria) && (() => {
-                              const commentText = correction.comment?.replace("🤖 ", "").replace("⏳ Wartet auf Bewertung", "").trim();
-                              if (!commentText && !correction.usedCriteria) return null;
-                              return (
-                                <div style={{ marginBottom: "6px" }}>
-                                  <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>KOMMENTAR DER KI</div>
-                                  <div style={{ background: isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
-                                    <span style={{ marginRight: "4px" }}>🤖</span>
-                                    {commentText}
-                                    {commentText && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
-                                    {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
-                                  </div>
-                                </div>
-                              );
-                            })()}
 
-                            {/* Lehrer-Kommentar — direkt unter KI-Kommentar */}
-                            {(() => {
-                              const current = teacherComments[qId] !== undefined ? teacherComments[qId] : (correction.teacherComment || "");
-                              const isDirty = teacherComments[qId] !== undefined;
-                              return (
-                                <div style={{ marginBottom: "8px" }}>
-                                  <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>KOMMENTAR DER LEHRKRAFT</div>
-                                  <textarea value={current} rows={2}
-                                    onChange={e => setTeacherComments(prev => ({ ...prev, [qId]: e.target.value }))}
-                                    placeholder="Eigener Kommentar für den Schüler (optional)..."
-                                    style={{ width: "100%", padding: "6px 10px", border: `1.5px solid ${isDirty && current ? "#f97316" : "#e2e8f0"}`, borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", background: isDirty && current ? "#fff7ed" : "#fff" }} />
-                                  {isDirty && <div style={{ fontSize: "10px", color: "#f97316", marginTop: "2px" }}>Wird beim Speichern für den Schüler sichtbar</div>}
-                                </div>
-                              );
-                            })()}
-
-                            {/* Editierbare Musterlösung */}
+                            {/* Musterlösung */}
                             {(() => {
                               const q = flattenQs(assignmentData?.question_data || []).find(q => String(q.id) === qId);
                               if (!q) return null;
@@ -1128,7 +1090,46 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               );
                             })()}
 
-                            {/* Klickbare Regeln pro Aufgabe */}
+                            {/* KI-Kommentar */}
+                            {isStillOpen && (
+                              <div style={{ background: "#fef9c3", borderRadius: "8px", padding: "8px 10px", marginBottom: "6px", fontSize: "12px", color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <div style={{ width: "10px", height: "10px", border: "2px solid #fde68a", borderTop: "2px solid #92400e", borderRadius: "50%", animation: "spin 1s linear infinite", flexShrink: 0 }} />
+                                Wird bewertet...
+                              </div>
+                            )}
+                            {!isStillOpen && (correction.comment || correction.usedCriteria) && (() => {
+                              const commentText = correction.comment?.replace("🤖 ", "").replace("⏳ Wartet auf Bewertung", "").trim();
+                              if (!commentText && !correction.usedCriteria) return null;
+                              return (
+                                <div style={{ marginBottom: "6px" }}>
+                                  <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>KOMMENTAR DER KI</div>
+                                  <div style={{ background: isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
+                                    <span style={{ marginRight: "4px" }}>🤖</span>
+                                    {commentText}
+                                    {commentText && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
+                                    {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* Lehrer-Kommentar */}
+                            {(() => {
+                              const current = teacherComments[qId] !== undefined ? teacherComments[qId] : (correction.teacherComment || "");
+                              const isDirty = teacherComments[qId] !== undefined;
+                              return (
+                                <div style={{ marginBottom: "8px" }}>
+                                  <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>KOMMENTAR DER LEHRKRAFT</div>
+                                  <textarea value={current} rows={2}
+                                    onChange={e => setTeacherComments(prev => ({ ...prev, [qId]: e.target.value }))}
+                                    placeholder="Eigener Kommentar für den Schüler (optional)..."
+                                    style={{ width: "100%", padding: "6px 10px", border: `1.5px solid ${isDirty && current ? "#f97316" : "#e2e8f0"}`, borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", background: isDirty && current ? "#fff7ed" : "#fff" }} />
+                                  {isDirty && <div style={{ fontSize: "10px", color: "#f97316", marginTop: "2px" }}>Wird beim Speichern für den Schüler sichtbar</div>}
+                                </div>
+                              );
+                            })()}
+
+                            {/* Toggle-Chips */}
                             {relevantRules.length === 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
                                 {DEFAULT_RULES_FALLBACK.map(r => {
@@ -1156,7 +1157,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               </div>
                             )}
 
-                            {/* Maßstab vorschlagen */}
+                            {/* Bewertungsmaßstab vorschlagen + verfeinern */}
                             {isAiReviewed && (() => {
                               const q = flattenQs(assignmentData?.question_data || []).find(q => String(q.id) === qId);
                               if (!q || (q.partialPoints?.length > 0)) return null;
@@ -1167,8 +1168,6 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 </button>
                               );
                             })()}
-
-                            {/* Maßstab anpassen */}
                             {isAiReviewed && (
                               <div style={{ background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px" }}>
                                 <div style={{ fontSize: "11px", fontWeight: 600, color: "#6d28d9", marginBottom: "5px" }}>Bewertungsmaßstab verfeinern</div>
@@ -1184,7 +1183,6 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 </div>
                               </div>
                             )}
-
                             {(correction.partialPoints?.length > 0) && (
                               <details style={{ marginBottom: "8px" }}>
                                 <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none" }}>📋 Bewertungsmaßstab ({correction.partialPoints.length} Kriterien)</summary>
@@ -1199,6 +1197,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               </details>
                             )}
 
+                            {/* Punkte */}
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                               <label style={{ fontSize: "12px", color: "#64748b" }}>Punkte:</label>
                               <input type="number" min={0} max={correction.maxPoints} step={0.5}
