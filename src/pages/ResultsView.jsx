@@ -386,6 +386,11 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [solutionEdits, setSolutionEdits] = useState({});
   const [teacherComments, setTeacherComments] = useState({});
   const [maxPointEdits, setMaxPointEdits] = useState({});
+  const [scanModal, setScanModal] = useState(false);
+  const [scanFile, setScanFile] = useState(null);
+  const [scanProcessing, setScanProcessing] = useState(false);
+  const [scanResult, setScanResult] = useState(null); // { students: [{name, answers}] }
+  const [scanError, setScanError] = useState("");
   const [savingSolution, setSavingSolution] = useState(null);
 
   const [refiningQuestion, setRefiningQuestion] = useState(null);
@@ -587,6 +592,129 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     const ids = new Set([rule.id, ...(propagate ? sameLabel.map(r => r.id) : [])]);
     setDetectedRules(prev => prev.map(r => ids.has(r.id) ? { ...r, enabled: newEnabled } : r));
     setRulePropagateModal(null);
+  };
+
+
+  const processScan = async () => {
+    if (!scanFile) return;
+    setScanProcessing(true);
+    setScanError("");
+    setScanResult(null);
+    try {
+      // PDF → base64
+      const base64 = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result.split(",")[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(scanFile);
+      });
+
+      // Fragen für Prompt zusammenstellen
+      const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
+      const qList = openQs.map((q, i) => `Aufgabe ${i + 1} (ID: ${q.id}): ${q.text?.replace(/<[^>]+>/g, "") || "(kein Text)"}`).join("\n");
+      const testCode = String(assignmentData?.id || "").slice(-6).toUpperCase();
+
+      const prompt = `Diese PDF enthält gescannte handgeschriebene Tests mehrerer Schüler.
+Jede Schülerseite hat oben rechts eine Zeile: [SCHÜLER: <name> | TEST: ${testCode}]
+
+Die offenen Aufgaben des Tests sind:
+${qList}
+
+Extrahiere für jeden Schüler die handgeschriebenen Antworten auf diese Aufgaben.
+Transkribiere die Handschrift so genau wie möglich.
+
+Gib NUR dieses JSON zurück (kein Text drumherum):
+[
+  {
+    "student": "<exakter Schülername aus dem Header>",
+    "answers": {
+      "<Aufgaben-ID>": "<transkribierte Antwort>",
+      ...
+    }
+  }
+]`;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4000,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+              { type: "text", text: prompt }
+            ]
+          }]
+        })
+      });
+
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+
+      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Keine Schüler erkannt");
+      setScanResult(parsed);
+    } catch (e) {
+      setScanError(`Fehler: ${e.message}`);
+    }
+    setScanProcessing(false);
+  };
+
+  const applyScanResult = async () => {
+    if (!scanResult) return;
+    setScanProcessing(true);
+    try {
+      // Für jeden erkannten Schüler: Submission erstellen oder updaten
+      const { data: existingSubs } = await supabase
+        .from("submissions").select("id, username, answers")
+        .eq("assignment_id", assignmentData.id);
+      const subMap = {};
+      (existingSubs || []).forEach(s => { subMap[s.username] = s; });
+
+      const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
+      const totalPoints = flattenQs(assignmentData?.question_data || []).reduce((s, q) => s + Number(q.points || 0), 0);
+
+      for (const { student, answers } of scanResult) {
+        const existing = subMap[student];
+        if (existing) {
+          // Antworten aktualisieren
+          await supabase.from("submissions").update({
+            answers: { ...(existing.answers || {}), ...answers },
+            reviewed: false,
+          }).eq("id", existing.id);
+        } else {
+          // Neue Submission anlegen
+          const { data: studentData } = await supabase
+            .from("students").select("id")
+            .eq("username", student).eq("group_id", assignmentData.group_id).single();
+          if (studentData) {
+            await supabase.from("submissions").insert({
+              assignment_id: assignmentData.id,
+              student_id: studentData.id,
+              username: student,
+              answers,
+              score: 0,
+              total_points: totalPoints,
+              grade: null,
+              ai_corrections: {},
+              reviewed: false,
+              cheat_log: [],
+            });
+          }
+        }
+      }
+
+      // Submissions neu laden und Batch-Korrektur starten
+      await fetchSubmissions();
+      setScanModal(false);
+      setScanFile(null);
+      setScanResult(null);
+    } catch (e) {
+      setScanError(`Fehler beim Speichern: ${e.message}`);
+    }
+    setScanProcessing(false);
   };
 
   const saveOverrides = async () => {
@@ -873,6 +1001,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
           <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>
             {submissions.length} Abgaben{avg ? ` · Ø ${avg}%` : ""}
             <button onClick={fetchSubmissions} style={{ marginLeft: "12px", background: "none", border: "none", color: "#2563a8", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>🔄 Aktualisieren</button>
+            <button onClick={() => setScanModal(true)} style={{ marginLeft: "8px", padding: "4px 12px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: "7px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>📄 Scan hochladen</button>
             {submissions.some(s => !s.released) && (
               <button onClick={releaseAll} style={{ marginLeft: "12px", padding: "4px 12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>✓ Alle freigeben</button>
             )}
@@ -1308,6 +1437,60 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
           </div>
         </div>
       )}
+      {/* Scan-Upload Modal */}
+      {scanModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "520px", width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
+            <h3 style={{ margin: "0 0 6px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>📄 Gescannte Tests hochladen</h3>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px", lineHeight: 1.6 }}>
+              Lade eine PDF mit den gescannten Testblättern hoch. Jede Seite muss den Code
+              <code style={{ background: "#f1f5f9", padding: "1px 6px", borderRadius: "4px", fontSize: "12px" }}>[SCHÜLER: name | TEST: {String(assignmentData?.id || "").slice(-6).toUpperCase()}]</code> enthalten.
+            </p>
+
+            {!scanResult ? (
+              <>
+                <label style={{ display: "block", border: "2px dashed #e2e8f0", borderRadius: "12px", padding: "32px", textAlign: "center", cursor: "pointer", background: scanFile ? "#f0fdf4" : "#f8fafc", marginBottom: "16px" }}>
+                  <div style={{ fontSize: "32px", marginBottom: "8px" }}>📁</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#374151" }}>
+                    {scanFile ? scanFile.name : "PDF auswählen oder hierher ziehen"}
+                  </div>
+                  {scanFile && <div style={{ fontSize: "12px", color: "#16a34a", marginTop: "4px" }}>✓ {(scanFile.size / 1024 / 1024).toFixed(1)} MB</div>}
+                  <input type="file" accept=".pdf" style={{ display: "none" }} onChange={e => { setScanFile(e.target.files[0]); setScanError(""); }} />
+                </label>
+                {scanError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#dc2626", marginBottom: "12px" }}>⚠️ {scanError}</div>}
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button onClick={() => { setScanModal(false); setScanFile(null); setScanError(""); }} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
+                  <button onClick={processScan} disabled={!scanFile || scanProcessing}
+                    style={{ flex: 2, padding: "11px", background: scanFile && !scanProcessing ? "#16a34a" : "#e2e8f0", color: scanFile && !scanProcessing ? "#fff" : "#94a3b8", border: "none", borderRadius: "9px", fontWeight: 700, cursor: scanFile && !scanProcessing ? "pointer" : "not-allowed" }}>
+                    {scanProcessing ? "⏳ KI liest Handschriften..." : "🤖 Analysieren"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#16a34a", marginBottom: "8px" }}>✓ {scanResult.length} Schüler/innen erkannt</div>
+                  {scanResult.map((s, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#374151", padding: "3px 0", borderBottom: i < scanResult.length - 1 ? "1px solid #dcfce7" : "none" }}>
+                      <span style={{ fontWeight: 600 }}>{s.student}</span>
+                      <span style={{ color: "#64748b" }}>{Object.keys(s.answers).length} Antworten</span>
+                    </div>
+                  ))}
+                </div>
+                {scanError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#dc2626", marginBottom: "12px" }}>⚠️ {scanError}</div>}
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button onClick={() => { setScanResult(null); setScanError(""); }} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>← Zurück</button>
+                  <button onClick={applyScanResult} disabled={scanProcessing}
+                    style={{ flex: 2, padding: "11px", background: scanProcessing ? "#e2e8f0" : "#2563a8", color: scanProcessing ? "#94a3b8" : "#fff", border: "none", borderRadius: "9px", fontWeight: 700, cursor: scanProcessing ? "not-allowed" : "pointer" }}>
+                    {scanProcessing ? "⏳ Wird gespeichert..." : "✓ Übernehmen & korrigieren"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
     </TeacherLayout>
   );
 }
