@@ -662,8 +662,7 @@ Gib NUR dieses JSON zurück:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 8000,
-          thinking: { type: "enabled", budget_tokens: 3000 },
+          max_tokens: 4000,
           messages: [{
             role: "user",
             content: [
@@ -675,8 +674,7 @@ Gib NUR dieses JSON zurück:
       });
 
       const data = await response.json();
-      // Extended thinking gibt thinking + text Blöcke zurück — nur text extrahieren
-      const text = data.content?.filter(b => b.type === "text").map(b => b.text || "").join("") || "";
+      const text = data.content?.map(b => b.text || "").join("") || "";
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
 
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Keine Schüler erkannt");
@@ -1511,30 +1509,49 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
               <>
                 {(() => {
                   const knownNames = new Set((submissions || []).map(s => s.username));
-                  const unrecognized = scanResult.filter(s => !knownNames.has(s.student));
+                  const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
                   return (
-                    <>
-                      <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "14px 16px", marginBottom: unrecognized.length > 0 ? "10px" : "16px" }}>
-                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#16a34a", marginBottom: "8px" }}>✓ {scanResult.length} Schüler/innen erkannt</div>
-                        {scanResult.map((s, i) => {
-                          const known = knownNames.has(s.student);
-                          return (
-                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13px", color: "#374151", padding: "4px 0", borderBottom: i < scanResult.length - 1 ? "1px solid #dcfce7" : "none" }}>
-                              <span style={{ fontWeight: 600, color: known ? "#374151" : "#dc2626" }}>
-                                {!known && "⚠️ "}{s.student}
-                                {!known && <span style={{ fontSize: "11px", color: "#dc2626", marginLeft: "6px" }}>nicht in Gruppe gefunden</span>}
-                              </span>
-                              <span style={{ color: "#64748b" }}>{Object.keys(s.answers).length} Antworten</span>
-                            </div>
-                          );
-                        })}
+                    <div style={{ maxHeight: "55vh", overflowY: "auto" }}>
+                      <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "10px", background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "8px", padding: "8px 12px" }}>
+                        ✏️ Prüfe die erkannten Antworten und korrigiere Lesefehler direkt hier bevor du überträgst.
                       </div>
-                      {unrecognized.length > 0 && (
-                        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px 14px", fontSize: "12px", color: "#dc2626", marginBottom: "16px" }}>
-                          ⚠️ {unrecognized.length} Schüler/in konnte keiner Gruppe zugeordnet werden. Bitte Namen manuell prüfen.
-                        </div>
-                      )}
-                    </>
+                      {scanResult.map((s, si) => {
+                        const known = knownNames.has(s.student);
+                        return (
+                          <div key={si} style={{ marginBottom: "16px", border: `1px solid ${known ? "#e2e8f0" : "#fecaca"}`, borderRadius: "10px", overflow: "hidden" }}>
+                            <div style={{ background: known ? "#f8fafc" : "#fef2f2", padding: "8px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontWeight: 700, fontSize: "13px", color: known ? "#374151" : "#dc2626" }}>
+                                {!known && "⚠️ "}{s.student}
+                              </span>
+                              {!known && <span style={{ fontSize: "11px", color: "#dc2626" }}>nicht in Gruppe</span>}
+                            </div>
+                            <div style={{ padding: "10px 14px" }}>
+                              {openQs.map((q, qi) => {
+                                const qId = String(q.id);
+                                const val = s.answers[qId] ?? "";
+                                return (
+                                  <div key={qId} style={{ marginBottom: "8px" }}>
+                                    <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "3px" }}>
+                                      Aufgabe {qi + 1}: {q.text?.replace(/<[^>]+>/g, "").slice(0, 40) || "–"}
+                                    </div>
+                                    <input
+                                      value={val}
+                                      onChange={e => {
+                                        const updated = [...scanResult];
+                                        updated[si] = { ...updated[si], answers: { ...updated[si].answers, [qId]: e.target.value } };
+                                        setScanResult(updated);
+                                      }}
+                                      placeholder="(keine Antwort erkannt)"
+                                      style={{ width: "100%", padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box", background: val ? "#fff" : "#f8fafc", color: val ? "#0f172a" : "#94a3b8" }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   );
                 })()}
                 {scanError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#dc2626", marginBottom: "12px" }}>⚠️ {scanError}</div>}
