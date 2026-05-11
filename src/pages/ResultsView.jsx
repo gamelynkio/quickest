@@ -634,24 +634,33 @@ Die offenen Aufgaben des Tests sind:
 ${qList}
 
 Extrahiere für jeden Schüler die handgeschriebenen Antworten auf diese Aufgaben.
-Du transkribierst Schülerantworten aus einem Fremdsprachentest. Diese Schüler lernen gerade die Sprache — ihre Antworten enthalten absichtliche oder unabsichtliche Fehler, die für die Bewertung entscheidend sind.
+Du transkribierst handgeschriebene Schülerantworten. Gehe für jede Antwort so vor:
 
-DEINE AUFGABE: Erkenne und übertrage jeden einzelnen Buchstaben exakt wie geschrieben, BESONDERS Fehler. Fehler sind keine Lesefehler, sondern die echten Antworten der Schüler.
+SCHRITT 1: Zähle jeden einzelnen Buchstaben auf den du siehst, getrennt durch Bindestriche.
+SCHRITT 2: Setze die Buchstaben zusammen — exakt so, wie sie da stehen.
 
-Gehe so vor:
-1. Lies die handgeschriebenen Buchstaben einzeln
-2. Übertrage sie ohne jede Änderung
+Beispiel: Schüler schreibt "kaze"
+→ Buchstaben: k-a-z-e
+→ Wort: kaze
 
-Konkrete Beispiele was KORREKT wäre:
-- Schüler schreibt "kaze" → du schreibst "kaze" (nicht "Katze")
-- Schüler schreibt "fed" → du schreibst "fed" (nicht "feed")
-- Schüler schreibt "froien" → du schreibst "froien" (nicht "freuen")
-- Schüler schreibt "le chein" → du schreibst "le chein" (nicht "le chien")
+Beispiel: Schüler schreibt "fed"
+→ Buchstaben: f-e-d
+→ Wort: fed
 
-Wenn etwas unleserlich ist: "[unleserlich]"
-Wenn keine Antwort vorhanden: ""
+Verwende im JSON-Feld "transcription" NUR das zusammengesetzte Ergebnis aus Schritt 2.
 
-Gib NUR dieses JSON zurück (kein Text drumherum):
+Wenn unleserlich: "[unleserlich]"
+Wenn keine Antwort: ""
+
+Gib NUR dieses JSON zurück:
+[
+  {
+    "student": "<Schülername aus Header>",
+    "answers": {
+      "<Aufgaben-ID>": "<transcription>"
+    }
+  }
+]
 [
   {
     "student": "<exakter Schülername aus dem Header>",
