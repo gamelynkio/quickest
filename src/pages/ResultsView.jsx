@@ -1045,7 +1045,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                         });
 
                         return (
-                          <div key={qId} style={{ marginBottom: "16px", background: "#f8fafc", borderRadius: "12px", padding: "14px", border: `1px solid ${correction.correct === true ? "#bbf7d0" : correction.correct === false ? "#fecaca" : isAiReviewed ? "#bfdbfe" : "#e2e8f0"}` }}>
+                          <div key={qId} style={{ marginBottom: "16px", background: "#f8fafc", borderRadius: "12px", padding: "14px", border: "1px solid #e2e8f0" }}>
                             <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
                               Aufgabe {i + 1}
                               {correction.correct === true && <span style={{ color: "#16a34a" }}>✓</span>}
@@ -1073,7 +1073,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               const isDirty = solutionEdits[qId] !== undefined && solutionEdits[qId] !== (q.solution || "");
                               return (
                                 <div style={{ marginBottom: "8px" }}>
-                                  <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600, marginBottom: "4px" }}>MUSTERLÖSUNG</div>
+                                  <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Musterlösung</div>
                                   <div style={{ display: "flex", gap: "6px" }}>
                                     <input value={currentSolution} onChange={e => setSolutionEdits(prev => ({ ...prev, [qId]: e.target.value }))}
                                       placeholder="Musterlösung eingeben..."
@@ -1102,12 +1102,12 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               if (!commentText && !correction.usedCriteria) return null;
                               return (
                                 <div style={{ marginBottom: "6px" }}>
-                                  <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>KOMMENTAR DER KI</div>
-                                  <div style={{ background: isAiReviewed ? "#eff6ff" : correction.correct ? "#dcfce7" : "#fef2f2", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: isAiReviewed ? "#1e40af" : correction.correct ? "#16a34a" : "#dc2626" }}>
+                                  <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Kommentar der KI</div>
+                                  <div style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#374151", border: "1px solid #e2e8f0" }}>
                                     <span style={{ marginRight: "4px" }}>🤖</span>
                                     {commentText}
-                                    {commentText && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
-                                    {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
+                                    {commentText && correction.usedCriteria && <span style={{ color: "#94a3b8", margin: "0 4px" }}>·</span>}
+                                    {correction.usedCriteria && <span style={{ color: "#64748b" }}>{correction.usedCriteria}</span>}
                                   </div>
                                 </div>
                               );
@@ -1119,43 +1119,25 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               const isDirty = teacherComments[qId] !== undefined;
                               return (
                                 <div style={{ marginBottom: "8px" }}>
-                                  <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>KOMMENTAR DER LEHRKRAFT</div>
+                                  <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Kommentar der Lehrkraft</div>
                                   <textarea value={current} rows={2}
                                     onChange={e => setTeacherComments(prev => ({ ...prev, [qId]: e.target.value }))}
                                     placeholder="Eigener Kommentar für den Schüler (optional)..."
-                                    style={{ width: "100%", padding: "6px 10px", border: `1.5px solid ${isDirty && current ? "#f97316" : "#e2e8f0"}`, borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", background: isDirty && current ? "#fff7ed" : "#fff" }} />
+                                    style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", background: "#fff" }} />
                                   {isDirty && <div style={{ fontSize: "10px", color: "#f97316", marginTop: "2px" }}>Wird beim Speichern für den Schüler sichtbar</div>}
                                 </div>
                               );
                             })()}
 
                             {/* Toggle-Chips */}
-                            {relevantRules.length === 0 && (
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
-                                {DEFAULT_RULES_FALLBACK.map(r => {
-                                  const newRule = { ...r, id: `default_${r.id}_${qId}`, scope: "task", taskId: String(qId), taskIds: [String(qId)], source: "default" };
-                                  return (
-                                    <button key={r.id} onClick={async () => {
-                                      const updated = [...detectedRules, newRule];
-                                      setDetectedRules(updated);
-                                      await supabase.from("assignments").update({ detected_rules: updated }).eq("id", assignmentData.id);
-                                    }} style={{ padding: "3px 9px", borderRadius: "20px", border: `1.5px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
-                                      {r.enabled ? "✓" : "○"} {r.label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {relevantRules.length > 0 && (
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
-                                {relevantRules.map(r => (
-                                  <button key={r.id} onClick={() => toggleRuleInPanel(r, !r.enabled)}
-                                    style={{ padding: "3px 9px", borderRadius: "20px", border: `1.5px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>
-                                    {r.enabled ? "✓" : "○"} {r.label}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
+                              {(relevantRules.length > 0 ? relevantRules : DEFAULT_RULES_FALLBACK.map(r => ({ ...r, id: `default_${r.id}_${qId}`, scope: "task", taskId: String(qId), taskIds: [String(qId)], source: "default" }))).map(r => (
+                                <button key={r.id} onClick={() => relevantRules.length > 0 ? toggleRuleInPanel(r, !r.enabled) : (async () => { const updated = [...detectedRules, r]; setDetectedRules(updated); await supabase.from("assignments").update({ detected_rules: updated }).eq("id", assignmentData.id); })()}
+                                  style={{ padding: "3px 9px", borderRadius: "20px", border: `1px solid ${r.enabled ? "#16a34a" : "#e2e8f0"}`, background: r.enabled ? "#f0fdf4" : "#f8fafc", color: r.enabled ? "#16a34a" : "#94a3b8", fontSize: "11px", fontWeight: 500, cursor: "pointer" }}>
+                                  {r.enabled ? "✓" : "○"} {r.label}
+                                </button>
+                              ))}
+                            </div>
 
                             {/* Bewertungsmaßstab vorschlagen + verfeinern */}
                             {isAiReviewed && (() => {
@@ -1169,8 +1151,8 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               );
                             })()}
                             {isAiReviewed && (
-                              <div style={{ background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px" }}>
-                                <div style={{ fontSize: "11px", fontWeight: 600, color: "#6d28d9", marginBottom: "5px" }}>Bewertungsmaßstab verfeinern</div>
+                              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px" }}>
+                                <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Bewertungsmaßstab verfeinern</div>
                                 <div style={{ display: "flex", gap: "6px" }}>
                                   <input value={questionFeedback[qId] || ""} onChange={e => setQuestionFeedback(prev => ({ ...prev, [qId]: e.target.value }))}
                                     onKeyDown={e => { if (e.key === "Enter" && questionFeedback[qId]?.trim()) refineQuestionWithFeedback(qId, questionFeedback[qId]); }}
@@ -1183,19 +1165,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 </div>
                               </div>
                             )}
-                            {(correction.partialPoints?.length > 0) && (
-                              <details style={{ marginBottom: "8px" }}>
-                                <summary style={{ cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b", userSelect: "none" }}>📋 Bewertungsmaßstab ({correction.partialPoints.length} Kriterien)</summary>
-                                <div style={{ marginTop: "6px", background: "#f8fafc", borderRadius: "6px", padding: "8px 10px", border: "1px solid #e2e8f0" }}>
-                                  {correction.partialPoints.map((p, pi) => (
-                                    <div key={pi} style={{ fontSize: "12px", color: "#374151", display: "flex", gap: "6px", marginBottom: "3px" }}>
-                                      <span style={{ background: "#eff6ff", borderRadius: "4px", padding: "1px 6px", fontWeight: 700, color: "#2563a8", flexShrink: 0 }}>{p.points} Pkt.</span>
-                                      <span>{p.description}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </details>
-                            )}
+
 
                             {/* Punkte */}
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
