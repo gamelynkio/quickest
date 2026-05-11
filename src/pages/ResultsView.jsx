@@ -634,22 +634,22 @@ Die offenen Aufgaben des Tests sind:
 ${qList}
 
 Extrahiere für jeden Schüler die handgeschriebenen Antworten auf diese Aufgaben.
-KRITISCH: Du bist ein OCR-Scanner, kein Sprachmodell. Deine einzige Aufgabe ist es, die handgeschriebenen Zeichen 1:1 zu übertragen.
+Du transkribierst Schülerantworten aus einem Fremdsprachentest. Diese Schüler lernen gerade die Sprache — ihre Antworten enthalten absichtliche oder unabsichtliche Fehler, die für die Bewertung entscheidend sind.
 
-VERBOTEN:
-- "kaze" → "Katze" (du erkennst den Buchstaben z, nicht tz)
-- "(to) fed" → "(to) feed" (du siehst kein zweites e)
-- "froien" → "freuen" (du siehst o-i, nicht e-u)
-- Jegliche Rechtschreib- oder Grammatikkorrektur
-- Ergänzung fehlender Buchstaben
-- Interpretation was gemeint sein könnte
+DEINE AUFGABE: Erkenne und übertrage jeden einzelnen Buchstaben exakt wie geschrieben, BESONDERS Fehler. Fehler sind keine Lesefehler, sondern die echten Antworten der Schüler.
 
-ERLAUBT:
-- Exakt die sichtbaren Buchstaben übertragen
-- "[unleserlich]" wenn Buchstaben nicht erkennbar sind
-- "" wenn keine Antwort vorhanden
+Gehe so vor:
+1. Lies die handgeschriebenen Buchstaben einzeln
+2. Übertrage sie ohne jede Änderung
 
-Stelle dir vor du kennst die Sprache nicht und überträgst nur Zeichen.
+Konkrete Beispiele was KORREKT wäre:
+- Schüler schreibt "kaze" → du schreibst "kaze" (nicht "Katze")
+- Schüler schreibt "fed" → du schreibst "fed" (nicht "feed")
+- Schüler schreibt "froien" → du schreibst "froien" (nicht "freuen")
+- Schüler schreibt "le chein" → du schreibst "le chein" (nicht "le chien")
+
+Wenn etwas unleserlich ist: "[unleserlich]"
+Wenn keine Antwort vorhanden: ""
 
 Gib NUR dieses JSON zurück (kein Text drumherum):
 [
