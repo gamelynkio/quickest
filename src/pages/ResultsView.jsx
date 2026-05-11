@@ -634,30 +634,16 @@ Die offenen Aufgaben des Tests sind:
 ${qList}
 
 Extrahiere für jeden Schüler die handgeschriebenen Antworten auf diese Aufgaben.
-Du transkribierst handgeschriebene Schülerantworten. Gehe für jede Antwort so vor:
+Du transkribierst handgeschriebene Schülerantworten. Lies jeden Buchstaben einzeln und gib exakt wieder was da steht — auch wenn es falsch geschrieben ist. Schülerfehler sind gewollt und dürfen nicht korrigiert werden.
 
-SCHRITT 1: Zähle jeden einzelnen Buchstaben auf den du siehst, getrennt durch Bindestriche.
-SCHRITT 2: Setze die Buchstaben zusammen — exakt so, wie sie da stehen.
-
-Beispiel: Schüler schreibt "kaze"
-→ Buchstaben: k-a-z-e
-→ Wort: kaze
-
-Beispiel: Schüler schreibt "fed"
-→ Buchstaben: f-e-d
-→ Wort: fed
-
-Verwende im JSON-Feld "transcription" NUR das zusammengesetzte Ergebnis aus Schritt 2.
-
-Wenn unleserlich: "[unleserlich]"
-Wenn keine Antwort: ""
+Wenn unleserlich: "[unleserlich]" — Wenn keine Antwort: ""
 
 Gib NUR dieses JSON zurück:
 [
   {
     "student": "<Schülername aus Header>",
     "answers": {
-      "<Aufgaben-ID>": "<transcription>"
+      "<Aufgaben-ID>": "<exakt transkribierte Antwort>"
     }
   }
 ]
@@ -676,7 +662,8 @@ Gib NUR dieses JSON zurück:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 4000,
+          max_tokens: 8000,
+          thinking: { type: "enabled", budget_tokens: 3000 },
           messages: [{
             role: "user",
             content: [
@@ -688,7 +675,8 @@ Gib NUR dieses JSON zurück:
       });
 
       const data = await response.json();
-      const text = data.content?.map(b => b.text || "").join("") || "";
+      // Extended thinking gibt thinking + text Blöcke zurück — nur text extrahieren
+      const text = data.content?.filter(b => b.type === "text").map(b => b.text || "").join("") || "";
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
 
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Keine Schüler erkannt");
