@@ -621,10 +621,22 @@ Die offenen Aufgaben des Tests sind:
 ${qList}
 
 Extrahiere für jeden Schüler die handgeschriebenen Antworten auf diese Aufgaben.
-WICHTIG: Transkribiere EXAKT was handschriftlich steht — Buchstabe für Buchstabe.
-Korrigiere KEINE Rechtschreibfehler, Grammatikfehler oder unleserliche Stellen.
-Wenn etwas unleserlich ist, schreibe "[unleserlich]".
-Wenn eine Aufgabe nicht beantwortet wurde, schreibe "".
+KRITISCH: Du bist ein OCR-Scanner, kein Sprachmodell. Deine einzige Aufgabe ist es, die handgeschriebenen Zeichen 1:1 zu übertragen.
+
+VERBOTEN:
+- "kaze" → "Katze" (du erkennst den Buchstaben z, nicht tz)
+- "(to) fed" → "(to) feed" (du siehst kein zweites e)
+- "froien" → "freuen" (du siehst o-i, nicht e-u)
+- Jegliche Rechtschreib- oder Grammatikkorrektur
+- Ergänzung fehlender Buchstaben
+- Interpretation was gemeint sein könnte
+
+ERLAUBT:
+- Exakt die sichtbaren Buchstaben übertragen
+- "[unleserlich]" wenn Buchstaben nicht erkennbar sind
+- "" wenn keine Antwort vorhanden
+
+Stelle dir vor du kennst die Sprache nicht und überträgst nur Zeichen.
 
 Gib NUR dieses JSON zurück (kein Text drumherum):
 [
