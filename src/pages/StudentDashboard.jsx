@@ -108,12 +108,21 @@ function SubmissionDetailModal({ submission, onClose }) {
                     return String(ans);
                   })()}
                 </div>
-                {(correction.comment || correction.usedCriteria) && (
-                  <div style={{ background: isCorrect ? "#dcfce7" : isAi ? "#eff6ff" : isWrong ? "#fef2f2" : "#fef9c3", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isCorrect ? "#16a34a" : isAi ? "#1e40af" : isWrong ? "#dc2626" : "#92400e" }}>
-                    <span style={{ marginRight: "4px" }}>🤖</span>
-                    {correction.comment?.replace("🤖 ", "")}
-                    {correction.comment && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
-                    {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
+                {(correction.comment || correction.usedCriteria) && (() => {
+                  const commentText = correction.comment?.replace("🤖 ", "").replace("⏳ Wartet auf Bewertung", "").trim();
+                  if (!commentText && !correction.usedCriteria) return null;
+                  return (
+                    <div style={{ background: isCorrect ? "#dcfce7" : isAi ? "#eff6ff" : isWrong ? "#fef2f2" : "#fef9c3", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: isCorrect ? "#16a34a" : isAi ? "#1e40af" : isWrong ? "#dc2626" : "#92400e" }}>
+                      <span style={{ marginRight: "4px" }}>🤖</span>
+                      {commentText}
+                      {commentText && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
+                      {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
+                    </div>
+                  );
+                })()}
+                {correction.teacherComment && (
+                  <div style={{ background: "#fefce8", border: "1px solid #fde68a", borderRadius: "8px", padding: "8px 10px", marginBottom: "8px", fontSize: "12px", color: "#92400e" }}>
+                    ✏️ {correction.teacherComment}
                   </div>
                 )}
                 {correction.solution && (
