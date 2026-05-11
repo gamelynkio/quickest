@@ -81,7 +81,7 @@ function SubmissionDetailModal({ submission, onClose }) {
             const isAi = correction.aiReviewed && !isManual;
 
             return (
-              <div key={qId} style={{ marginBottom: "14px", background: "#f8fafc", borderRadius: "12px", padding: "14px 16px", border: `1px solid ${isCorrect ? "#bbf7d0" : isWrong ? "#fecaca" : "#e2e8f0"}` }}>
+              <div key={qId} style={{ marginBottom: "14px", background: "#f8fafc", borderRadius: "12px", padding: "14px 16px", border: "1px solid #e2e8f0" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <span style={{ fontSize: "13px", fontWeight: 700, color: "#374151" }}>Aufgabe {i + 1}</span>
@@ -110,8 +110,8 @@ function SubmissionDetailModal({ submission, onClose }) {
                 </div>
                 {correction.solution && (
                   <div style={{ marginBottom: "8px" }}>
-                    <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>MUSTERLÖSUNG</div>
-                    <div style={{ background: "#f0f7ff", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#1e3a5f", border: "1px solid #bfdbfe" }}>
+                    <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Musterlösung</div>
+                    <div style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#374151", border: "1px solid #e2e8f0" }}>
                       {correction.solution}
                     </div>
                   </div>
@@ -121,20 +121,20 @@ function SubmissionDetailModal({ submission, onClose }) {
                   if (!commentText && !correction.usedCriteria) return null;
                   return (
                     <div style={{ marginBottom: "8px" }}>
-                      <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>KOMMENTAR DER KI</div>
-                      <div style={{ background: isCorrect ? "#dcfce7" : isAi ? "#eff6ff" : isWrong ? "#fef2f2" : "#fef9c3", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: isCorrect ? "#16a34a" : isAi ? "#1e40af" : isWrong ? "#dc2626" : "#92400e" }}>
+                      <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Kommentar der KI</div>
+                      <div style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#374151", border: "1px solid #e2e8f0" }}>
                         <span style={{ marginRight: "4px" }}>🤖</span>
                         {commentText}
-                        {commentText && correction.usedCriteria && <span style={{ opacity: 0.5, margin: "0 4px" }}>·</span>}
-                        {correction.usedCriteria && <span style={{ opacity: 0.8 }}>{correction.usedCriteria}</span>}
+                        {commentText && correction.usedCriteria && <span style={{ color: "#94a3b8", margin: "0 4px" }}>·</span>}
+                        {correction.usedCriteria && <span style={{ color: "#64748b" }}>{correction.usedCriteria}</span>}
                       </div>
                     </div>
                   );
                 })()}
                 {correction.teacherComment && (
                   <div style={{ marginBottom: "8px" }}>
-                    <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, marginBottom: "3px" }}>KOMMENTAR DER LEHRKRAFT</div>
-                    <div style={{ background: "#fefce8", border: "1px solid #fde68a", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#92400e" }}>
+                    <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Kommentar der Lehrkraft</div>
+                    <div style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#374151", border: "1px solid #e2e8f0" }}>
                       ✏️ {correction.teacherComment}
                     </div>
                   </div>
