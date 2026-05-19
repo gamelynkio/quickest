@@ -389,7 +389,8 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [scanModal, setScanModal] = useState(false);
   const [scanFile, setScanFile] = useState(null);
   const [scanProcessing, setScanProcessing] = useState(false);
-  const [scanResult, setScanResult] = useState(null); // { students: [{name, answers}] }
+  const [scanProcessingStep, setScanProcessingStep] = useState("");
+  const [scanResult, setScanResult] = useState(null);
   const [scanError, setScanError] = useState("");
   const [savingSolution, setSavingSolution] = useState(null);
 
@@ -613,77 +614,85 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setScanProcessing(true);
     setScanError("");
     setScanResult(null);
+    
     try {
-      // PDF → base64
-      const base64 = await new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result.split(",")[1]);
-        reader.onerror = rej;
-        reader.readAsDataURL(scanFile);
-      });
+      // Schritt 1: PDF → Seiten als Bilder via PDF.js
+      setScanProcessingStep("PDF wird geladen...");
+      const pdfjsLib = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.mjs");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.mjs";
+      const arrayBuffer = await scanFile.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pageTexts = [];
 
-      // Fragen für Prompt zusammenstellen
+      // Schritt 2: Jede Seite → Google Vision OCR
+      for (let i = 1; i <= pdf.numPages; i++) {
+        setScanProcessingStep(`Seite ${i} von ${pdf.numPages} wird erkannt...`);
+        const page = await pdf.getPage(i);
+        const scale = 2.0;
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+        const imageBase64 = canvas.toDataURL("image/jpeg", 0.95).split(",")[1];
+
+        const visionRes = await fetch(
+          `${supabaseUrl}/functions/v1/vision-ocr`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${supabaseAnonKey}`,
+              "apikey": supabaseAnonKey,
+            },
+            body: JSON.stringify({ imageBase64 })
+          }
+        );
+        const visionData = await visionRes.json();
+        if (visionData.error) throw new Error(`OCR: ${visionData.error}`);
+        pageTexts.push(visionData.text || "");
+      }
+
+      // Schritt 3: OCR-Text → Claude ordnet Schüler & Antworten zu
+      setScanProcessingStep("Antworten werden zugeordnet...");
+      const fullText = pageTexts.join("\n\n--- SEITENUMBRUCH ---\n\n");
       const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
       const qList = openQs.map((q, i) => `Aufgabe ${i + 1} (ID: ${q.id}): ${q.text?.replace(/<[^>]+>/g, "") || "(kein Text)"}`).join("\n");
       const testCode = String(assignmentData?.id || "").slice(-6).toUpperCase();
 
-      const prompt = `Diese PDF enthält gescannte handgeschriebene Tests mehrerer Schüler.
-Jede Schülerseite hat oben rechts eine Zeile: [SCHÜLER: <name> | TEST: ${testCode}]
+      const prompt = `Der folgende Text wurde per OCR exakt aus gescannten Schüler-Tests extrahiert. Jede Schülerseite beginnt mit "[SCHÜLER: <name> | TEST: ${testCode}]".
 
-Die offenen Aufgaben des Tests sind:
+Die Aufgaben des Tests:
 ${qList}
 
-Extrahiere für jeden Schüler die handgeschriebenen Antworten auf diese Aufgaben.
-Du transkribierst handgeschriebene Schülerantworten. Lies jeden Buchstaben einzeln und gib exakt wieder was da steht — auch wenn es falsch geschrieben ist. Schülerfehler sind gewollt und dürfen nicht korrigiert werden.
+Extrahiere für jeden Schüler die Antworten. Übernimm den OCR-Text EXAKT — keine Korrekturen.
 
-Wenn unleserlich: "[unleserlich]" — Wenn keine Antwort: ""
+OCR-Text:
+${fullText}
 
-Gib NUR dieses JSON zurück:
-[
-  {
-    "student": "<Schülername aus Header>",
-    "answers": {
-      "<Aufgaben-ID>": "<exakt transkribierte Antwort>"
-    }
-  }
-]
-[
-  {
-    "student": "<exakter Schülername aus dem Header>",
-    "answers": {
-      "<Aufgaben-ID>": "<transkribierte Antwort>",
-      ...
-    }
-  }
-]`;
+Gib NUR JSON zurück: [{"student":"<name>","answers":{"<id>":"<text>"}}]`;
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+      const claudeRes = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 4000,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-              { type: "text", text: prompt }
-            ]
-          }]
+          max_tokens: 2000,
+          messages: [{ role: "user", content: prompt }]
         })
       });
-
-      const data = await response.json();
-      const text = data.content?.map(b => b.text || "").join("") || "";
+      const claudeData = await claudeRes.json();
+      const text = claudeData.content?.map(b => b.text || "").join("") || "";
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Keine Schüler erkannt");
       setScanResult(parsed);
     } catch (e) {
       setScanError(`Fehler: ${e.message}`);
     }
     setScanProcessing(false);
+    setScanProcessingStep("");
   };
+
 
   const applyScanResult = async () => {
     if (!scanResult) return;
@@ -1481,10 +1490,10 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
           <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "520px", width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
             <h3 style={{ margin: "0 0 6px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>📄 Gescannte Tests hochladen</h3>
-            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px", lineHeight: 1.6 }}>
-              Lade eine PDF mit den gescannten Testblättern hoch. Jede Seite muss den Code
-              <code style={{ background: "#f1f5f9", padding: "1px 6px", borderRadius: "4px", fontSize: "12px" }}>[SCHÜLER: name | TEST: {String(assignmentData?.id || "").slice(-6).toUpperCase()}]</code> enthalten.
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "12px", lineHeight: 1.6 }}>
+              Jede Seite muss den Code <code style={{ background: "#f1f5f9", padding: "1px 6px", borderRadius: "4px", fontSize: "12px" }}>[SCHÜLER: name | TEST: {String(assignmentData?.id || "").slice(-6).toUpperCase()}]</code> enthalten.
             </p>
+
 
             {!scanResult ? (
               <>
@@ -1501,7 +1510,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                   <button onClick={() => { setScanModal(false); setScanFile(null); setScanError(""); }} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
                   <button onClick={processScan} disabled={!scanFile || scanProcessing}
                     style={{ flex: 2, padding: "11px", background: scanFile && !scanProcessing ? "#16a34a" : "#e2e8f0", color: scanFile && !scanProcessing ? "#fff" : "#94a3b8", border: "none", borderRadius: "9px", fontWeight: 700, cursor: scanFile && !scanProcessing ? "pointer" : "not-allowed" }}>
-                    {scanProcessing ? "⏳ KI liest Handschriften..." : "🤖 Analysieren"}
+                    {scanProcessing ? `⏳ ${scanProcessingStep || "Wird verarbeitet..."}` : "🔍 Analysieren"}
                   </button>
                 </div>
               </>
@@ -1512,8 +1521,8 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                   const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
                   return (
                     <div style={{ maxHeight: "55vh", overflowY: "auto" }}>
-                      <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "10px", background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "8px", padding: "8px 12px" }}>
-                        ✏️ Prüfe die erkannten Antworten und korrigiere Lesefehler direkt hier bevor du überträgst.
+                      <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "10px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "8px 12px" }}>
+                        ✓ OCR abgeschlossen — prüfe die Antworten und korrigiere falls nötig.
                       </div>
                       {scanResult.map((s, si) => {
                         const known = knownNames.has(s.student);
