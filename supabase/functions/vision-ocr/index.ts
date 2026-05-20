@@ -6,44 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Konvertiert eine PDF-Seite zu einem Bild via Google Vision PDF-Support
-async function ocrPdfPage(pdfBase64: string, pageNum: number, apiKey: string): Promise<string> {
-  const res = await fetch(
-    `https://vision.googleapis.com/v1/files:annotate?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        requests: [{
-          inputConfig: {
-            content: pdfBase64,
-            mimeType: "application/pdf"
-          },
-          features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
-          pages: [pageNum],
-          imageContext: {
-            languageHints: ["de", "en", "fr", "es"]
-          }
-        }]
-      })
-    }
-  );
-  const data = await res.json();
-  if (data.error) throw new Error(`Google Vision PDF: ${data.error.message}`);
-  return data.responses?.[0]?.fullTextAnnotation?.text || "";
-}
-
-// Erkennt Anzahl der Seiten aus PDF-Struktur
-function getPdfPageCount(pdfBase64: string): number {
-  try {
-    const pdfBytes = atob(pdfBase64);
-    const matches = pdfBytes.match(/\/Type\s*\/Page[^s]/g);
-    return matches ? matches.length : 1;
-  } catch {
-    return 1;
-  }
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -51,23 +13,50 @@ serve(async (req) => {
     const GOOGLE_VISION_KEY = Deno.env.get("GOOGLE_CLOUD_VISION_API_KEY");
     if (!GOOGLE_VISION_KEY) throw new Error("GOOGLE_CLOUD_VISION_API_KEY nicht konfiguriert");
 
-    const body = await req.json();
-    const { imageBase64, mimeType } = body;
+    const { imageBase64, mimeType } = await req.json();
     if (!imageBase64) throw new Error("Keine Datei übermittelt");
 
     let fullText = "";
 
     if (mimeType === "application/pdf") {
-      // PDF direkt an Vision API — unterstützt mehrseitige PDFs
-      const pageCount = Math.min(getPdfPageCount(imageBase64), 30);
-      const texts: string[] = [];
-      for (let i = 1; i <= pageCount; i++) {
-        const pageText = await ocrPdfPage(imageBase64, i, GOOGLE_VISION_KEY);
-        texts.push(pageText);
-      }
+      // PDF → files:annotate (unterstützt mehrseitige PDFs)
+      // Seiten 1-30 anfordern — Vision gibt zurück was vorhanden ist
+      const pages = Array.from({ length: 30 }, (_, i) => i + 1);
+
+      const res = await fetch(
+        `https://vision.googleapis.com/v1/files:annotate?key=${GOOGLE_VISION_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requests: [{
+              inputConfig: {
+                content: imageBase64,
+                mimeType: "application/pdf"
+              },
+              features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
+              pages,
+              imageContext: { languageHints: ["de", "en", "fr", "es"] }
+            }]
+          })
+        }
+      );
+
+      const data = await res.json();
+
+      if (data.error) throw new Error(`Google Vision: ${data.error.message}`);
+
+      // files:annotate hat verschachtelte Struktur:
+      // responses[0].responses[] = eine Antwort pro Seite
+      const pageResponses = data.responses?.[0]?.responses || [];
+      const texts = pageResponses
+        .map((r: any) => r.fullTextAnnotation?.text || "")
+        .filter((t: string) => t.trim().length > 0);
+
       fullText = texts.join("\n\n--- SEITENUMBRUCH ---\n\n");
+
     } else {
-      // Bild (JPG/PNG) direkt
+      // Bild (JPG/PNG) → images:annotate
       const res = await fetch(
         `https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_VISION_KEY}`,
         {
@@ -82,11 +71,14 @@ serve(async (req) => {
           })
         }
       );
+
       const data = await res.json();
       if (data.error) throw new Error(`Google Vision: ${data.error.message}`);
       if (data.responses?.[0]?.error) throw new Error(`Google Vision: ${data.responses[0].error.message}`);
       fullText = data.responses?.[0]?.fullTextAnnotation?.text || "";
     }
+
+    if (!fullText.trim()) throw new Error("Kein Text erkannt");
 
     return new Response(JSON.stringify({ text: fullText }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
