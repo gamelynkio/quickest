@@ -1,0 +1,1 @@
+ALTER TABLE public.submissions ADD COLUMN correction_requests jsonb DEFAULT '{}'::jsonb;
