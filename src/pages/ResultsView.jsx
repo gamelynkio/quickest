@@ -677,49 +677,37 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         return [...printedLines].some(p => p && l.includes(p.slice(0, 6)));
       };
 
-      // Schüler-Abschnitte per Marker — tolerant gegenüber OCR-Variationen
-      // Vision liest [ manchmal als |, r, oder lässt es weg
-      const markerRegex = /[\[|r]?S[CK]H[ÜU]LER:?\s*([^|\]\n]+)[|\]]\s*TEST:?\s*([^\]|\n]+)/gi;
-      const markers = [];
-      let m;
-      while ((m = markerRegex.exec(ocrText)) !== null) {
-        const name = m[1].trim().replace(/^[-\s]+|[-\s]+$/g, "");
-        if (name.length > 2) markers.push({ name, index: m.index });
-      }
+      // Seiten aufteilen — Vision trennt Seiten mit SEITENUMBRUCH
+      // WICHTIG: Marker steht am ENDE jeder Seite (Vision liest Header zuletzt)
+      const markerRe = /[\[|r]?S[CK]H[ÜU]LER:?\s*([^|\]\n]+)[|\]]?\s*TEST:?\s*([^\]|\n\r]+)/i;
+      const rawPages = ocrText.split(/---\s*SEITENUMBRUCH\s*---/i);
+      const parsed = [];
 
-      // Fallback: suche Schülernamen direkt im OCR-Text
-      if (markers.length === 0) {
-        let groupNames = assignmentData?.groups?.usernames || [];
-        if (typeof groupNames === "string") { try { groupNames = JSON.parse(groupNames); } catch { groupNames = []; } }
-        for (const username of groupNames) {
-          const idx = ocrText.indexOf(username);
-          if (idx !== -1) markers.push({ name: username, index: idx });
-        }
-        markers.sort((a, b) => a.index - b.index);
-      }
-
-      if (markers.length === 0) {
-        throw new Error("Keine Schüler erkannt. Bitte prüfe ob der Code [SCHÜLER: name | TEST: " + testCode + "] auf dem Blatt vorhanden und lesbar ist.");
-      }
-
-      const parsed = markers.map(({ name, index }, mi) => {
-        const pageEnd = mi + 1 < markers.length ? markers[mi + 1].index : ocrText.length;
-        const pageText = ocrText.slice(index, pageEnd);
-
-        // Alle Zeilen filtern: nur handgeschriebene Antworten behalten
-        const answerLines = pageText
-          .split("\n")
+      const extractFromPage = (pageText) => {
+        const mm = pageText.match(markerRe);
+        if (!mm) return null;
+        const studentName = mm[1].trim().replace(/^[-\s]+|[-\s]+$/g, "");
+        if (!studentName || studentName.length < 2) return null;
+        const answerLines = pageText.split("\n")
           .map(l => l.trim())
-          .filter(l => l.length >= 1 && !isPrinted(l));
-
-        // Antworten in Reihenfolge den Fragen zuweisen
+          .filter(l => l.length >= 1 && !isPrinted(l) && l !== studentName);
         const answers = {};
-        openQs.forEach((q, qi) => {
-          answers[String(q.id)] = answerLines[qi] || "";
-        });
+        openQs.forEach((q, qi) => { answers[String(q.id)] = answerLines[qi] || ""; });
+        return { student: studentName, answers };
+      };
 
-        return { student: name, answers };
-      });
+      for (const rawPage of rawPages) {
+        const result = extractFromPage(rawPage);
+        if (result) parsed.push(result);
+      }
+
+      if (parsed.length === 0) {
+        // Fallback: gesamter Text ist eine Seite
+        const result = extractFromPage(ocrText);
+        if (result) parsed.push(result);
+      }
+
+      if (parsed.length === 0) throw new Error("Keine Schüler erkannt. Enthält der Scan den Code [SCHÜLER: name | TEST: " + testCode + "]?");
 
       setScanDebug(ocrText.slice(0, 1000));
       setScanResult(parsed);
