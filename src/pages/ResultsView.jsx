@@ -423,7 +423,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       .subscribe();
 
     // Polling als Backup — alle 5 Sek. neue Abgaben laden
-    const poll = setInterval(() => { if (!aiRunning) fetchSubmissions(); }, 5000);
+    const poll = setInterval(() => { if (!aiRunning) fetchSubmissions(); }, 3000);
     return () => { supabase.removeChannel(channel); supabase.removeChannel(assignmentChannel); clearInterval(poll); };
   }, [assignment]);
 
@@ -1164,13 +1164,15 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                             </td>
                             <td style={{ padding: "13px 16px" }}>
                               {!s.not_participated && (
-                                <button onClick={() => {
-                                  setSelectedSubmission(s);
+                                <button onClick={async () => {
+                                  // Frische Daten inkl. correction_requests laden
+                                  const { data: fresh } = await supabase.from("submissions").select("*").eq("id", s.id).single();
+                                  const sub = { ...(fresh || s), assignments: s.assignments };
+                                  setSelectedSubmission(sub);
                                   setOverrides({});
                                   setMaxPointEdits({});
-                                  // Bestehende Lehrer-Kommentare laden
                                   const initComments = {};
-                                  Object.entries(s.ai_corrections || {}).forEach(([qId, c]) => {
+                                  Object.entries(sub.ai_corrections || {}).forEach(([qId, c]) => {
                                     if (c.teacherComment) initComments[qId] = c.teacherComment;
                                   });
                                   setTeacherComments(initComments);
