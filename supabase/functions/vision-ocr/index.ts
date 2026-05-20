@@ -6,6 +6,32 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+async function ocrPdfBatch(
+  pdfBase64: string,
+  pages: number[],
+  apiKey: string
+): Promise<string[]> {
+  const res = await fetch(
+    `https://vision.googleapis.com/v1/files:annotate?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: [{
+          inputConfig: { content: pdfBase64, mimeType: "application/pdf" },
+          features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
+          pages,
+          imageContext: { languageHints: ["de", "en", "fr", "es"] }
+        }]
+      })
+    }
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(`Google Vision: ${data.error.message}`);
+  const pageResponses = data.responses?.[0]?.responses || [];
+  return pageResponses.map((r: any) => r.fullTextAnnotation?.text || "");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -19,41 +45,31 @@ serve(async (req) => {
     let fullText = "";
 
     if (mimeType === "application/pdf") {
-      // PDF → files:annotate (unterstützt mehrseitige PDFs)
-      // Seiten 1-30 anfordern — Vision gibt zurück was vorhanden ist
-      const pages = Array.from({ length: 30 }, (_, i) => i + 1);
+      // In 5er-Batches verarbeiten (Vision-Limit: max 5 Seiten pro Call)
+      // Bis zu 60 Seiten = 12 Batches (reicht für 30 Schüler × 2 Seiten)
+      const MAX_PAGES = 60;
+      const BATCH_SIZE = 5;
+      const allTexts: string[] = [];
 
-      const res = await fetch(
-        `https://vision.googleapis.com/v1/files:annotate?key=${GOOGLE_VISION_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            requests: [{
-              inputConfig: {
-                content: imageBase64,
-                mimeType: "application/pdf"
-              },
-              features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
-              pages,
-              imageContext: { languageHints: ["de", "en", "fr", "es"] }
-            }]
-          })
+      for (let start = 1; start <= MAX_PAGES; start += BATCH_SIZE) {
+        const pages = Array.from(
+          { length: BATCH_SIZE },
+          (_, i) => start + i
+        );
+        try {
+          const texts = await ocrPdfBatch(pdfBase64, pages, GOOGLE_VISION_KEY);
+          const hasContent = texts.some(t => t.trim().length > 10);
+          if (!hasContent && start > 1) break; // Keine weiteren Seiten
+          allTexts.push(...texts.filter(t => t.trim().length > 0));
+          if (texts.length < BATCH_SIZE) break; // Letzte Seite erreicht
+        } catch (e: any) {
+          // Wenn Seite nicht existiert → fertig
+          if (e.message.includes("page") || e.message.includes("Page")) break;
+          throw e;
         }
-      );
+      }
 
-      const data = await res.json();
-
-      if (data.error) throw new Error(`Google Vision: ${data.error.message}`);
-
-      // files:annotate hat verschachtelte Struktur:
-      // responses[0].responses[] = eine Antwort pro Seite
-      const pageResponses = data.responses?.[0]?.responses || [];
-      const texts = pageResponses
-        .map((r: any) => r.fullTextAnnotation?.text || "")
-        .filter((t: string) => t.trim().length > 0);
-
-      fullText = texts.join("\n\n--- SEITENUMBRUCH ---\n\n");
+      fullText = allTexts.join("\n\n--- SEITENUMBRUCH ---\n\n");
 
     } else {
       // Bild (JPG/PNG) → images:annotate
@@ -71,14 +87,13 @@ serve(async (req) => {
           })
         }
       );
-
       const data = await res.json();
       if (data.error) throw new Error(`Google Vision: ${data.error.message}`);
       if (data.responses?.[0]?.error) throw new Error(`Google Vision: ${data.responses[0].error.message}`);
       fullText = data.responses?.[0]?.fullTextAnnotation?.text || "";
     }
 
-    if (!fullText.trim()) throw new Error("Kein Text erkannt");
+    if (!fullText.trim()) throw new Error("Kein Text erkannt — bitte Scan-Qualität prüfen");
 
     return new Response(JSON.stringify({ text: fullText }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
