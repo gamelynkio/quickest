@@ -57,7 +57,7 @@ serve(async (req) => {
           (_, i) => start + i
         );
         try {
-          const texts = await ocrPdfBatch(pdfBase64, pages, GOOGLE_VISION_KEY);
+          const texts = await ocrPdfBatch(imageBase64, pages, GOOGLE_VISION_KEY);
           const hasContent = texts.some(t => t.trim().length > 10);
           if (!hasContent && start > 1) break; // Keine weiteren Seiten
           allTexts.push(...texts.filter(t => t.trim().length > 0));
