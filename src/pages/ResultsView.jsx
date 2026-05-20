@@ -614,53 +614,47 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     setScanProcessing(true);
     setScanError("");
     setScanResult(null);
-    
     try {
-      // Schritt 1: PDF → Seiten als Bilder via PDF.js
-      setScanProcessingStep("PDF wird geladen...");
-      const pdfjsLib = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.mjs");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.mjs";
-      const arrayBuffer = await scanFile.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const pageTexts = [];
+      const fileExt = scanFile.name.split(".").pop().toLowerCase();
+      const mimeType = fileExt === "pdf" ? "application/pdf"
+        : fileExt === "png" ? "image/png"
+        : "image/jpeg";
 
-      // Schritt 2: Jede Seite → Google Vision OCR
-      for (let i = 1; i <= pdf.numPages; i++) {
-        setScanProcessingStep(`Seite ${i} von ${pdf.numPages} wird erkannt...`);
-        const page = await pdf.getPage(i);
-        const scale = 2.0;
-        const viewport = page.getViewport({ scale });
-        const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-        const imageBase64 = canvas.toDataURL("image/jpeg", 0.95).split(",")[1];
+      // Datei → base64
+      setScanProcessingStep("Datei wird vorbereitet...");
+      const fileBase64 = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result.split(",")[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(scanFile);
+      });
 
-        const visionRes = await fetch(
-          `${supabaseUrl}/functions/v1/vision-ocr`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${supabaseAnonKey}`,
-              "apikey": supabaseAnonKey,
-            },
-            body: JSON.stringify({ imageBase64 })
-          }
-        );
-        const visionData = await visionRes.json();
-        if (visionData.error) throw new Error(`OCR: ${visionData.error}`);
-        pageTexts.push(visionData.text || "");
-      }
+      // Edge Function erledigt OCR komplett serverseitig
+      setScanProcessingStep("Handschrift wird erkannt...");
+      const visionRes = await fetch(
+        `${supabaseUrl}/functions/v1/vision-ocr`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseAnonKey}`,
+            "apikey": supabaseAnonKey,
+          },
+          body: JSON.stringify({ imageBase64: fileBase64, mimeType })
+        }
+      );
+      const visionData = await visionRes.json();
+      if (visionData.error) throw new Error(`OCR: ${visionData.error}`);
+      const ocrText = visionData.text || "";
+      if (!ocrText.trim()) throw new Error("Kein Text erkannt — bitte prüfe ob der Scan lesbar ist");
 
-      // Schritt 3: OCR-Text → Claude ordnet Schüler & Antworten zu
+      // Claude ordnet OCR-Text den Schülern und Aufgaben zu
       setScanProcessingStep("Antworten werden zugeordnet...");
-      const fullText = pageTexts.join("\n\n--- SEITENUMBRUCH ---\n\n");
       const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
       const qList = openQs.map((q, i) => `Aufgabe ${i + 1} (ID: ${q.id}): ${q.text?.replace(/<[^>]+>/g, "") || "(kein Text)"}`).join("\n");
       const testCode = String(assignmentData?.id || "").slice(-6).toUpperCase();
 
-      const prompt = `Der folgende Text wurde per OCR exakt aus gescannten Schüler-Tests extrahiert. Jede Schülerseite beginnt mit "[SCHÜLER: <name> | TEST: ${testCode}]".
+      const prompt = `Der folgende Text wurde per OCR aus gescannten Schüler-Tests extrahiert. Jede Schülerseite enthält eine Zeile: [SCHÜLER: <name> | TEST: ${testCode}]
 
 Die Aufgaben des Tests:
 ${qList}
@@ -668,13 +662,17 @@ ${qList}
 Extrahiere für jeden Schüler die Antworten. Übernimm den OCR-Text EXAKT — keine Korrekturen.
 
 OCR-Text:
-${fullText}
+${ocrText}
 
 Gib NUR JSON zurück: [{"student":"<name>","answers":{"<id>":"<text>"}}]`;
 
       const claudeRes = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabaseAnonKey}`,
+          "apikey": supabaseAnonKey,
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 2000,
@@ -684,7 +682,7 @@ Gib NUR JSON zurück: [{"student":"<name>","answers":{"<id>":"<text>"}}]`;
       const claudeData = await claudeRes.json();
       const text = claudeData.content?.map(b => b.text || "").join("") || "";
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Keine Schüler erkannt");
+      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Keine Schüler erkannt — enthält der Scan den Code [SCHÜLER: name | TEST: " + testCode + "]?");
       setScanResult(parsed);
     } catch (e) {
       setScanError(`Fehler: ${e.message}`);
@@ -1503,7 +1501,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                     {scanFile ? scanFile.name : "PDF auswählen oder hierher ziehen"}
                   </div>
                   {scanFile && <div style={{ fontSize: "12px", color: "#16a34a", marginTop: "4px" }}>✓ {(scanFile.size / 1024 / 1024).toFixed(1)} MB</div>}
-                  <input type="file" accept=".pdf" style={{ display: "none" }} onChange={e => { setScanFile(e.target.files[0]); setScanError(""); }} />
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={e => { setScanFile(e.target.files[0]); setScanError(""); }} />
                 </label>
                 {scanError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#dc2626", marginBottom: "12px" }}>⚠️ {scanError}</div>}
                 <div style={{ display: "flex", gap: "10px" }}>
