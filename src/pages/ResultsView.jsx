@@ -669,7 +669,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         const pageText = ocrText.slice(index, pageEnd);
 
         // Für jede Frage: Text nach der Fragen-Zeile extrahieren
-        const answers: Record<string, string> = {};
+        const answers = {};
         openQs.forEach((q, qi) => {
           const qText = q.text?.replace(/<[^>]+>/g, "").trim() || "";
           if (!qText) return;
