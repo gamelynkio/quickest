@@ -7,6 +7,11 @@ function SubmissionDetailModal({ submission, onClose }) {
   const corrections = submission.ai_corrections || {};
 
   const [orderedCorrections, setOrderedCorrections] = useState([]);
+  const [requestTexts, setRequestTexts] = useState({});
+  const [submittedRequests, setSubmittedRequests] = useState(
+    Object.fromEntries(Object.entries(submission.correction_requests || {}).map(([k, v]) => [k, v]))
+  );
+  const [submitting, setSubmitting] = useState(null);
 
   useEffect(() => {
     const flat = [];
@@ -139,12 +144,59 @@ function SubmissionDetailModal({ submission, onClose }) {
                     </div>
                   </div>
                 )}
+
+                {/* Nachkorrektur anfragen */}
+                {submittedRequests[qId] ? (
+                  <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "8px 12px", fontSize: "12px", color: "#16a34a", marginBottom: "8px" }}>
+                    ✓ Nachkorrektur beantragt: „{submittedRequests[qId].text}"
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: "8px" }}>
+                    {requestTexts[qId] !== undefined ? (
+                      <div>
+                        <textarea
+                          value={requestTexts[qId]}
+                          onChange={e => setRequestTexts(prev => ({ ...prev, [qId]: e.target.value }))}
+                          placeholder="Begründe warum du eine Nachkorrektur anfragst..."
+                          rows={2}
+                          style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "6px" }}
+                        />
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <button onClick={() => setRequestTexts(prev => { const n = { ...prev }; delete n[qId]; return n; })}
+                            style={{ flex: 1, padding: "6px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "7px", fontSize: "12px", cursor: "pointer" }}>
+                            Abbrechen
+                          </button>
+                          <button onClick={async () => {
+                            if (!requestTexts[qId]?.trim()) return;
+                            setSubmitting(qId);
+                            const updated = { ...(submission.correction_requests || {}), [qId]: { text: requestTexts[qId].trim(), ts: new Date().toISOString(), status: "open" } };
+                            await supabase.from("submissions").update({ correction_requests: updated }).eq("id", submission.id);
+                            setSubmittedRequests(prev => ({ ...prev, [qId]: { text: requestTexts[qId].trim() } }));
+                            setRequestTexts(prev => { const n = { ...prev }; delete n[qId]; return n; });
+                            setSubmitting(null);
+                          }} disabled={!requestTexts[qId]?.trim() || submitting === qId}
+                            style={{ flex: 2, padding: "6px", background: requestTexts[qId]?.trim() ? "#f97316" : "#e2e8f0", color: requestTexts[qId]?.trim() ? "#fff" : "#94a3b8", border: "none", borderRadius: "7px", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>
+                            {submitting === qId ? "⏳" : "✓ Anfrage absenden"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={() => setRequestTexts(prev => ({ ...prev, [qId]: "" }))}
+                        style={{ width: "100%", padding: "6px 10px", background: "none", border: "1px dashed #e2e8f0", borderRadius: "7px", fontSize: "12px", color: "#94a3b8", cursor: "pointer", textAlign: "left" }}>
+                        🔁 Nachkorrektur anfragen
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
           <button onClick={onClose} style={{ width: "100%", padding: "13px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", marginTop: "4px" }}>
             Schließen
           </button>
+          <p style={{ fontSize: "11px", color: "#94a3b8", textAlign: "center", marginTop: "8px" }}>
+            Fehler in der Korrektur? Nutze die Schaltfläche „Nachkorrektur anfragen" bei der jeweiligen Aufgabe.
+          </p>
         </div>
       </div>
     </div>
