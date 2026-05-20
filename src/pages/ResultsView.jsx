@@ -1136,7 +1136,15 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                               {s.grade ? <span style={{ fontWeight: 800, fontSize: "18px", color: GRADE_COLOR[s.grade] || "#374151" }}>{s.grade}</span> : <span style={{ color: "#94a3b8" }}>–</span>}
                             </td>
                             <td style={{ padding: "13px 16px" }}>
-                              {aiRunning && !s.reviewed
+                              {(() => {
+                              const openRequests = Object.values(s.correction_requests || {}).filter(r => r.status === "open").length;
+                              return openRequests > 0 ? (
+                                <span style={{ background: "#fff7ed", color: "#ea580c", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, marginRight: "6px" }}>
+                                  🔁 {openRequests} Anfrage{openRequests > 1 ? "n" : ""}
+                                </span>
+                              ) : null;
+                            })()}
+                            {aiRunning && !s.reviewed
                                 ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "5px" }}>
                                     <div style={{ width: "10px", height: "10px", border: "2px solid #bfdbfe", borderTop: "2px solid #2563a8", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
                                     KI korrigiert
@@ -1311,6 +1319,27 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                     {commentText && correction.usedCriteria && <span style={{ color: "#94a3b8", margin: "0 4px" }}>·</span>}
                                     {correction.usedCriteria && <span style={{ color: "#64748b" }}>{correction.usedCriteria}</span>}
                                   </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* Nachkorrektur-Anfrage */}
+                            {(() => {
+                              const req = selectedSubmission.correction_requests?.[qId];
+                              if (!req || req.status !== "open") return null;
+                              return (
+                                <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "8px", padding: "10px 12px", marginBottom: "8px" }}>
+                                  <div style={{ fontSize: "11px", color: "#ea580c", fontWeight: 700, marginBottom: "4px" }}>🔁 NACHKORREKTUR BEANTRAGT</div>
+                                  <div style={{ fontSize: "12px", color: "#374151", marginBottom: "8px" }}>„{req.text}"</div>
+                                  <button onClick={async () => {
+                                    const updated = { ...(selectedSubmission.correction_requests || {}), [qId]: { ...req, status: "resolved" } };
+                                    await supabase.from("submissions").update({ correction_requests: updated }).eq("id", selectedSubmission.id);
+                                    const updatedSub = { ...selectedSubmission, correction_requests: updated };
+                                    setSubmissions(prev => prev.map(s => s.id === selectedSubmission.id ? updatedSub : s));
+                                    setSelectedSubmission(updatedSub);
+                                  }} style={{ padding: "4px 12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}>
+                                    ✓ Erledigt
+                                  </button>
                                 </div>
                               );
                             })()}
