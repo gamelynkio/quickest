@@ -648,61 +648,65 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       const ocrText = visionData.text || "";
       if (!ocrText.trim()) throw new Error("Kein Text erkannt — bitte prüfe ob der Scan lesbar ist");
 
-      // Direkte Extraktion per Regex — kein LLM, keine Autokorrektur
+      // Direkte Extraktion ohne LLM — kein Autokorrektur-Risiko
       setScanProcessingStep("Antworten werden zugeordnet...");
       const testCode = String(assignmentData?.id || "").slice(-6).toUpperCase();
       const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
 
-      // Seiten nach Schüler-Marker aufteilen
-      const pagePattern = /\[SCHÜLER:\s*([^|]+)\|\s*TEST:\s*([^\]]+)\]/gi;
-      const pages = [];
-      let match;
+      // Bekannte gedruckte Zeilen die NICHT Antworten sind
+      const printedLines = new Set([
+        "vokabeltest", "datum", "gesamt", "seite", "quicktest",
+        "übersetze", "vocabulary", "zeit", "pkt", "punkte",
+        ...(openQs.map(q => q.text?.replace(/<[^>]+>/g, "").toLowerCase().trim() || "")),
+        ...(assignmentData?.question_data || []).flatMap(t =>
+          [t.taskTitle?.toLowerCase() || "", t.taskText?.toLowerCase() || ""]
+        )
+      ]);
+
+      const isPrinted = (line) => {
+        const l = line.toLowerCase().trim();
+        if (!l || l.length < 2) return true;
+        if (l.match(/^\/\d+\s*pkt/i)) return true;           // /1 Pkt.
+        if (l.match(/^\d+\.\d*/)) return true;               // 1.1, 1.2 etc.
+        if (l.match(/^seite\s+\d+/i)) return true;            // Seite 2 von 29
+        if (l.match(/^\[schüler:/i)) return true;              // [SCHÜLER:...]
+        if (l.match(/^datum:/i)) return true;
+        if (l.match(/^edit with/i)) return true;
+        // Prüfe ob Zeile einer bekannten gedruckten Zeile ähnelt
+        return [...printedLines].some(p => p && l.includes(p.slice(0, 6)));
+      };
+
+      // Schüler-Abschnitte per Marker trennen
+      const markerRegex = /\[SCHÜLER:\s*([^|\]]+)\|\s*TEST:\s*([^\]]+)\]/gi;
       const markers = [];
-      while ((match = pagePattern.exec(ocrText)) !== null) {
-        markers.push({ name: match[1].trim(), index: match.index });
+      let m;
+      while ((m = markerRegex.exec(ocrText)) !== null) {
+        markers.push({ name: m[1].trim(), index: m.index });
       }
 
-      if (markers.length === 0) throw new Error("Keine Schüler erkannt — enthält der Scan den Code [SCHÜLER: name | TEST: " + testCode + "]?");
+      if (markers.length === 0) {
+        throw new Error("Keine Schüler erkannt. Enthält der Scan den Code [SCHÜLER: name | TEST: " + testCode + "]?");
+      }
 
       const parsed = markers.map(({ name, index }, mi) => {
         const pageEnd = mi + 1 < markers.length ? markers[mi + 1].index : ocrText.length;
         const pageText = ocrText.slice(index, pageEnd);
 
-        // Für jede Frage: Text nach der Fragen-Zeile extrahieren
+        // Alle Zeilen filtern: nur handgeschriebene Antworten behalten
+        const answerLines = pageText
+          .split("\n")
+          .map(l => l.trim())
+          .filter(l => l.length >= 1 && !isPrinted(l));
+
+        // Antworten in Reihenfolge den Fragen zuweisen
         const answers = {};
         openQs.forEach((q, qi) => {
-          const qText = q.text?.replace(/<[^>]+>/g, "").trim() || "";
-          if (!qText) return;
-
-          // Suche Fragen-Text im OCR (erste 30 Zeichen reichen für Match)
-          const searchText = qText.slice(0, 30).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const qRegex = new RegExp(searchText, "i");
-          const qMatch = pageText.search(qRegex);
-
-          if (qMatch === -1) {
-            answers[String(q.id)] = "";
-            return;
-          }
-
-          // Text nach der Fragen-Zeile bis zur nächsten Frage oder Seite
-          const afterQ = pageText.slice(qMatch + searchText.length);
-          const nextQText = openQs[qi + 1]?.text?.replace(/<[^>]+>/g, "").trim().slice(0, 30);
-          const nextQRegex = nextQText ? new RegExp(nextQText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
-          const nextQPos = nextQRegex ? afterQ.search(nextQRegex) : afterQ.length;
-          const answerBlock = afterQ.slice(0, nextQPos > 0 ? nextQPos : afterQ.length);
-
-          // Erste nicht-leere Zeile die keine Punkte-Angabe ist
-          const lines = answerBlock.split("\n")
-            .map(l => l.trim())
-            .filter(l => l.length > 0 && !l.match(/^\/\d+\s*Pkt/i) && !l.match(/^\d+\.\d+/) && !l.match(/^QuickTest/i) && !l.match(/^Seite/i) && !l.match(/^Datum/i));
-
-          answers[String(q.id)] = lines[0] || "";
+          answers[String(q.id)] = answerLines[qi] || "";
         });
 
         return { student: name, answers };
       });
 
-      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Fehler beim Parsen der Schülerantworten");
       setScanResult(parsed);
     } catch (e) {
       setScanError(`Fehler: ${e.message}`);
@@ -1535,7 +1539,11 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
             ) : (
               <>
                 {(() => {
-                  const knownNames = new Set((submissions || []).map(s => s.username));
+                  // Prüfe gegen Gruppe — auch wenn noch keine Submissions vorhanden
+                  const knownNames = new Set([
+                    ...(submissions || []).map(s => s.username),
+                    ...(assignmentData?.groups?.usernames || []),
+                  ]);
                   const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
                   return (
                     <div style={{ maxHeight: "55vh", overflowY: "auto" }}>
