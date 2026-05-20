@@ -392,6 +392,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [scanProcessingStep, setScanProcessingStep] = useState("");
   const [scanResult, setScanResult] = useState(null);
   const [scanError, setScanError] = useState("");
+  const [scanDebug, setScanDebug] = useState("");
   const [savingSolution, setSavingSolution] = useState(null);
 
   const [refiningQuestion, setRefiningQuestion] = useState(null);
@@ -720,6 +721,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         return { student: name, answers };
       });
 
+      setScanDebug(ocrText.slice(0, 1000));
       setScanResult(parsed);
     } catch (e) {
       setScanError(`Fehler: ${e.message}`);
@@ -1563,6 +1565,12 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                       <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "10px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "8px 12px" }}>
                         ✓ OCR abgeschlossen — prüfe die Antworten und korrigiere falls nötig.
                       </div>
+                      {scanDebug && (
+                        <details style={{ marginBottom: "10px" }}>
+                          <summary style={{ fontSize: "11px", color: "#94a3b8", cursor: "pointer" }}>🔍 Roher OCR-Text (Debug)</summary>
+                          <pre style={{ fontSize: "10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "8px", overflowX: "auto", whiteSpace: "pre-wrap", maxHeight: "150px", overflowY: "auto", color: "#374151", marginTop: "6px" }}>{scanDebug}</pre>
+                        </details>
+                      )}
                       {scanResult.map((s, si) => {
                         const known = knownNames.has(s.student);
                         return (
