@@ -648,41 +648,61 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       const ocrText = visionData.text || "";
       if (!ocrText.trim()) throw new Error("Kein Text erkannt — bitte prüfe ob der Scan lesbar ist");
 
-      // Claude ordnet OCR-Text den Schülern und Aufgaben zu
+      // Direkte Extraktion per Regex — kein LLM, keine Autokorrektur
       setScanProcessingStep("Antworten werden zugeordnet...");
-      const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
-      const qList = openQs.map((q, i) => `Aufgabe ${i + 1} (ID: ${q.id}): ${q.text?.replace(/<[^>]+>/g, "") || "(kein Text)"}`).join("\n");
       const testCode = String(assignmentData?.id || "").slice(-6).toUpperCase();
+      const openQs = flattenQs(assignmentData?.question_data || []).filter(q => q.type === "qa" || q.type === "open");
 
-      const prompt = `Der folgende Text wurde per OCR aus gescannten Schüler-Tests extrahiert. Jede Schülerseite enthält eine Zeile: [SCHÜLER: <name> | TEST: ${testCode}]
+      // Seiten nach Schüler-Marker aufteilen
+      const pagePattern = /\[SCHÜLER:\s*([^|]+)\|\s*TEST:\s*([^\]]+)\]/gi;
+      const pages = [];
+      let match;
+      const markers = [];
+      while ((match = pagePattern.exec(ocrText)) !== null) {
+        markers.push({ name: match[1].trim(), index: match.index });
+      }
 
-Die Aufgaben des Tests:
-${qList}
+      if (markers.length === 0) throw new Error("Keine Schüler erkannt — enthält der Scan den Code [SCHÜLER: name | TEST: " + testCode + "]?");
 
-Extrahiere für jeden Schüler die Antworten. Übernimm den OCR-Text EXAKT — keine Korrekturen.
+      const parsed = markers.map(({ name, index }, mi) => {
+        const pageEnd = mi + 1 < markers.length ? markers[mi + 1].index : ocrText.length;
+        const pageText = ocrText.slice(index, pageEnd);
 
-OCR-Text:
-${ocrText}
+        // Für jede Frage: Text nach der Fragen-Zeile extrahieren
+        const answers: Record<string, string> = {};
+        openQs.forEach((q, qi) => {
+          const qText = q.text?.replace(/<[^>]+>/g, "").trim() || "";
+          if (!qText) return;
 
-Gib NUR JSON zurück: [{"student":"<name>","answers":{"<id>":"<text>"}}]`;
+          // Suche Fragen-Text im OCR (erste 30 Zeichen reichen für Match)
+          const searchText = qText.slice(0, 30).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const qRegex = new RegExp(searchText, "i");
+          const qMatch = pageText.search(qRegex);
 
-      const claudeRes = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabaseAnonKey}`,
-          "apikey": supabaseAnonKey,
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 2000,
-          messages: [{ role: "user", content: prompt }]
-        })
+          if (qMatch === -1) {
+            answers[String(q.id)] = "";
+            return;
+          }
+
+          // Text nach der Fragen-Zeile bis zur nächsten Frage oder Seite
+          const afterQ = pageText.slice(qMatch + searchText.length);
+          const nextQText = openQs[qi + 1]?.text?.replace(/<[^>]+>/g, "").trim().slice(0, 30);
+          const nextQRegex = nextQText ? new RegExp(nextQText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
+          const nextQPos = nextQRegex ? afterQ.search(nextQRegex) : afterQ.length;
+          const answerBlock = afterQ.slice(0, nextQPos > 0 ? nextQPos : afterQ.length);
+
+          // Erste nicht-leere Zeile die keine Punkte-Angabe ist
+          const lines = answerBlock.split("\n")
+            .map(l => l.trim())
+            .filter(l => l.length > 0 && !l.match(/^\/\d+\s*Pkt/i) && !l.match(/^\d+\.\d+/) && !l.match(/^QuickTest/i) && !l.match(/^Seite/i) && !l.match(/^Datum/i));
+
+          answers[String(q.id)] = lines[0] || "";
+        });
+
+        return { student: name, answers };
       });
-      const claudeData = await claudeRes.json();
-      const text = claudeData.content?.map(b => b.text || "").join("") || "";
-      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Keine Schüler erkannt — enthält der Scan den Code [SCHÜLER: name | TEST: " + testCode + "]?");
+
+      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Fehler beim Parsen der Schülerantworten");
       setScanResult(parsed);
     } catch (e) {
       setScanError(`Fehler: ${e.message}`);
