@@ -6,11 +6,18 @@ const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97
 function SubmissionDetailModal({ submission: initialSubmission, onClose }) {
   const [submission, setSubmission] = useState(initialSubmission);
 
-  // Automatisch aktualisieren während Modal offen ist
+  // Automatisch aktualisieren + Lobby-Reset erkennen
   useEffect(() => {
     const poll = setInterval(async () => {
+      // Submission-Daten frisch laden
       const { data } = await supabase.from("submissions").select("*").eq("id", initialSubmission.id).single();
       if (data) setSubmission(prev => ({ ...prev, ...data }));
+      // Lobby-Reset prüfen — wenn Assignment zurückgesetzt wurde, Modal schließen
+      const { data: assignment } = await supabase.from("assignments")
+        .select("status, lobby_started_at").eq("id", initialSubmission.assignment_id).single();
+      if (assignment && !assignment.lobby_started_at && assignment.status !== "beendet" && assignment.status !== "archiviert") {
+        onClose();
+      }
     }, 4000);
     return () => clearInterval(poll);
   }, [initialSubmission.id]);
@@ -18,10 +25,26 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose }) {
 
   const [orderedCorrections, setOrderedCorrections] = useState([]);
   const [requestTexts, setRequestTexts] = useState({});
-  const [submittedRequests, setSubmittedRequests] = useState(
-    Object.fromEntries(Object.entries(submission.correction_requests || {}).map(([k, v]) => [k, v]))
-  );
+  const [submittedRequests, setSubmittedRequests] = useState({});
   const [submitting, setSubmitting] = useState(null);
+
+  // orderedCorrections und submittedRequests aktuell halten wenn Polling neue Daten bringt
+  useEffect(() => {
+    const corrections = submission.ai_corrections || {};
+    const qs = submission.question_data || [];
+    const flat = (arr) => {
+      const res = [];
+      for (const q of arr) {
+        if (q.type === "section") for (const t of (q.tasks||[])) for (const tq of (t.questions||[])) res.push(tq);
+        else if (q.type === "task") for (const tq of (q.questions||[])) res.push(tq);
+        else res.push(q);
+      }
+      return res;
+    };
+    const ordered = flat(qs).map(q => [String(q.id), corrections[String(q.id)] || corrections[q.id] || null]).filter(([,c]) => c);
+    setOrderedCorrections(ordered);
+    setSubmittedRequests(Object.fromEntries(Object.entries(submission.correction_requests || {}).map(([k,v]) => [k,v])));
+  }, [submission]);
 
   useEffect(() => {
     const flat = [];
