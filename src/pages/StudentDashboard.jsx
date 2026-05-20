@@ -170,11 +170,16 @@ function SubmissionDetailModal({ submission, onClose }) {
                             if (!requestTexts[qId]?.trim()) return;
                             setSubmitting(qId);
                             const updated = { ...(submission.correction_requests || {}), [qId]: { text: requestTexts[qId].trim(), ts: new Date().toISOString(), status: "open" } };
-                            await supabase.from("submissions").update({ correction_requests: updated }).eq("id", submission.id);
+                            const { error } = await supabase.from("submissions").update({ correction_requests: updated }).eq("id", submission.id);
+                            if (error) {
+                              alert("Fehler beim Speichern: " + error.message);
+                              setSubmitting(null);
+                              return;
+                            }
                             setSubmittedRequests(prev => ({ ...prev, [qId]: { text: requestTexts[qId].trim() } }));
                             setRequestTexts(prev => { const n = { ...prev }; delete n[qId]; return n; });
                             setSubmitting(null);
-                          }} disabled={!requestTexts[qId]?.trim() || submitting === qId}
+                            }} disabled={!requestTexts[qId]?.trim() || submitting === qId}
                             style={{ flex: 2, padding: "6px", background: requestTexts[qId]?.trim() ? "#f97316" : "#e2e8f0", color: requestTexts[qId]?.trim() ? "#fff" : "#94a3b8", border: "none", borderRadius: "7px", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>
                             {submitting === qId ? "⏳" : "✓ Anfrage absenden"}
                           </button>
