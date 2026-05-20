@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97316", "5": "#ef4444", "6": "#dc2626" };
 
-function SubmissionDetailModal({ submission: initialSubmission, onClose }) {
+function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobbyReset }) {
   const [submission, setSubmission] = useState(initialSubmission);
 
   // Automatisch aktualisieren + Lobby-Reset erkennen
@@ -16,7 +16,7 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose }) {
       const { data: assignment } = await supabase.from("assignments")
         .select("status, lobby_started_at").eq("id", initialSubmission.assignment_id).single();
       if (assignment && !assignment.lobby_started_at && assignment.status !== "beendet" && assignment.status !== "archiviert") {
-        onClose();
+        onLobbyReset?.();
       }
     }, 4000);
     return () => clearInterval(poll);
@@ -513,7 +513,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
         )}
       </div>
       {sebBlockedAssignment && <SEB_MODAL />}
-      {selectedSubmission && <SubmissionDetailModal submission={selectedSubmission} onClose={() => setSelectedSubmission(null)} />}
+      {selectedSubmission && <SubmissionDetailModal submission={selectedSubmission} onClose={() => setSelectedSubmission(null)} onLobbyReset={() => { setSelectedSubmission(null); fetchData(); }} />}
     </div>
   );
 }
