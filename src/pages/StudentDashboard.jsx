@@ -3,7 +3,17 @@ import { supabase } from "@/integrations/supabase/client";
 
 const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97316", "5": "#ef4444", "6": "#dc2626" };
 
-function SubmissionDetailModal({ submission, onClose }) {
+function SubmissionDetailModal({ submission: initialSubmission, onClose }) {
+  const [submission, setSubmission] = useState(initialSubmission);
+
+  // Automatisch aktualisieren während Modal offen ist
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      const { data } = await supabase.from("submissions").select("*").eq("id", initialSubmission.id).single();
+      if (data) setSubmission(prev => ({ ...prev, ...data }));
+    }, 4000);
+    return () => clearInterval(poll);
+  }, [initialSubmission.id]);
   const corrections = submission.ai_corrections || {};
 
   const [orderedCorrections, setOrderedCorrections] = useState([]);
