@@ -669,23 +669,36 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         if (l.match(/^\/\d+\s*pkt/i)) return true;           // /1 Pkt.
         if (l.match(/^\d+\.\d*/)) return true;               // 1.1, 1.2 etc.
         if (l.match(/^seite\s+\d+/i)) return true;            // Seite 2 von 29
-        if (l.match(/^\[schüler:/i)) return true;              // [SCHÜLER:...]
+        if (l.match(/schüler:/i)) return true;                  // [SCHÜLER:...]
         if (l.match(/^datum:/i)) return true;
         if (l.match(/^edit with/i)) return true;
         // Prüfe ob Zeile einer bekannten gedruckten Zeile ähnelt
         return [...printedLines].some(p => p && l.includes(p.slice(0, 6)));
       };
 
-      // Schüler-Abschnitte per Marker trennen
-      const markerRegex = /\[SCHÜLER:\s*([^|\]]+)\|\s*TEST:\s*([^\]]+)\]/gi;
+      // Schüler-Abschnitte per Marker — tolerant gegenüber OCR-Variationen
+      // Vision liest [ manchmal als |, r, oder lässt es weg
+      const markerRegex = /[\[|r]?S[CK]H[ÜU]LER:?\s*([^|\]\n]+)[|\]]\s*TEST:?\s*([^\]|\n]+)/gi;
       const markers = [];
       let m;
       while ((m = markerRegex.exec(ocrText)) !== null) {
-        markers.push({ name: m[1].trim(), index: m.index });
+        const name = m[1].trim().replace(/^[-\s]+|[-\s]+$/g, "");
+        if (name.length > 2) markers.push({ name, index: m.index });
+      }
+
+      // Fallback: suche Schülernamen direkt im OCR-Text
+      if (markers.length === 0) {
+        let groupNames = assignmentData?.groups?.usernames || [];
+        if (typeof groupNames === "string") { try { groupNames = JSON.parse(groupNames); } catch { groupNames = []; } }
+        for (const username of groupNames) {
+          const idx = ocrText.indexOf(username);
+          if (idx !== -1) markers.push({ name: username, index: idx });
+        }
+        markers.sort((a, b) => a.index - b.index);
       }
 
       if (markers.length === 0) {
-        throw new Error("Keine Schüler erkannt. Enthält der Scan den Code [SCHÜLER: name | TEST: " + testCode + "]?");
+        throw new Error("Keine Schüler erkannt. Bitte prüfe ob der Code [SCHÜLER: name | TEST: " + testCode + "] auf dem Blatt vorhanden und lesbar ist.");
       }
 
       const parsed = markers.map(({ name, index }, mi) => {
