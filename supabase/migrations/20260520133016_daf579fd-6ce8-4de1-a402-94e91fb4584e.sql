@@ -1,0 +1,1 @@
+CREATE POLICY "allow_anon_correction_requests" ON public.submissions FOR UPDATE TO anon USING (true) WITH CHECK (true);
