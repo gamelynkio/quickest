@@ -66,7 +66,7 @@ ${answers.map((a, i) => `${i + 1}. ${a.username}: "${a.answer}"`).join("\n")}
 Gib deine Bewertung als JSON zurück:
 {
   "criteria": "<1-2 Sätze welche Kriterien du angewendet hast>",
-  "results": [{"username": "<n>", "points": <Zahl max ${q.points}>, "comment": "<1 Satz Begründung>"}]
+  "results": [{"username": "<n>", "points": <Zahl max ${q.points}>, "comment": "<1 Satz Begründung>", "confidence": <0.0-1.0>}]\n\nconfidence: 1.0 = eindeutig, 0.5 = unklar ob Antwort als korrekt gilt, 0.0 = völlig unklar
 }`;
 
     try {
@@ -89,6 +89,7 @@ Gib deine Bewertung als JSON zurück:
           points: Math.min(Math.max(0, Number(r.points) || 0), Number(q.points)),
           comment: `🤖 ${r.comment}`,
           usedCriteria,
+          confidence: r.confidence ?? 1.0,
           aiReviewed: true, needsReview: false,
           correct: Number(r.points) >= Number(q.points),
           maxPoints: Number(q.points),
@@ -393,6 +394,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [scanResult, setScanResult] = useState(null);
   const [scanError, setScanError] = useState("");
   const [scanDebug, setScanDebug] = useState("");
+  const [calibration, setCalibration] = useState(null); // {qId, qText, cases:[{subId,username,answer,points,maxPoints}], examples:{}}
   const [savingSolution, setSavingSolution] = useState(null);
 
   const [refiningQuestion, setRefiningQuestion] = useState(null);
@@ -552,9 +554,100 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
       }
 
       setTimeout(() => { setAiProgress(""); setAiRunning(false); setReleaseModal(true); }, 2000);
+
+      // Niedrige Konfidenz-Fälle pro Aufgabe sammeln und Kalibrierung anbieten
+      const LOW_CONF = 0.72;
+      const qMap = {};
+      submissions.forEach(s => {
+        Object.entries(s.ai_corrections || {}).forEach(([qId, c]) => {
+          if ((c.confidence ?? 1) < LOW_CONF && c.aiReviewed) {
+            if (!qMap[qId]) qMap[qId] = { qId, cases: [] };
+            qMap[qId].cases.push({ subId: s.id, username: s.username, answer: s.answers?.[qId] || "–", points: c.points, maxPoints: c.maxPoints });
+          }
+        });
+      });
+      const lowConfQs = Object.values(qMap).filter(q => q.cases.length >= 2);
+      if (lowConfQs.length > 0) {
+        const first = lowConfQs[0];
+        const qData = flattenQs(aData?.question_data || []).find(q => String(q.id) === first.qId);
+        setTimeout(() => setCalibration({ ...first, qText: qData?.text?.replace(/<[^>]+>/g, "") || "", solution: qData?.solution || "", examples: {} }), 2500);
+      }
     } catch (e) {
       setAiProgress("❌ Fehler bei der Korrektur.");
       setTimeout(() => { setAiProgress(""); setAiRunning(false); }, 3000);
+    }
+  };
+
+
+  const runCalibrationCorrection = async () => {
+    if (!calibration) return;
+    const { qId, solution, examples } = calibration;
+    const qData = flattenQs(assignmentData?.question_data || []).find(q => String(q.id) === qId);
+    if (!qData) return;
+
+    setAiProgress("🎯 Kalibrierte Neu-Korrektur läuft...");
+    setAiRunning(true);
+    setCalibration(null);
+
+    const exampleLines = Object.entries(examples)
+      .map(([subId, pts]) => {
+        const s = submissions.find(s => s.id === subId);
+        return s ? `- "${s.answers?.[qId] || "–"}" → ${pts} / ${qData.points} Pkt. (Lehrer)` : null;
+      })
+      .filter(Boolean).join("
+");
+
+    const toRecorrect = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed && !examples[s.id]);
+
+    const answers = toRecorrect
+      .filter(s => s.answers?.[qId]?.trim())
+      .map((s, i) => `${i + 1}. ${s.username}: "${s.answers[qId]}"`).join("
+");
+    if (!answers) { setAiRunning(false); setAiProgress(""); return; }
+
+    const prompt = `Du bewertest Schülerantworten. Passe deinen Maßstab an diese Lehrer-Beispiele an:
+
+${exampleLines}
+
+Frage: ${qData.text?.replace(/<[^>]+>/g, "") || ""}
+Musterlösung: ${solution}
+Max. Punkte: ${qData.points}
+
+Bewerte jetzt konsistent nach demselben Maßstab:
+${answers}
+
+Antworte NUR als JSON: {"results": [{"username": "<n>", "points": <Zahl>, "comment": "<1 Satz>"}]}`;
+
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/anthropic-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await res.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+      const results = parsed.results || [];
+
+      for (const r of results) {
+        const s = toRecorrect.find(s => s.username === r.username);
+        if (!s) continue;
+        const newPoints = Math.min(Math.max(0, Number(r.points)), Number(qData.points));
+        const updated = {
+          ...s.ai_corrections,
+          [qId]: { ...s.ai_corrections[qId], points: newPoints, comment: `🤖 ${r.comment}`, correct: newPoints >= Number(qData.points), confidence: 0.95 }
+        };
+        const newScore = Object.entries(updated).reduce((sum, [, c]) => sum + (c.points ?? 0), 0);
+        const total = flattenQs(assignmentData?.question_data || []).reduce((sum, q) => sum + Number(q.points || 0), 0);
+        const newGrade = calcGrade(newScore, total);
+        await supabase.from("submissions").update({ ai_corrections: updated, score: newScore, grade: newGrade }).eq("id", s.id);
+        setSubmissions(prev => prev.map(sub => sub.id === s.id ? { ...sub, ai_corrections: updated, score: newScore, grade: newGrade } : sub));
+      }
+      setAiProgress("✅ Kalibrierte Korrektur abgeschlossen.");
+      setTimeout(() => { setAiProgress(""); setAiRunning(false); }, 2000);
+    } catch (e) {
+      setAiProgress("❌ Fehler bei der Neu-Korrektur.");
+      setTimeout(() => { setAiProgress(""); setAiRunning(false); }, 2000);
     }
   };
 
@@ -1536,6 +1629,55 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
               <button onClick={createMakeupTest} disabled={!makeupTemplateId || makeupSelected.size === 0 || creatingMakeup}
                 style={{ flex: 1, padding: "11px", background: (makeupTemplateId && makeupSelected.size > 0) ? "#2563a8" : "#e2e8f0", color: (makeupTemplateId && makeupSelected.size > 0) ? "#fff" : "#94a3b8", border: "none", borderRadius: "10px", fontWeight: 700, cursor: (makeupTemplateId && makeupSelected.size > 0) ? "pointer" : "not-allowed" }}>
                 {creatingMakeup ? "Wird erstellt..." : `Nachtest für ${makeupSelected.size} Schüler/in →`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kalibrierungs-Modal */}
+      {calibration && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "28px", maxWidth: "540px", width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+              <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>🎯 Kalibrierung nötig</h3>
+              <button onClick={() => setCalibration(null)} style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "#94a3b8" }}>✕</button>
+            </div>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px", lineHeight: 1.5 }}>
+              Die KI war bei dieser Aufgabe unsicher. Bewerte <strong>2–3 Beispiele</strong> kurz manuell — dann korrigiert die KI alle ähnlichen Antworten nach deinem Maßstab neu.
+            </p>
+            <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "12px 14px", marginBottom: "16px", border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "3px" }}>AUFGABE</div>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a" }}>{calibration.qText}</div>
+              {calibration.solution && <div style={{ fontSize: "12px", color: "#64748b", marginTop: "3px" }}>Musterlösung: <em>{calibration.solution}</em></div>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "18px" }}>
+              {calibration.cases.slice(0, 6).map(c => (
+                <div key={c.subId} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", background: calibration.examples[c.subId] !== undefined ? "#f0fdf4" : "#f8fafc", borderRadius: "8px", border: `1px solid ${calibration.examples[c.subId] !== undefined ? "#bbf7d0" : "#e2e8f0"}` }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>{c.username}</div>
+                    <div style={{ fontSize: "13px", color: "#0f172a", fontWeight: 500 }}>„{c.answer}"</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>KI: {c.points}/{c.maxPoints} Pkt.</div>
+                  </div>
+                  <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {Array.from({ length: Math.floor(c.maxPoints / 0.5) + 1 }, (_, i) => i * 0.5).map(pts => (
+                      <button key={pts} onClick={() => setCalibration(prev => ({ ...prev, examples: { ...prev.examples, [c.subId]: pts } }))}
+                        style={{ padding: "3px 8px", borderRadius: "6px", border: `1.5px solid ${calibration.examples[c.subId] === pts ? "#16a34a" : "#e2e8f0"}`, background: calibration.examples[c.subId] === pts ? "#f0fdf4" : "#fff", fontSize: "12px", fontWeight: 700, color: calibration.examples[c.subId] === pts ? "#16a34a" : "#64748b", cursor: "pointer" }}>
+                        {pts}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setCalibration(null)} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>
+                Überspringen
+              </button>
+              <button onClick={runCalibrationCorrection}
+                disabled={Object.keys(calibration.examples).length < 2}
+                style={{ flex: 2, padding: "11px", background: Object.keys(calibration.examples).length >= 2 ? "#2563a8" : "#e2e8f0", color: Object.keys(calibration.examples).length >= 2 ? "#fff" : "#94a3b8", border: "none", borderRadius: "9px", fontWeight: 700, cursor: "pointer" }}>
+                {Object.keys(calibration.examples).length >= 2 ? `🎯 ${calibration.cases.length - Object.keys(calibration.examples).length} Antworten neu korrigieren` : `Noch ${2 - Object.keys(calibration.examples).length} Beispiel(e) nötig`}
               </button>
             </div>
           </div>
