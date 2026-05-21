@@ -594,13 +594,15 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         const s = submissions.find(s => s.id === subId);
         return s ? `- "${s.answers?.[qId] || "–"}" → ${pts} / ${qData.points} Pkt. (Lehrer)` : null;
       })
-      .filter(Boolean).join("\n");
+      .filter(Boolean).join("
+");
 
     const toRecorrect = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed && !examples[s.id]);
 
     const answers = toRecorrect
       .filter(s => s.answers?.[qId]?.trim())
-      .map((s, i) => `${i + 1}. ${s.username}: "${s.answers[qId]}"`).join("\n");
+      .map((s, i) => `${i + 1}. ${s.username}: "${s.answers[qId]}"`).join("
+");
     if (!answers) { setAiRunning(false); setAiProgress(""); return; }
 
     const prompt = `Du bewertest Schülerantworten. Passe deinen Maßstab an diese Lehrer-Beispiele an:
@@ -1144,7 +1146,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
 
   const submittedUsernames = new Set(submissions.map(s => s.username));
   const relevantUsernames = assignment?.makeup_usernames?.length ? assignment.makeup_usernames : groupUsernames;
-  const missingStudents = relevantUsernames.filter(u => !submittedUsernames.has(u));
+  const missingStudents = [...relevantUsernames].sort((a, b) => a.localeCompare(b, "de")).filter(u => !submittedUsernames.has(u));
   const participated = submissions.filter(s => !s.not_participated);
   const avg = participated.length > 0
     ? (participated.reduce((s, r) => s + ((r.score || 0) / (r.total_points || 1)) * 100, 0) / participated.length).toFixed(1)
