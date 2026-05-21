@@ -1144,7 +1144,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
 
   const submittedUsernames = new Set(submissions.map(s => s.username));
   const relevantUsernames = assignment?.makeup_usernames?.length ? assignment.makeup_usernames : groupUsernames;
-  const missingStudents = relevantUsernames.filter(u => !submittedUsernames.has(u));
+  const missingStudents = [...relevantUsernames].sort((a, b) => a.localeCompare(b, "de")).filter(u => !submittedUsernames.has(u));
   const participated = submissions.filter(s => !s.not_participated);
   const avg = participated.length > 0
     ? (participated.reduce((s, r) => s + ((r.score || 0) / (r.total_points || 1)) * 100, 0) / participated.length).toFixed(1)
