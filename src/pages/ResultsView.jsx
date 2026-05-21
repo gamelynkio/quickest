@@ -594,13 +594,15 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         const s = submissions.find(s => s.id === subId);
         return s ? `- "${s.answers?.[qId] || "–"}" → ${pts} / ${qData.points} Pkt. (Lehrer)` : null;
       })
-      .filter(Boolean).join("\n");
+      .filter(Boolean).join("
+");
 
     const toRecorrect = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed && !examples[s.id]);
 
     const answers = toRecorrect
       .filter(s => s.answers?.[qId]?.trim())
-      .map((s, i) => `${i + 1}. ${s.username}: "${s.answers[qId]}"`).join("\n");
+      .map((s, i) => `${i + 1}. ${s.username}: "${s.answers[qId]}"`).join("
+");
     if (!answers) { setAiRunning(false); setAiProgress(""); return; }
 
     const prompt = `Du bewertest Schülerantworten. Passe deinen Maßstab an diese Lehrer-Beispiele an:
@@ -1210,10 +1212,31 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                       </tr>
                     </thead>
                     <tbody>
-                      {submissions.map((s, i) => {
+                      {(() => {
+                        // Alle Gruppenmitglieder alphabetisch — fehlende als Platzhalter
+                        const subMap = {};
+                        submissions.forEach(s => { subMap[s.username] = s; });
+                        const allNames = [...new Set([
+                          ...(relevantUsernames || []),
+                          ...submissions.map(s => s.username)
+                        ])].sort((a, b) => a.localeCompare(b, "de"));
+
+                        return allNames.map((username, i) => {
+                          const s = subMap[username];
+                          const isPlaceholder = !s;
+
+                          if (isPlaceholder) {
+                            return (
+                              <tr key={username} style={{ borderBottom: i < allNames.length - 1 ? "1px solid #f8fafc" : "none", opacity: 0.5 }}>
+                                <td style={{ padding: "13px 16px", fontWeight: 600, fontSize: "14px", color: "#94a3b8" }}>{username}</td>
+                                <td colSpan={5} style={{ padding: "13px 16px", fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>nicht teilgenommen</td>
+                              </tr>
+                            );
+                          }
+
                         const hasAiPending = Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed);
                         return (
-                          <tr key={s.id} style={{ borderBottom: i < submissions.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent" }}>
+                          <tr key={s.id} style={{ borderBottom: i < allNames.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent" }}>
                             <td style={{ padding: "13px 16px", fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>
                               {s.username}
                               {s.cheat_log?.length > 0 && <span title={`${s.cheat_log.length}× Tab-Wechsel`} style={{ marginLeft: "6px", fontSize: "11px", background: "#fef2f2", color: "#dc2626", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>⚠️ {s.cheat_log.length}×</span>}
@@ -1272,7 +1295,8 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                             </td>
                           </tr>
                         );
-                      })}
+                      });
+                        })()}
                     </tbody>
                   </table>
                 </div>
