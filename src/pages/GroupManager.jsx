@@ -48,12 +48,6 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
   const openNewForm = () => { setEditingGroup(null); setNewName(""); setNewSubject(""); setNewCount(20); setShowForm(true); };
   const openEditForm = (g) => { setEditingGroup(g); setNewName(g.name); setNewSubject(g.subject); setNewCount(g.count); setShowForm(true); };
 
-  const handleExpand = async (groupId) => {
-    if (expandedGroup === groupId) { setExpandedGroup(null); return; }
-    setExpandedGroup(groupId);
-    await loadPins(groupId);
-  };
-
   const loadPins = async (groupId) => {
     const { data, error } = await supabase.from("students").select("username, pin").eq("group_id", groupId);
     if (error) { console.error("PIN-Ladefehler:", error); return; }
@@ -62,6 +56,13 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
       data.forEach(s => { pinMap[s.username] = s.pin; });
       setStudentPins(prev => ({ ...prev, [groupId]: pinMap }));
     }
+  };
+
+  const handleExpand = async (groupId) => {
+    if (expandedGroup === groupId) { setExpandedGroup(null); return; }
+    setExpandedGroup(groupId);
+    // Immer frisch laden, nicht aus Cache
+    await loadPins(groupId);
   };
 
   const saveGroup = async () => {
@@ -95,8 +96,9 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
         await supabase.from("students").insert(students);
         setGroups(prev => [data, ...prev]);
         setShowForm(false);
-        // Automatisch aufklappen und PINs laden
+        // Automatisch aufklappen und PINs laden (kurz warten bis DB-Insert committed)
         setExpandedGroup(data.id);
+        await new Promise(r => setTimeout(r, 800));
         await loadPins(data.id);
       }
     } finally {
@@ -129,6 +131,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
     await supabase.from("students").insert(students);
     setGroups(prev => prev.map(g => g.id === group.id ? data : g));
     setExpandedGroup(group.id);
+    await new Promise(r => setTimeout(r, 800));
     await loadPins(group.id);
     setRegenConfirm(null);
   };
@@ -309,7 +312,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
                   <>
                     <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "12px", marginTop: "14px" }}>Benutzername + individuelle PIN pro Schüler/in</p>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
-                      {group.usernames.map((u, i) => {
+                      {[...group.usernames].sort((a, b) => a.localeCompare(b)).map((u, i) => {
                         const pin = studentPins[group.id]?.[u];
                         return (
                           <div key={i} style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 12px", fontSize: "13px", color: "#374151", border: "1px solid #e2e8f0" }}>
@@ -338,7 +341,7 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
             <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a", textAlign: "center" }}>Welche Schüler/innen verlassen die Gruppe?</h3>
             <p style={{ color: "#64748b", marginBottom: "16px", fontSize: "14px", textAlign: "center" }}>Bitte wähle genau <strong>{needToRemove}</strong> Benutzernamen aus.</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "20px" }}>
-              {removingFrom.group.usernames.map((u, i) => {
+              {[...removingFrom.group.usernames].sort((a, b) => a.localeCompare(b)).map((u, i) => {
                 const selected = selectedToRemove.has(i);
                 return (
                   <button key={i} onClick={() => {
