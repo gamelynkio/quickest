@@ -1193,7 +1193,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
               </div>
             )}
 
-            {submissions.length === 0 ? (
+            {submissions.length === 0 && relevantUsernames.length === 0 ? (
               <div style={{ background: "#fff", borderRadius: "16px", padding: "48px", textAlign: "center", border: "1px solid #e2e8f0", color: "#94a3b8" }}>
                 <div style={{ fontSize: "40px", marginBottom: "12px" }}>📭</div>
                 <div style={{ fontWeight: 600 }}>Noch keine Abgaben</div>
@@ -1204,7 +1204,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ background: "#f8fafc" }}>
-                        {["Schüler/in", "Punkte", "Note", "Status", "Freigabe", ""].map(h => (
+                        {["Nr.", "Schüler/in", "Punkte", "Note", "Status", "Freigabe", ""].map(h => (
                           <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
                         ))}
                       </tr>
@@ -1225,7 +1225,8 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
 
                           if (isPlaceholder) {
                             return (
-                              <tr key={username} style={{ borderBottom: i < allNames.length - 1 ? "1px solid #f8fafc" : "none", opacity: 0.5 }}>
+                              <tr key={username} style={{ borderBottom: i < allNames.length - 1 ? "1px solid #f8fafc" : "none", opacity: 0.45 }}>
+                                <td style={{ padding: "13px 16px", fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>{i + 1}.</td>
                                 <td style={{ padding: "13px 16px", fontWeight: 600, fontSize: "14px", color: "#94a3b8" }}>{username}</td>
                                 <td colSpan={5} style={{ padding: "13px 16px", fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>nicht teilgenommen</td>
                               </tr>
@@ -1235,6 +1236,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                         const hasAiPending = Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed);
                         return (
                           <tr key={s.id} style={{ borderBottom: i < allNames.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent" }}>
+                            <td style={{ padding: "13px 16px", fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>{i + 1}.</td>
                             <td style={{ padding: "13px 16px", fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>
                               {s.username}
                               {s.cheat_log?.length > 0 && <span title={`${s.cheat_log.length}× Tab-Wechsel`} style={{ marginLeft: "6px", fontSize: "11px", background: "#fef2f2", color: "#dc2626", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>⚠️ {s.cheat_log.length}×</span>}
