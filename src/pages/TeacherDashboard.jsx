@@ -500,17 +500,36 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                   <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
                     👥 Warteraum ({lobbyStudents.length} / {lobbyModal.makeup_usernames?.length || lobbyModal.groups?.count || "?"})
                   </div>
-                  {lobbyStudents.length === 0 ? (
-                    <div style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", paddingTop: "20px" }}>
-                      <div style={{ fontSize: "28px", marginBottom: "8px" }}>⏳</div>Noch niemand da...
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "160px", overflowY: "auto" }}>
-                      {[...lobbyStudents].sort((a, b) => a.localeCompare(b, "de")).map((name, i) => (
-                        <div key={i} style={{ background: "#dcfce7", borderRadius: "8px", padding: "6px 12px", fontSize: "13px", fontWeight: 600, color: "#16a34a", display: "flex", alignItems: "center", gap: "6px" }}>✓ {name}</div>
-                      ))}
-                    </div>
-                  )}
+                  {(() => {
+                    let allNames = lobbyModal.makeup_usernames?.length
+                      ? [...lobbyModal.makeup_usernames]
+                      : (() => {
+                          let names = lobbyModal.groups?.usernames || [];
+                          if (typeof names === "string") { try { names = JSON.parse(names); } catch { names = []; } }
+                          return [...names];
+                        })();
+                    allNames = allNames.sort((a, b) => a.localeCompare(b, "de"));
+                    if (allNames.length === 0) return (
+                      <div style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", paddingTop: "20px" }}>
+                        <div style={{ fontSize: "28px", marginBottom: "8px" }}>⏳</div>Warte auf Schüler...
+                      </div>
+                    );
+                    const joined = new Set(lobbyStudents);
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "3px", maxHeight: "220px", overflowY: "auto" }}>
+                        {allNames.map((name, i) => {
+                          const isJoined = joined.has(name);
+                          return (
+                            <div key={name} style={{ display: "flex", alignItems: "center", gap: "10px", borderRadius: "7px", padding: "5px 10px", background: isJoined ? "#f0fdf4" : "transparent", transition: "background 0.3s" }}>
+                              <span style={{ fontSize: "11px", color: "#94a3b8", minWidth: "22px", fontWeight: 600 }}>{i + 1}.</span>
+                              <span style={{ fontSize: "13px", fontWeight: isJoined ? 700 : 400, color: isJoined ? "#16a34a" : "#94a3b8", flex: 1 }}>{name}</span>
+                              {isJoined && <span style={{ fontSize: "12px", color: "#16a34a" }}>✓</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             ) : (
