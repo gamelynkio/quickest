@@ -506,7 +506,7 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "160px", overflowY: "auto" }}>
-                      {lobbyStudents.map((name, i) => (
+                      {[...lobbyStudents].sort((a, b) => a.localeCompare(b, "de")).map((name, i) => (
                         <div key={i} style={{ background: "#dcfce7", borderRadius: "8px", padding: "6px 12px", fontSize: "13px", fontWeight: 600, color: "#16a34a", display: "flex", alignItems: "center", gap: "6px" }}>✓ {name}</div>
                       ))}
                     </div>
