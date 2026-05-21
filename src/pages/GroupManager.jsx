@@ -311,14 +311,14 @@ export default function GroupManager({ navigate, onLogout, currentUser }) {
                 ) : (
                   <>
                     <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "12px", marginTop: "14px" }}>Benutzername + individuelle PIN pro Schüler/in</p>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
-                      {[...group.usernames].sort((a, b) => a.localeCompare(b)).map((u, i) => {
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      {[...group.usernames].sort((a, b) => a.localeCompare(b, "de")).map((u, i) => {
                         const pin = studentPins[group.id]?.[u];
                         return (
-                          <div key={i} style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 12px", fontSize: "13px", color: "#374151", border: "1px solid #e2e8f0" }}>
-                            <span style={{ color: "#94a3b8", fontSize: "11px", display: "block" }}>#{i + 1}</span>
-                            <span style={{ fontWeight: 600 }}>{u}</span>
-                            <span style={{ display: "block", fontSize: "12px", color: "#2563a8", fontWeight: 700 }}>PIN: {pin || "…"}</span>
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f8fafc", borderRadius: "8px", padding: "8px 14px", fontSize: "13px", color: "#374151", border: "1px solid #e2e8f0" }}>
+                            <span style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 600, minWidth: "28px" }}>{i + 1}.</span>
+                            <span style={{ fontWeight: 600, flex: 1 }}>{u}</span>
+                            <span style={{ fontSize: "12px", color: "#2563a8", fontWeight: 700, fontFamily: "monospace" }}>PIN: {pin || "…"}</span>
                           </div>
                         );
                       })}
