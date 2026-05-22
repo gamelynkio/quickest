@@ -203,9 +203,16 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
                             if (!requestTexts[qId]?.trim()) return;
                             setSubmitting(qId);
                             const updated = { ...(submission.correction_requests || {}), [qId]: { text: requestTexts[qId].trim(), ts: new Date().toISOString(), status: "open" } };
-                            const { error } = await supabase.from("submissions").update({ correction_requests: updated }).eq("id", submission.id);
-                            if (error) {
-                              alert("Fehler beim Speichern: " + error.message);
+                            const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
+                            const { data: rpcOk, error } = await supabase.rpc("request_correction", {
+                              _submission_id: submission.id,
+                              _username: qtStudent.username || "",
+                              _pin: qtStudent.pin || "",
+                              _question_id: qId,
+                              _request_text: requestTexts[qId].trim()
+                            });
+                            if (error || !rpcOk) {
+                              alert("Fehler beim Speichern: " + (error?.message || "Unbekannter Fehler"));
                               setSubmitting(null);
                               return;
                             }
