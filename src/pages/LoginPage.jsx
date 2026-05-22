@@ -139,14 +139,18 @@ export default function LoginPage({ onLogin }) {
           return;
         }
       } else {
-        const { data, error } = await supabase
-          .from("students")
-          .select("*, groups(name, subject)")
-          .ilike("username", username.trim())
-          .eq("pin", password.trim())
-          .single();
-        if (error || !data) { setError("Ungültiger Benutzername oder PIN."); return; }
-        onLogin("student", data);
+        const { data, error } = await supabase.rpc("student_login", {
+          _username: username.trim(),
+          _pin: password.trim()
+        });
+        if (error || !data || data.length === 0) { setError("Ungültiger Benutzername oder PIN."); return; }
+        const student = data[0];
+        onLogin("student", {
+          id: student.id,
+          username: student.username,
+          group_id: student.group_id,
+          groups: { name: student.group_name, subject: student.group_subject }
+        });
       }
     } finally {
       setLoading(false);
