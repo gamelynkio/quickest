@@ -360,26 +360,36 @@ export type Database = {
       get_assignment_for_student: {
         Args: { _assignment_id: number }
         Returns: {
-          anti_cheat: boolean
-          custom_rules: string
-          detected_rules: Json
+          anti_cheat: boolean | null
+          created_at: string
+          custom_rules: string | null
+          detected_rules: Json | null
+          grading_mode: string | null
           grading_scale: Json
           group_id: number
           id: number
-          lobby_end_at: string
-          lobby_started_at: string
-          makeup_usernames: string[]
-          parent_assignment_id: number
-          paused_at: string
+          lobby_end_at: string | null
+          lobby_started_at: string | null
+          makeup_usernames: string[] | null
+          parent_assignment_id: number | null
+          paused_at: string | null
           question_data: Json
-          require_seb: boolean
+          require_seb: boolean | null
           status: string
-          time_limit: number
-          timing_mode: string
+          teacher_id: string
+          template_id: number | null
+          time_limit: number | null
+          timing_mode: string | null
           title: string
-          window_end: string
-          window_start: string
+          window_end: string | null
+          window_start: string | null
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "assignments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_server_time: { Args: never; Returns: string }
       get_student_submission: {
