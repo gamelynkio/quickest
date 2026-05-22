@@ -331,10 +331,27 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     setLoading(true);
     let data = null;
     if (preloaded) {
-      const { data: fresh } = await supabase.from("assignments").select("*").eq("id", preloaded.id).single();
+      const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
+      const { data: fresh } = await supabase.rpc("get_assignment_for_student", {
+        _assignment_id: preloaded.id,
+        _username: qtStudent.username || "",
+        _pin: qtStudent.pin || ""
+      });
       data = fresh || preloaded;
     } else {
-      const { data: aktiv } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
+      const qtStudent2 = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
+      const { data: activeLookup } = await supabase
+        .from("assignments").select("id").eq("group_id", currentUser.group_id)
+        .eq("status", "aktiv").order("created_at", { ascending: false }).limit(1).single();
+      let aktiv = null;
+      if (activeLookup?.id) {
+        const { data: rpcResult } = await supabase.rpc("get_assignment_for_student", {
+          _assignment_id: activeLookup.id,
+          _username: qtStudent2.username || currentUser.username || "",
+          _pin: qtStudent2.pin || currentUser.pin || ""
+        });
+        aktiv = rpcResult;
+      }
       if (aktiv) { data = aktiv; }
       else {
         const { data: beendet } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "beendet").order("created_at", { ascending: false }).limit(1).single();
