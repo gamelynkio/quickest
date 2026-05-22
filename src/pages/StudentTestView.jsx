@@ -336,9 +336,9 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       const fresh = Array.isArray(freshArr) ? freshArr[0] : freshArr;
       data = fresh || preloaded;
     } else {
-      const { data: activeLookup } = await supabase.from("assignments").select("id")
-        .eq("group_id", currentUser.group_id).eq("status", "aktiv")
-        .order("created_at", { ascending: false }).limit(1).single();
+      const { data: activeLookupArr } = await supabase.rpc("list_active_assignments_for_group", { _group_id: currentUser.group_id });
+      const activeLookups = (Array.isArray(activeLookupArr) ? activeLookupArr : []).sort((a,b) => new Date(b.lobby_started_at||0) - new Date(a.lobby_started_at||0));
+      const activeLookup = activeLookups[0] || null;
       let aktiv = null;
       if (activeLookup?.id) {
         const { data: aktivArr } = await supabase.rpc("get_assignment_for_student", { _assignment_id: activeLookup.id });
@@ -346,7 +346,10 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       }
       if (aktiv) { data = aktiv; }
       else {
-        const { data: beendet } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "beendet").order("created_at", { ascending: false }).limit(1).single();
+        // beendet query placeholder — see below
+      const { data: beendetArr } = await supabase.rpc("list_active_assignments_for_group", { _group_id: currentUser.group_id });
+      const beendetList = (Array.isArray(beendetArr) ? beendetArr : []).filter(a => a.status === "beendet");
+      const beendet = beendetList.sort((a,b) => new Date(b.lobby_started_at||0) - new Date(a.lobby_started_at||0))[0] || null;
         data = beendet || null;
       }
     }
@@ -420,7 +423,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     const assignmentId = assignment.id;
     const heartbeat = setInterval(async () => {
       await supabase.rpc("lobby_heartbeat", { _assignment_id: assignmentId, _username: currentUser.username });
-      const { data: asgn } = await supabase.from("assignments").select("paused_at, status, lobby_started_at").eq("id", assignmentId).single();
+      const { data: asgnArr } = await supabase.rpc("get_assignment_status", { _assignment_id: assignmentId });
+      const asgn = Array.isArray(asgnArr) ? asgnArr[0] : asgnArr;
       if (asgn) {
         setIsPaused(!!asgn.paused_at);
         if (asgn.status === "beendet" && !isEndedRef.current) { isEndedRef.current = true; setIsEnded(true); handleSubmitRef.current?.(); }
@@ -544,7 +548,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     if (!lobbyWaiting || !assignment?.id) return;
     const id = assignment.id;
     const interval = setInterval(async () => {
-      const { data } = await supabase.from("assignments").select("lobby_started_at, lobby_end_at, status, time_limit").eq("id", id).single();
+      const { data: dataArr } = await supabase.rpc("get_assignment_status", { _assignment_id: id });
+      const data = Array.isArray(dataArr) ? dataArr[0] : dataArr;
       if (!data) return;
       const timeLimit = data.time_limit || assignmentRef.current?.time_limit || 1200;
       if (data.status === "beendet") { setIsEnded(true); return; }
