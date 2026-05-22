@@ -357,7 +357,82 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_assignment_for_student: {
+        Args: { _assignment_id: number }
+        Returns: {
+          anti_cheat: boolean
+          custom_rules: string
+          detected_rules: Json
+          grading_scale: Json
+          group_id: number
+          id: number
+          lobby_end_at: string
+          lobby_started_at: string
+          makeup_usernames: string[]
+          parent_assignment_id: number
+          paused_at: string
+          question_data: Json
+          require_seb: boolean
+          status: string
+          time_limit: number
+          timing_mode: string
+          title: string
+          window_end: string
+          window_start: string
+        }[]
+      }
       get_server_time: { Args: never; Returns: string }
+      get_student_submission: {
+        Args: { _assignment_id: number; _pin: string; _username: string }
+        Returns: {
+          ai_corrections: Json | null
+          answers: Json
+          assignment_id: number
+          cheat_log: Json | null
+          correction_requests: Json | null
+          grade: string | null
+          id: number
+          manual_overrides: Json | null
+          released: boolean | null
+          reviewed: boolean | null
+          score: number | null
+          student_id: number | null
+          submitted_at: string
+          total_points: number | null
+          username: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "submissions"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      list_active_assignments_for_group: {
+        Args: { _group_id: number }
+        Returns: {
+          id: number
+          lobby_end_at: string
+          lobby_started_at: string
+          makeup_usernames: string[]
+          paused_at: string
+          require_seb: boolean
+          status: string
+          time_limit: number
+          timing_mode: string
+          title: string
+          window_end: string
+          window_start: string
+        }[]
+      }
+      lobby_heartbeat: {
+        Args: { _assignment_id: number; _username: string }
+        Returns: undefined
+      }
+      lobby_leave: {
+        Args: { _assignment_id: number; _username: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
