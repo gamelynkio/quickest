@@ -391,6 +391,22 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_assignment_status: {
+        Args: { _assignment_id: number }
+        Returns: {
+          anti_cheat: boolean
+          id: number
+          lobby_end_at: string
+          lobby_started_at: string
+          paused_at: string
+          require_seb: boolean
+          status: string
+          time_limit: number
+          timing_mode: string
+          window_end: string
+          window_start: string
+        }[]
+      }
       get_server_time: { Args: never; Returns: string }
       get_student_submission: {
         Args: { _assignment_id: number; _pin: string; _username: string }
