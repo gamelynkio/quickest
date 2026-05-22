@@ -213,6 +213,7 @@ function SubmissionDetails({ submissionId }) {
         const { data: asgn } = await supabase.from("assignments")
           .select("question_data").eq("id", sub.assignment_id).single();
         if (asgn?.question_data) setQuestionData(asgn.question_data);
+        // Fallback: auch per RPC laden falls Policy question_data blockiert
       }
     };
     load();
@@ -331,15 +332,18 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     setLoading(true);
     let data = null;
     if (preloaded) {
-      const { data: fresh } = await supabase.rpc("get_assignment_for_student", { _assignment_id: preloaded.id });
+      const { data: freshArr } = await supabase.rpc("get_assignment_for_student", { _assignment_id: preloaded.id });
+      const fresh = Array.isArray(freshArr) ? freshArr[0] : freshArr;
       data = fresh || preloaded;
     } else {
-      const { data: aktiv } = await supabase.rpc("get_assignment_for_student", {
-        _assignment_id: await supabase.from("assignments").select("id")
-          .eq("group_id", currentUser.group_id).eq("status", "aktiv")
-          .order("created_at", { ascending: false }).limit(1).single()
-          .then(r => r.data?.id)
-      }).then(r => ({ data: r.data }));
+      const { data: activeLookup } = await supabase.from("assignments").select("id")
+        .eq("group_id", currentUser.group_id).eq("status", "aktiv")
+        .order("created_at", { ascending: false }).limit(1).single();
+      let aktiv = null;
+      if (activeLookup?.id) {
+        const { data: aktivArr } = await supabase.rpc("get_assignment_for_student", { _assignment_id: activeLookup.id });
+        aktiv = Array.isArray(aktivArr) ? aktivArr[0] : aktivArr;
+      }
       if (aktiv) { data = aktiv; }
       else {
         const { data: beendet } = await supabase.from("assignments").select("*").eq("group_id", currentUser.group_id).eq("status", "beendet").order("created_at", { ascending: false }).limit(1).single();
