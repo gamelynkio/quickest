@@ -132,7 +132,7 @@ export default function LoginPage({ onLogin }) {
           if (error.message.includes("Email not confirmed") || error.message.includes("email_not_confirmed")) {
             setEmailNotConfirmed(true);
           } else if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
-            setError("E-Mail oder Passwort falsch. Falls du dein Passwort vergessen hast, klicke auf „Passwort vergessen".");
+            setError('E-Mail oder Passwort falsch. Falls du dein Passwort vergessen hast, klicke auf „Passwort vergessen".');
           } else {
             setError(`Anmeldung fehlgeschlagen: ${error.message}`);
           }
