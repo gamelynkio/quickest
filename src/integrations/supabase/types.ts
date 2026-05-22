@@ -433,6 +433,16 @@ export type Database = {
         Args: { _assignment_id: number; _username: string }
         Returns: undefined
       }
+      student_login: {
+        Args: { _pin: string; _username: string }
+        Returns: {
+          group_id: number
+          group_name: string
+          group_subject: string
+          id: number
+          username: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
