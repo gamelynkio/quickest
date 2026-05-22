@@ -18,9 +18,9 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
       });
       if (data?.[0]) setSubmission(prev => ({ ...prev, ...data[0] }));
       // Lobby-Reset prüfen — wenn Assignment zurückgesetzt wurde, Modal schließen
-      const { data: assignment } = await supabase.from("assignments")
-        .select("status, lobby_started_at").eq("id", initialSubmission.assignment_id).single();
-      if (assignment && !assignment.lobby_started_at && assignment.status !== "beendet" && assignment.status !== "archiviert") {
+      const { data: asgnArr } = await supabase.rpc("get_assignment_status", { _assignment_id: initialSubmission.assignment_id });
+      const assignment = Array.isArray(asgnArr) ? asgnArr[0] : asgnArr;
+      if (!assignment || (!assignment.lobby_started_at && assignment.status !== "beendet" && assignment.status !== "archiviert")) {
         onLobbyReset?.();
       }
     }, 4000);
@@ -304,7 +304,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
       .map(a => String(a.parent_assignment_id))
   );
 
-  const visibleAssignments = assignments.filter(a => {
+  const visibleAssignments = assignments.filter(a => a.status === "aktiv").filter(a => {
     if (submittedIds.has(String(a.id))) return false;
     if (coveredByMakeup.has(String(a.id))) return false;
     if (a.parent_assignment_id) {
