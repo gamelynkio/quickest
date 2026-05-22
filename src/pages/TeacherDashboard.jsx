@@ -102,8 +102,13 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
   };
 
   const reactivateAssignment = async (id) => {
-    await supabase.from("assignments").update({ status: "aktiv" }).eq("id", id);
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "aktiv" } : a));
+    await supabase.from("assignments").update({
+      status: "aktiv",
+      lobby_started_at: null,
+      lobby_end_at: null,
+      paused_at: null
+    }).eq("id", id);
+    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "aktiv", lobby_started_at: null, lobby_end_at: null, paused_at: null } : a));
   };
 
   const archiveAssignment = async (id) => {
