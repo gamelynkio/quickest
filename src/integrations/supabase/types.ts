@@ -408,6 +408,10 @@ export type Database = {
         }[]
       }
       get_server_time: { Args: never; Returns: string }
+      get_student_context: {
+        Args: { _pin: string; _username: string }
+        Returns: Json
+      }
       get_student_submission: {
         Args: { _assignment_id: number; _pin: string; _username: string }
         Returns: {
@@ -450,6 +454,15 @@ export type Database = {
           window_end: string
           window_start: string
         }[]
+      }
+      lobby_action: {
+        Args: {
+          _action: string
+          _assignment_id: number
+          _pin: string
+          _username: string
+        }
+        Returns: boolean
       }
       lobby_heartbeat: {
         Args: { _assignment_id: number; _username: string }
