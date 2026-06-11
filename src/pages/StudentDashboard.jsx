@@ -11,17 +11,16 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
     const poll = setInterval(async () => {
       // Submission-Daten frisch laden
       const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
-      const { data } = await supabase.rpc("get_student_submission", {
-        _assignment_id: initialSubmission.assignment_id,
+      // Frische Daten + Lobby-Reset-Check in einem Call
+      const { data: ctx } = await supabase.rpc("get_student_context", {
         _username: qtStudent.username || "",
         _pin: qtStudent.pin || ""
       });
-      if (data?.[0]) setSubmission(prev => ({ ...prev, ...data[0] }));
-      // Lobby-Reset prüfen — wenn Assignment zurückgesetzt wurde, Modal schließen
-      const { data: asgnArr } = await supabase.rpc("get_assignment_status", { _assignment_id: initialSubmission.assignment_id });
-      const assignment = Array.isArray(asgnArr) ? asgnArr[0] : asgnArr;
-      if (!assignment || (!assignment.lobby_started_at && assignment.status !== "beendet" && assignment.status !== "archiviert")) {
-        onLobbyReset?.();
+      if (ctx && !ctx.error) {
+        const freshSub = (ctx.submissions || []).find(s => s.id === initialSubmission.id);
+        if (freshSub) setSubmission(prev => ({ ...prev, ...freshSub }));
+        const asgn = (ctx.assignments || []).find(a => a.id === initialSubmission.assignment_id);
+        if (!asgn) onLobbyReset?.(); // Assignment nicht mehr aktiv → wurde zurückgesetzt
       }
     }, 4000);
     return () => clearInterval(poll);
@@ -271,28 +270,18 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
   const fetchData = async () => {
     const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
-    const pin = qtStudent.pin || "";
-    const [{ data: asgn }, { data: allMakeups }] = await Promise.all([
-      supabase.rpc("list_active_assignments_for_group", { _group_id: currentUser.group_id }),
-      supabase.from("assignments").select("id, parent_assignment_id, title")
-        .eq("group_id", currentUser.group_id)
-        .not("parent_assignment_id", "is", null),
-    ]);
-    const allAssignments = asgn || [];
-    const subsResults = await Promise.all(
-      allAssignments.map(a => supabase.rpc("get_student_submission", {
-        _assignment_id: a.id,
-        _username: currentUser.username,
-        _pin: pin
-      }))
-    );
-    const subs = subsResults.flatMap((r, i) => (r.data || []).map(s => ({
+    if (!qtStudent.username || !qtStudent.pin) return;
+    const { data, error } = await supabase.rpc("get_student_context", {
+      _username: qtStudent.username,
+      _pin: qtStudent.pin
+    });
+    if (error || !data || data.error) return;
+    setAssignments(data.assignments || []);
+    setSubmissions((data.submissions || []).map(s => ({
       ...s,
-      assignments: { title: allAssignments[i]?.title }
+      assignments: { title: (data.assignments || []).find(a => a.id === s.assignment_id)?.title || "" }
     })));
-    setAssignments(allAssignments);
-    setSubmissions(subs);
-    setAllMakeupAssignments(allMakeups || []);
+    setAllMakeupAssignments(data.all_group_assignments || []);
     setLoading(false);
   };
 
@@ -341,11 +330,12 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
 
   const handleOpenSubmission = async (s) => {
     const [{ data: freshSubmission }, { data: assignmentData }] = await Promise.all([
-      supabase.rpc("get_student_submission", {
-        _assignment_id: s.assignment_id,
-        _username: s.username,
-        _pin: JSON.parse(sessionStorage.getItem("qt_student") || "{}").pin || ""
-      }).then(r => ({ data: r.data?.[0] })),
+      (async () => {
+        const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
+        const { data: ctx } = await supabase.rpc("get_student_context", { _username: qtStudent.username || "", _pin: qtStudent.pin || "" });
+        const sub = (ctx?.submissions || []).find(sub => sub.id === s.id);
+        return { data: sub || s };
+      })(),
       supabase.from("assignments").select("question_data, teacher_id").eq("id", s.assignment_id).single(),
     ]);
     let teacherName = "–";
