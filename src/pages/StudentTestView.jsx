@@ -407,9 +407,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
       if (data.timing_mode === "lobby" && !data.lobby_started_at) {
         setLobbyWaiting(true);
         const now = new Date().toISOString();
-        const { data: hbResult } = await supabase.rpc("lobby_heartbeat", { _assignment_id: data.id, _username: currentUser.username });
-        // if no row existed yet, insert (first join)
-        if (!hbResult) { await supabase.from("lobby_presence").insert({ assignment_id: data.id, username: currentUser.username, last_seen: now }); }
+        const qtStudentJoin = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
+        await supabase.rpc("lobby_action", { _username: qtStudentJoin.username||"", _pin: qtStudentJoin.pin||"", _assignment_id: data.id, _action: "join" });
         const { data: presenceData } = await supabase.from("lobby_presence").select("username").eq("assignment_id", data.id).gte("last_seen", new Date(Date.now() - 15000).toISOString());
         setLobbyPlayerCount(presenceData?.length || 0);
       }
@@ -422,7 +421,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     if (!assignment || submitted) return;
     const assignmentId = assignment.id;
     const heartbeat = setInterval(async () => {
-      await supabase.rpc("lobby_heartbeat", { _assignment_id: assignmentId, _username: currentUser.username });
+      const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
+      await supabase.rpc("lobby_action", { _username: qtStudent.username||"", _pin: qtStudent.pin||"", _assignment_id: assignmentId, _action: "heartbeat" });
       const { data: asgnArr } = await supabase.rpc("get_assignment_status", { _assignment_id: assignmentId });
       const asgn = Array.isArray(asgnArr) ? asgnArr[0] : asgnArr;
       if (asgn) {
@@ -439,7 +439,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
         }
       }
     }, 3000);
-    const cleanup = async () => { await supabase.rpc("lobby_leave", { _assignment_id: assignmentId, _username: currentUser.username }); };
+    const cleanup = async () => { const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
+      await supabase.rpc("lobby_action", { _username: qtStudent.username||"", _pin: qtStudent.pin||"", _assignment_id: assignmentId, _action: "leave" }); };
     window.addEventListener("beforeunload", cleanup);
     return () => { clearInterval(heartbeat); window.removeEventListener("beforeunload", cleanup); };
   }, [assignment?.id, submitted]);
@@ -646,7 +647,8 @@ export default function StudentTestView({ currentUser, assignment: assignmentPro
     }).select("id").single();
     if (newSubmission) { submissionIdRef.current = newSubmission.id; setSubmissionId(newSubmission.id); }
     safeStorage.removeItem(`qt_start_${assignment.id}_${currentUser.id}`);
-    await supabase.rpc("lobby_leave", { _assignment_id: assignment.id, _username: currentUser.username });
+    const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
+      await supabase.rpc("lobby_action", { _username: qtStudent.username||"", _pin: qtStudent.pin||"", _assignment_id: assignment.id, _action: "leave" });
     setSubmitted(true);
     // Initiales Ergebnis setzen (noch nicht freigegeben)
     setSubmissionResult({ released: false, grade: null, score: null, total_points: null });
