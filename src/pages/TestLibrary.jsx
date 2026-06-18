@@ -33,6 +33,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const [shareLink, setShareLink] = useState("");
   const [copiedWhat, setCopiedWhat] = useState("");
   const [assigning, setAssigning] = useState(false);
+  const isMobile = useIsMobile();
 
   const copyWithFeedback = (text, what) => {
     navigator.clipboard.writeText(text);
