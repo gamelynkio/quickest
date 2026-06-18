@@ -1245,10 +1245,25 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                           }
 
                         const hasAiPending = Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed);
+                        const openDetails = async () => {
+                          if (s.not_participated) return;
+                          const { data: fresh } = await supabase.from("submissions").select("*").eq("id", s.id).single();
+                          const sub = { ...(fresh || s), assignments: s.assignments };
+                          setSelectedSubmission(sub);
+                          setOverrides({});
+                          setMaxPointEdits({});
+                          const initComments = {};
+                          Object.entries(sub.ai_corrections || {}).forEach(([qId, c]) => {
+                            if (c.teacherComment) initComments[qId] = c.teacherComment;
+                          });
+                          setTeacherComments(initComments);
+                        };
+                        const stop = e => e.stopPropagation();
                         return (
-                          <tr key={s.id} style={{ borderBottom: i < allNames.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent" }}>
+                          <tr key={s.id} onClick={openDetails} style={{ borderBottom: i < allNames.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent", cursor: s.not_participated ? "default" : "pointer" }}>
                             <td style={{ padding: "13px 16px", fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>{i + 1}.</td>
                             <td style={{ padding: "13px 16px", fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>
+
                               {s.username}
                               {s.cheat_log?.length > 0 && <span title={`${s.cheat_log.length}× Tab-Wechsel`} style={{ marginLeft: "6px", fontSize: "11px", background: "#fef2f2", color: "#dc2626", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>⚠️ {s.cheat_log.length}×</span>}
                               {s.assignments?.title !== assignment.title && <span style={{ marginLeft: "6px", fontSize: "10px", background: "#f0f7ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px" }}>Nachtest</span>}
