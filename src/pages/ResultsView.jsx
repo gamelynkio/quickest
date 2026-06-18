@@ -1742,13 +1742,20 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
 
             {!scanResult ? (
               <>
-                <label style={{ display: "block", border: "2px dashed #e2e8f0", borderRadius: "12px", padding: "32px", textAlign: "center", cursor: "pointer", background: scanFile ? "#f0fdf4" : "#f8fafc", marginBottom: "16px" }}>
+                <label style={{ display: "block", border: "2px dashed #e2e8f0", borderRadius: "12px", padding: "24px", textAlign: "center", cursor: "pointer", background: scanFile ? "#f0fdf4" : "#f8fafc", marginBottom: "10px" }}>
                   <div style={{ fontSize: "32px", marginBottom: "8px" }}>📁</div>
                   <div style={{ fontSize: "14px", fontWeight: 600, color: "#374151" }}>
-                    {scanFile ? scanFile.name : "PDF auswählen oder hierher ziehen"}
+                    {scanFile ? scanFile.name : "PDF oder Foto aus Ordner"}
                   </div>
                   {scanFile && <div style={{ fontSize: "12px", color: "#16a34a", marginTop: "4px" }}>✓ {(scanFile.size / 1024 / 1024).toFixed(1)} MB</div>}
                   <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={e => { setScanFile(e.target.files[0]); setScanError(""); }} />
+                </label>
+
+                <label style={{ display: "block", border: "2px dashed #bbf7d0", borderRadius: "12px", padding: "18px", textAlign: "center", cursor: "pointer", background: "#f0fdf4", marginBottom: "16px" }}>
+                  <div style={{ fontSize: "28px", marginBottom: "6px" }}>📷</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#16a34a" }}>Direkt fotografieren</div>
+                  <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>Rückkamera öffnen</div>
+                  <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { setScanFile(e.target.files[0]); setScanError(""); }} />
                 </label>
                 {scanError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#dc2626", marginBottom: "12px" }}>⚠️ {scanError}</div>}
                 <div style={{ display: "flex", gap: "10px" }}>
