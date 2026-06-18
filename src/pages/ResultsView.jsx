@@ -600,8 +600,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
 
     const answers = toRecorrect
       .filter(s => s.answers?.[qId]?.trim())
-      .map((s, i) => `${i + 1}. ${s.username}: "${s.answers[qId]}"`).join("
-");
+      .map((s, i) => `${i + 1}. ${s.username}: "${s.answers[qId]}"`).join("\n");
     if (!answers) { setAiRunning(false); setAiProgress(""); return; }
 
     const prompt = `Du bewertest Schülerantworten. Passe deinen Maßstab an diese Lehrer-Beispiele an:
