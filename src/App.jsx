@@ -4,7 +4,6 @@ import LoginPage from "./pages/LoginPage";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import TestEditor from "./pages/TestEditor";
 import TestLibrary from "./pages/TestLibrary";
-import StudentTestView from "./pages/StudentTestView";
 import StudentDashboard from "./pages/StudentDashboard";
 import GroupManager from "./pages/GroupManager";
 import ResultsView from "./pages/ResultsView";
@@ -23,7 +22,6 @@ export default function App() {
       return stored ? JSON.parse(stored) : null;
     } catch { return null; }
   });
-  const [studentPage, setStudentPage] = useState("dashboard"); // "dashboard" | "test"
   const [currentPage, setCurrentPage] = useState(() => {
     try {
       const saved = sessionStorage.getItem("qt_page") || "dashboard";
@@ -95,16 +93,8 @@ export default function App() {
     setStudentPage("dashboard");
   };
 
-  const [selectedAssignment, setSelectedAssignment] = useState(null);
 
-  const handleStudentStartTest = (assignment) => {
-    setSelectedAssignment(assignment);
-    setStudentPage("test");
-  };
 
-  const handleStudentFinish = async () => {
-    setStudentPage("dashboard");
-  };
 
   const handleLogout = async () => {
     try {
@@ -150,10 +140,7 @@ export default function App() {
 
   // Student flow
   if (studentUser) {
-    if (studentPage === "test") {
-      return <StudentTestView currentUser={studentUser} assignment={selectedAssignment} onFinish={handleStudentFinish} />;
-    }
-    return <StudentDashboard currentUser={studentUser} onStartTest={handleStudentStartTest} onLogout={handleLogout} />;
+    return <StudentDashboard currentUser={studentUser} onLogout={handleLogout} />;
   }
 
   if (!session || currentPage === "login") return <LoginPage onLogin={handleLogin} />;
