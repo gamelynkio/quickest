@@ -355,39 +355,6 @@ export default function StudentDashboard({ currentUser, onLogout }) {
     return;
   };
 
-  const SebModal = () => (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-      <div style={{ background: "#fff", borderRadius: "24px", padding: "32px", maxWidth: "480px", width: "100%", textAlign: "center" }}>
-        <div style={{ fontSize: "52px", marginBottom: "12px" }}>🔒</div>
-        <h3 style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Safe Exam Browser erforderlich</h3>
-        <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px", lineHeight: 1.6 }}>
-          Dieser Test muss mit dem <strong>Safe Exam Browser</strong> geöffnet werden.
-        </p>
-        <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "16px", marginBottom: "20px", textAlign: "left" }}>
-          <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "10px" }}>So geht's:</div>
-          <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#64748b", lineHeight: 2 }}>
-            <li>Installiere die <strong>Safe Exam Browser</strong> App (einmalig)</li>
-            <li>Klicke auf „Safe Exam Browser starten" — SEB öffnet sich automatisch</li>
-            <li>Logge dich ein und starte den Test</li>
-          </ol>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
-          <a href="https://apps.apple.com/us/app/safeexambrowser/id1155002964" target="_blank" rel="noreferrer"
-            style={{ padding: "10px", background: "#000", color: "#fff", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 600 }}>🍎 App Store (iOS)</a>
-          <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer"
-            style={{ padding: "10px", background: "#0078d4", color: "#fff", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 600 }}>🪟 Windows / macOS</a>
-        </div>
-        <a href="sebs://quickest.lovable.app/?role=student"
-          style={{ display: "block", padding: "14px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "14px", textDecoration: "none", marginBottom: "10px" }}>
-          🔒 Safe Exam Browser starten
-        </a>
-        <button onClick={() => setSebBlockedAssignment(null)}
-          style={{ width: "100%", padding: "12px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
-          Zurück zum Dashboard
-        </button>
-      </div>
-    </div>
-  );
 
   const timeLabel = (a) => {
     const mins = Math.round((a.time_limit || 0) / 60);
