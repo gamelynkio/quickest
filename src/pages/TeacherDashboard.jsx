@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+const useIsMobile = () => { const [m, setM] = useState(window.innerWidth < 768); useEffect(() => { const h = () => setM(window.innerWidth < 768); window.addEventListener("resize", h); return () => window.removeEventListener("resize", h); }, []); return m; };
 import { supabase } from "@/integrations/supabase/client";
 import TeacherLayout from "../components/TeacherLayout";
 
@@ -14,6 +15,7 @@ export default function TeacherDashboard({ currentUser, navigate }) {
   const [stats, setStats] = useState({ total: 0, active: 0, groups: 0, done: 0 });
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => { if (currentUser?.id) fetchAll(); }, [currentUser?.id]);
 
@@ -74,14 +76,14 @@ export default function TeacherDashboard({ currentUser, navigate }) {
 
   return (
     <TeacherLayout currentUser={currentUser} navigate={navigate}>
-      <div style={{ padding: "32px 32px 0" }}>
+      <div style={{ padding: isMobile ? "16px 12px 0" : "32px 32px 0" }}>
         <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginBottom: "4px" }}>
           Willkommen, {currentUser.name || currentUser.email?.split("@")[0]} 👋
         </h1>
         <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px" }}>Hier ist deine Übersicht.</p>
 
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "28px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: "16px", marginBottom: "28px" }}>
           {[
             { icon: "📋", val: stats.total, label: "Tests gesamt" },
             { icon: "🟢", val: stats.active, label: "Aktive Tests" },
@@ -98,7 +100,7 @@ export default function TeacherDashboard({ currentUser, navigate }) {
       </div>
 
       {/* Assignments table */}
-      <div style={{ padding: "0 32px 32px" }}>
+      <div style={{ padding: isMobile ? "0 12px 16px" : "0 32px 32px" }}>
         <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden", marginBottom: "20px" }}>
           <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -113,7 +115,7 @@ export default function TeacherDashboard({ currentUser, navigate }) {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#f8fafc" }}>
-                {["Test", "Gruppe", "Status", "Aktionen"].map(h => (
+                {(isMobile ? ["Test", "Aktionen"] : ["Test", "Gruppe", "Status", "Aktionen"]).map(h => (
                   <th key={h} style={{ padding: "12px 20px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#64748b", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
                 ))}
               </tr>
@@ -134,12 +136,12 @@ export default function TeacherDashboard({ currentUser, navigate }) {
                         {a.isChild && <span style={{ fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>Nachtest</span>}
                       </div>
                     </td>
-                    <td style={{ padding: "13px 20px", fontSize: "13px", color: "#2563a8", fontWeight: 500 }}>{a.groups?.name || "–"}</td>
-                    <td style={{ padding: "13px 20px" }}>
+                    {!isMobile && <td style={{ padding: "13px 20px", fontSize: "13px", color: "#2563a8", fontWeight: 500 }}>{a.groups?.name || "–"}</td>}
+                    {!isMobile && <td style={{ padding: "13px 20px" }}>
                       <span style={{ background: st.bg, color: st.color, borderRadius: "6px", padding: "3px 10px", fontSize: "12px", fontWeight: 600 }}>{st.label}</span>
-                    </td>
+                    </td>}
                     <td style={{ padding: "13px 20px" }}>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
                         {/* Drucken */}
                         <button onClick={() => navigate("testPrint", a)} style={{ padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#f8fafc", fontSize: "12px", cursor: "pointer", color: "#374151" }}>
                           🖨️ Drucken
@@ -226,8 +228,10 @@ export default function TeacherDashboard({ currentUser, navigate }) {
           </div>
         )}
 
-        {/* Quick Actions */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "20px" }}>
+        {/* Quick Actions — nur auf Desktop */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "20px" }}
+          className="desktop-only">
+          <style>{`@media (max-width: 768px) { .desktop-only { display: none !important; } }`}</style>
           <button onClick={() => navigate("groups")} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "24px", textAlign: "center", cursor: "pointer" }}>
             <div style={{ fontSize: "32px", marginBottom: "8px" }}>👥</div>
             <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>Lerngruppen verwalten</div>
