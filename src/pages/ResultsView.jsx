@@ -1352,10 +1352,35 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                     {(() => {
                       const allQs = flattenQs(assignmentData?.question_data || assignment?.question_data || []);
                       const corrections = selectedSubmission.ai_corrections || {};
-                      const orderedKeys = allQs.length > 0
-                        ? allQs.map(q => String(q.id)).filter(id => corrections[id] !== undefined)
-                        : Object.keys(corrections);
+
+                      // Wenn ai_corrections leer aber Fragen vorhanden: alle Fragen anzeigen
+                      let orderedKeys;
+                      if (allQs.length > 0) {
+                        orderedKeys = allQs.map(q => String(q.id));
+                        // Füge Platzhalter für fehlende Korrekturen ein
+                        orderedKeys.forEach(qId => {
+                          if (!corrections[qId]) {
+                            corrections[qId] = { points: 0, correct: false, aiReviewed: false, needsReview: false, maxPoints: Number(allQs.find(q => String(q.id) === qId)?.points || 0), comment: "" };
+                          }
+                        });
+                      } else {
+                        orderedKeys = Object.keys(corrections);
+                      }
                       const missingKeys = Object.keys(corrections).filter(k => !orderedKeys.includes(k));
+
+                      if (orderedKeys.length === 0 && missingKeys.length === 0) {
+                        return (
+                          <div style={{ padding: "24px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                            <div style={{ fontSize: "28px", marginBottom: "8px" }}>📋</div>
+                            Noch keine Korrektur vorhanden.
+                            <br />
+                            <button onClick={() => { const toReset = [{ ...selectedSubmission, reviewed: false }]; startBatchCorrection(toReset); }} disabled={aiRunning}
+                              style={{ marginTop: "12px", padding: "8px 16px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                              🤖 Jetzt korrigieren
+                            </button>
+                          </div>
+                        );
+                      }
 
                       return [...orderedKeys, ...missingKeys].map((qId, i) => {
                         const correction = corrections[qId];
