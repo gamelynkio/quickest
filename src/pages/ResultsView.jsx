@@ -4,6 +4,16 @@ import TeacherLayout from "../components/TeacherLayout";
 
 const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97316", "5": "#ef4444", "6": "#dc2626" };
 
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+};
+
 const flattenQs = (qs) => {
   const result = [];
   for (const q of (qs || [])) {
@@ -394,6 +404,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [scanResult, setScanResult] = useState(null);
   const [scanError, setScanError] = useState("");
   const [scanDebug, setScanDebug] = useState("");
+  const isMobile = useIsMobile();
   const [calibration, setCalibration] = useState(null); // {qId, qText, cases:[{subId,username,answer,points,maxPoints}], examples:{}}
   const [savingSolution, setSavingSolution] = useState(null);
 
@@ -594,13 +605,15 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         const s = submissions.find(s => s.id === subId);
         return s ? `- "${s.answers?.[qId] || "–"}" → ${pts} / ${qData.points} Pkt. (Lehrer)` : null;
       })
-      .filter(Boolean).join("\n");
+      .filter(Boolean).join("
+");
 
     const toRecorrect = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed && !examples[s.id]);
 
     const answers = toRecorrect
       .filter(s => s.answers?.[qId]?.trim())
-      .map((s, i) => `${i + 1}. ${s.username}: "${s.answers[qId]}"`).join("\n");
+      .map((s, i) => `${i + 1}. ${s.username}: "${s.answers[qId]}"`).join("
+");
     if (!answers) { setAiRunning(false); setAiProgress(""); return; }
 
     const prompt = `Du bewertest Schülerantworten. Passe deinen Maßstab an diese Lehrer-Beispiele an:
@@ -1304,7 +1317,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                 {/* Detail Panel */}
                 {selectedSubmission && <div onClick={() => setSelectedSubmission(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.15)", zIndex: 499 }} />}
                 {selectedSubmission && (
-                  <div style={{ position: "fixed", top: 0, right: 0, width: "480px", height: "100vh", background: "#fff", borderLeft: "1px solid #e2e8f0", padding: "24px", overflowY: "auto", zIndex: 500, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)" }}>
+                  <div style={{ position: "fixed", top: 0, right: 0, width: isMobile ? "100vw" : "480px", height: "100vh", background: "#fff", borderLeft: "1px solid #e2e8f0", padding: isMobile ? "16px" : "24px", overflowY: "auto", zIndex: 500, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
                       <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{selectedSubmission.username}</h3>
                       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -1732,8 +1745,8 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
       )}
       {/* Scan-Upload Modal */}
       {scanModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "520px", width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", zIndex: 1000, padding: isMobile ? "0" : "20px" }}>
+          <div style={{ background: "#fff", borderRadius: isMobile ? "16px 16px 0 0" : "20px", padding: isMobile ? "20px 16px" : "32px", maxWidth: "520px", width: "100%", maxHeight: isMobile ? "92vh" : "85vh", overflowY: "auto" }}>
             <h3 style={{ margin: "0 0 6px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>📄 Gescannte Tests hochladen</h3>
             <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "12px", lineHeight: 1.6 }}>
               Jede Seite muss den Code <code style={{ background: "#f1f5f9", padding: "1px 6px", borderRadius: "4px", fontSize: "12px" }}>[SCHÜLER: name | TEST: {String(assignmentData?.id || "").slice(-6).toUpperCase()}]</code> enthalten.
