@@ -1,259 +1,43 @@
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import TeacherLayout from "../components/TeacherLayout";
 
+const DEMO_TESTS = [
+  { id: 1, title: "Mathe – Bruchrechnung Kl. 6", questions: 12, group: "6a", status: "aktiv", submissions: 18, total: 24, avgScore: 76 },
+  { id: 2, title: "Deutsch – Grammatik", questions: 8, group: "7b", status: "beendet", submissions: 22, total: 22, avgScore: 82 },
+  { id: 3, title: "Englisch – Simple Past", questions: 15, group: "8c", status: "entwurf", submissions: 0, total: 28, avgScore: null },
+];
+
 const STATUS_STYLE = {
-  aktiv:       { bg: "#dcfce7", color: "#16a34a", label: "Aktiv" },
-  beendet:     { bg: "#f1f5f9", color: "#64748b", label: "Beendet" },
-  archiviert:  { bg: "#f3f4f6", color: "#9ca3af", label: "Archiviert" },
-  entwurf:     { bg: "#fef9c3", color: "#ca8a04", label: "Entwurf" },
+  aktiv: { bg: "#dcfce7", color: "#16a34a", label: "Aktiv" },
+  beendet: { bg: "#f1f5f9", color: "#64748b", label: "Beendet" },
+  entwurf: { bg: "#fef9c3", color: "#ca8a04", label: "Entwurf" },
 };
 
-const QRCode = ({ url, size = 140 }) => (
-  <img
-    src={`https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&bgcolor=ffffff&color=1e3a5f&margin=8`}
-    alt="QR-Code"
-    style={{ width: size, height: size, borderRadius: "10px", border: "2px solid #e2e8f0" }}
-  />
-);
-
 export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
-  const [assignments, setAssignments] = useState([]);
-  const [groups, setGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [endConfirm, setEndConfirm] = useState(null);
-  const [lobbyModal, setLobbyModal] = useState(null);
-  const [lobbyStudents, setLobbyStudents] = useState([]);
-  const [lobbySubmissions, setLobbySubmissions] = useState([]);
-  const [lobbyTimeLeft, setLobbyTimeLeft] = useState(null);
-  const [starting, setStarting] = useState(false);
-  const [resetConfirm, setResetConfirm] = useState(false);
-
-  useEffect(() => { fetchData(); }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
-    const [{ data: asgn }, { data: grps }] = await Promise.all([
-      supabase.from("assignments").select("*, groups(name, subject, count, usernames)").order("created_at", { ascending: false }),
-      supabase.from("groups").select("*"),
-    ]);
-    setAssignments(asgn || []);
-    setGroups(grps || []);
-    setLoading(false);
-  };
-
-  const endAssignment = async (id) => {
-    // Status auf beendet setzen
-    const endedAt = new Date().toISOString();
-    await supabase.from("assignments").update({ status: "beendet", lobby_end_at: endedAt }).eq("id", id);
-
-    // Für alle Schüler ohne Abgabe eine leere Submission erstellen
-    const assignment = assignments.find(a => a.id === id);
-    if (assignment?.groups) {
-      // usernames kann als jsonb-Array oder String ankommen
-      let usernames = assignment.groups.usernames || [];
-      if (typeof usernames === "string") {
-        try { usernames = JSON.parse(usernames); } catch { usernames = []; }
-      }
-      if (usernames.length > 0) {
-        // Kurz warten damit laufende Auto-Submits zuerst landen
-        await new Promise(r => setTimeout(r, 2000));
-        const { data: existing } = await supabase
-          .from("submissions").select("username").eq("assignment_id", id);
-        const submittedNames = new Set((existing || []).map(s => s.username));
-        const missing = usernames.filter(u => !submittedNames.has(u));
-        if (missing.length > 0) {
-          const { data: studentData } = await supabase
-            .from("students").select("id, username").in("username", missing)
-            .eq("group_id", assignment.group_id);
-          const inserts = (studentData || []).map(s => {
-            const totalPoints = assignment.question_data
-              ? assignment.question_data.reduce((sum, q) => {
-                  if (q.type === "section") return sum + (q.tasks || []).reduce((ts, t) => ts + (t.questions || []).reduce((qs, tq) => qs + Number(tq.points || 0), 0), 0);
-                  return sum + Number(q.points || 0);
-                }, 0)
-              : 0;
-            const gs = [...(assignment.grading_scale || [])].sort((a, b) => a.minPercent - b.minPercent);
-            const grade = gs.length > 0 ? gs[0].grade : "6";
-            return {
-              assignment_id: id,
-              student_id: s.id,
-              username: s.username,
-              answers: {},
-              score: 0,
-              total_points: totalPoints,
-              grade: null,
-              ai_corrections: {},
-              reviewed: true,
-              cheat_log: [],
-              not_participated: true,
-            };
-          });
-          if (inserts.length > 0) {
-            await supabase.from("submissions").insert(inserts);
-          }
-        }
-      }
-    }
-
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "beendet", lobby_end_at: endedAt } : a));
-    setEndConfirm(null);
-  };
-
-  const reactivateAssignment = async (id) => {
-    await supabase.from("assignments").update({
-      status: "aktiv",
-      lobby_started_at: null,
-      lobby_end_at: null,
-      paused_at: null
-    }).eq("id", id);
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "aktiv", lobby_started_at: null, lobby_end_at: null, paused_at: null } : a));
-  };
-
-  const archiveAssignment = async (id) => {
-    await supabase.from("assignments").update({ status: "archiviert" }).eq("id", id);
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "archiviert" } : a));
-  };
-
-  const unarchiveAssignment = async (id) => {
-    const endedAt = new Date().toISOString();
-    await supabase.from("assignments").update({ status: "beendet", lobby_end_at: endedAt }).eq("id", id);
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "beendet" } : a));
-  };
-
-  const pauseAssignment = async (id) => {
-    const now = new Date().toISOString();
-    await supabase.from("assignments").update({ paused_at: now }).eq("id", id);
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, paused_at: now } : a));
-  };
-
-  const resumeAssignment = async (id) => {
-    await supabase.from("assignments").update({ paused_at: null }).eq("id", id);
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, paused_at: null } : a));
-  };
-
-  const deleteAssignment = async (id) => {
-    await supabase.from("assignments").delete().eq("id", id);
-    setAssignments(prev => prev.filter(a => a.id !== id));
-    setDeleteConfirm(null);
-  };
-
-  const openLobby = async (assignment) => {
-    setLobbyModal(assignment);
-    setLobbyStudents([]);
-    const { data } = await supabase
-      .from("lobby_presence")
-      .select("username")
-      .eq("assignment_id", assignment.id);
-    setLobbyStudents((data || []).map(d => d.username));
-  };
-
-  useEffect(() => {
-    if (!lobbyModal) return;
-    const channel = supabase
-      .channel(`lobby-${lobbyModal.id}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "lobby_presence",
-        filter: `assignment_id=eq.${lobbyModal.id}`
-      }, async () => {
-        const { data } = await supabase
-          .from("lobby_presence").select("username").eq("assignment_id", lobbyModal.id);
-        setLobbyStudents((data || []).map(d => d.username));
-      })
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [lobbyModal]);
-
-  const startLobby = async () => {
-    if (!lobbyModal || starting) return;
-    setStarting(true);
-    const timeLimit = lobbyModal.time_limit || 1200;
-    // lobby_started_at: 5s in der Zukunft (Countdown für Schüler)
-    // lobby_end_at: absoluter Endzeitpunkt — alle Clients rechnen dagegen
-    const startAt = new Date(Date.now() + 5000).toISOString();
-    const endAt = new Date(Date.now() + 5000 + timeLimit * 1000).toISOString();
-    await supabase.from("assignments").update({
-      lobby_started_at: startAt,
-      lobby_end_at: endAt,
-    }).eq("id", lobbyModal.id);
-    setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: startAt, lobby_end_at: endAt } : a));
-    setLobbyModal(prev => ({ ...prev, lobby_started_at: startAt, lobby_end_at: endAt }));
-    setStarting(false);
-  };
-
-  const doResetLobby = async () => {
-    if (!lobbyModal) return;
-    setResetConfirm(false);
-    await supabase.from("assignments").update({ lobby_started_at: null, lobby_end_at: null, status: "aktiv", paused_at: null }).eq("id", lobbyModal.id);
-    await supabase.from("lobby_presence").delete().eq("assignment_id", lobbyModal.id);
-    await supabase.from("submissions").delete().eq("assignment_id", lobbyModal.id);
-    setAssignments(prev => prev.map(a => a.id === lobbyModal.id ? { ...a, lobby_started_at: null, lobby_end_at: null, status: "aktiv", paused_at: null } : a));
-    setLobbyModal(prev => ({ ...prev, lobby_started_at: null, lobby_end_at: null, status: "aktiv", paused_at: null }));
-    setLobbyStudents([]);
-    setLobbySubmissions([]);
-    setLobbyTimeLeft(null);
-  };
-
-  const appUrl = "https://quickest.lovable.app?role=student";
-  const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-
-  useEffect(() => {
-    if (!lobbyModal) return;
-    const tick = async () => {
-      const [{ data: presence }, { data: subs }] = await Promise.all([
-        supabase.from("lobby_presence").select("username").eq("assignment_id", lobbyModal.id),
-        supabase.from("submissions").select("username").eq("assignment_id", lobbyModal.id),
-      ]);
-      const unique = [...new Set((presence || []).map(d => d.username))];
-      setLobbyStudents(unique);
-      setLobbySubmissions((subs || []).map(s => s.username));
-      if (lobbyModal.lobby_started_at) {
-        const elapsed = Math.floor((Date.now() - new Date(lobbyModal.lobby_started_at).getTime()) / 1000);
-        const remaining = Math.max(0, (lobbyModal.time_limit || 1200) - elapsed);
-        setLobbyTimeLeft(remaining);
-      }
-    };
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [lobbyModal]);
-
   const stats = [
-    { label: "Tests gesamt", value: assignments.length, icon: "📋", color: "#2563a8" },
-    { label: "Aktive Tests", value: assignments.filter(a => a.status === "aktiv").length, icon: "🟢", color: "#16a34a" },
-    { label: "Lerngruppen", value: groups.length, icon: "👥", color: "#7c3aed" },
-    { label: "Abgeschlossen", value: assignments.filter(a => a.status === "beendet").length, icon: "✅", color: "#64748b" },
+    { label: "Tests gesamt", value: "3", icon: "📋", color: "#2563a8" },
+    { label: "Aktive Tests", value: "1", icon: "🟢", color: "#16a34a" },
+    { label: "Lerngruppen", value: "3", icon: "👥", color: "#7c3aed" },
+    { label: "Tests diesen Monat", value: "3 / 30", icon: "📅", color: "#ea580c" },
   ];
-
-  // Sort: parents first, children below (non-archived only)
-  const getSorted = () => {
-    const visible = assignments.filter(a => a.status !== "archiviert");
-    const parents = visible.filter(a => !a.parent_assignment_id);
-    const children = visible.filter(a => !!a.parent_assignment_id);
-    const sorted = [];
-    parents.forEach(p => {
-      sorted.push({ ...p, isChild: false });
-      children.filter(c => c.parent_assignment_id === p.id).forEach(c => sorted.push({ ...c, isChild: true }));
-    });
-    children.filter(c => !parents.find(p => p.id === c.parent_assignment_id)).forEach(c => sorted.push({ ...c, isChild: true }));
-    return sorted;
-  };
 
   return (
     <TeacherLayout navigate={navigate} onLogout={onLogout} currentUser={currentUser} activePage="dashboard">
       <div style={{ padding: "32px" }}>
         <div style={{ marginBottom: "28px" }}>
           <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", margin: 0 }}>
-            Willkommen, {currentUser?.name?.split(" ")[0]} 👋
+            Guten Morgen, {currentUser?.name?.split(" ")[0]} 👋
           </h1>
-          <p style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Hier ist deine Übersicht.</p>
+          <p style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>
+            Hier ist deine Übersicht für heute.
+          </p>
         </div>
 
-        {/* Stats */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "28px" }}>
           {stats.map(s => (
-            <div key={s.label} style={{ background: "#fff", borderRadius: "14px", padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #e2e8f0" }}>
+            <div key={s.label} style={{
+              background: "#fff", borderRadius: "14px", padding: "20px",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #e2e8f0"
+            }}>
               <div style={{ fontSize: "24px", marginBottom: "8px" }}>{s.icon}</div>
               <div style={{ fontSize: "26px", fontWeight: 800, color: s.color }}>{s.value}</div>
               <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>{s.label}</div>
@@ -261,390 +45,86 @@ export default function TeacherDashboard({ navigate, onLogout, currentUser }) {
           ))}
         </div>
 
-        {/* Assignments table */}
         <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
           <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Testzuweisungen</h2>
-            <button onClick={() => navigate("library")} style={{ padding: "9px 18px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📚 Test-Vorlagen</button>
+            <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Meine Tests</h2>
+            <button onClick={() => navigate("testEditor", null)} style={{
+              padding: "9px 18px", background: "#2563a8", color: "#fff",
+              border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px",
+              cursor: "pointer"
+            }}>
+              ✏️ Neuer Test
+            </button>
           </div>
-
-          {loading ? (
-            <div style={{ padding: "48px", textAlign: "center", color: "#94a3b8" }}>Wird geladen...</div>
-          ) : assignments.length === 0 ? (
-            <div style={{ padding: "48px", textAlign: "center", color: "#94a3b8" }}>
-              <div style={{ fontSize: "40px", marginBottom: "12px" }}>📋</div>
-              <div style={{ fontWeight: 600 }}>Noch keine Tests zugewiesen</div>
-              <div style={{ fontSize: "13px", marginTop: "4px" }}>Gehe zu „Test-Vorlagen" um einen Test einer Gruppe zuzuweisen.</div>
-              <button onClick={() => navigate("library")} style={{ marginTop: "16px", padding: "9px 20px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>
-                Zur Vorlagen-Bibliothek →
-              </button>
-            </div>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc" }}>
-                  {["Test", "Gruppe", "Modus", "Status", "Aktionen"].map(h => (
-                    <th key={h} style={{ padding: "12px 20px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {getSorted().map((a, i, arr) => {
-                  const s = STATUS_STYLE[a.status] || STATUS_STYLE.entwurf;
-                  const mins = Math.round((a.time_limit || 0) / 60);
-                  const isLobby = a.timing_mode === "lobby";
-                  const lobbyStarted = isLobby && !!a.lobby_started_at;
-                  const isEnded = a.status === "beendet" || a.status === "archiviert";
-                  const isArchived = a.status === "archiviert";
-                  return (
-                    <tr key={a.id} style={{ borderBottom: i < arr.length - 1 ? "1px solid #f8fafc" : "none", background: isEnded ? "#f8fafc" : a.isChild ? "#fafbff" : "transparent", opacity: isArchived ? 0.6 : isEnded ? 0.75 : 1 }}>
-                      <td style={{ padding: a.isChild ? "10px 20px 10px 40px" : "14px 20px", fontWeight: 600, fontSize: "14px", color: a.isChild ? "#4b5563" : "#0f172a" }}>
-                        {a.isChild && <span style={{ color: "#94a3b8", marginRight: "8px", fontSize: "16px" }}>↳</span>}
-                        {a.title}
-                        {a.isChild && <span style={{ marginLeft: "6px", fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>Nachtest</span>}
-                      </td>
-                      <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>
-                        {a.groups?.name || "–"}
-                        {a.groups?.subject && <span style={{ color: "#94a3b8", marginLeft: "4px" }}>({a.groups.subject})</span>}
-                      </td>
-                      <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>
-                        {isLobby ? (
-                          <span style={{ background: "#f5f3ff", color: "#6d28d9", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>
-                            🎮 Lobby{lobbyStarted ? " · Gestartet" : " · Wartet"}
-                          </span>
-                        ) : (
-                          <>
-                            {mins > 0 ? `${mins} Min.` : "–"}
-                            {a.timing_mode === "window" && a.window_date && (
-                              <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
-                                📅 {new Date(a.window_date).toLocaleDateString("de-DE")} {a.window_start}–{a.window_end}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </td>
-                      <td style={{ padding: "14px 20px" }}>
-                        <span style={{ background: s.bg, color: s.color, borderRadius: "6px", padding: "3px 10px", fontSize: "12px", fontWeight: 600 }}>{s.label}</span>
-                        {a.paused_at && <span style={{ marginLeft: "6px", fontSize: "11px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>⏸ Pause</span>}
-                        {a.anti_cheat && <span style={{ marginLeft: "6px", fontSize: "11px", color: "#7c3aed" }}>🛡️</span>}
-                      </td>
-                      <td style={{ padding: "14px 20px" }}>
-                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                          {isLobby && !isEnded && (
-                            <button onClick={() => openLobby(a)} style={{ padding: "5px 10px", border: "1px solid #e9d5ff", borderRadius: "7px", background: "#f5f3ff", fontSize: "12px", cursor: "pointer", color: "#6d28d9", fontWeight: 600 }}>
-                              🎮 Lobby
-                            </button>
-                          )}
-                          <button onClick={() => navigate("results", a)} style={{ padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151" }}>
-                            📊 Ergebnisse
-                          </button>
-                          {a.status === "archiviert" ? (
-                            <button onClick={() => unarchiveAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#f8fafc", fontSize: "12px", cursor: "pointer", color: "#64748b", fontWeight: 600 }}>
-                              📂 Aus Archiv
-                            </button>
-                          ) : a.status === "beendet" ? (
-                            <>
-                              <button onClick={() => reactivateAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #bbf7d0", borderRadius: "7px", background: "#f0fdf4", fontSize: "12px", cursor: "pointer", color: "#16a34a", fontWeight: 600 }}>
-                                ▶ Reaktivieren
-                              </button>
-                              <button onClick={() => archiveAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#f8fafc", fontSize: "12px", cursor: "pointer", color: "#94a3b8", fontWeight: 600 }}>
-                                📁 Archivieren
-                              </button>
-                            </>
-                          ) : a.paused_at ? (
-                            <button onClick={() => resumeAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #bbf7d0", borderRadius: "7px", background: "#f0fdf4", fontSize: "12px", cursor: "pointer", color: "#16a34a", fontWeight: 600 }}>
-                              ▶ Fortsetzen
-                            </button>
-                          ) : (
-                            <button onClick={() => pauseAssignment(a.id)} style={{ padding: "5px 10px", border: "1px solid #bfdbfe", borderRadius: "7px", background: "#eff6ff", fontSize: "12px", cursor: "pointer", color: "#2563a8", fontWeight: 600 }}>
-                              ⏸ Pausieren
-                            </button>
-                          )}
-                          {!isEnded && a.status !== "archiviert" && (
-                            <button onClick={() => setEndConfirm(a)} style={{ padding: "5px 10px", border: "1px solid #fde68a", borderRadius: "7px", background: "#fefce8", fontSize: "12px", cursor: "pointer", color: "#92400e", fontWeight: 600 }}>
-                              ✓ Beenden
-                            </button>
-                          )}
-                          <button onClick={() => setDeleteConfirm(a.id)} style={{ padding: "5px 10px", border: "1px solid #fecaca", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#dc2626" }}>🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#f8fafc" }}>
+                {["Test", "Gruppe", "Aufgaben", "Abgaben", "Ø Ergebnis", "Status", "Aktionen"].map(h => (
+                  <th key={h} style={{ padding: "12px 20px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {DEMO_TESTS.map((test, i) => {
+                const s = STATUS_STYLE[test.status];
+                return (
+                  <tr key={test.id} style={{ borderBottom: i < DEMO_TESTS.length - 1 ? "1px solid #f8fafc" : "none" }}>
+                    <td style={{ padding: "14px 20px", fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>{test.title}</td>
+                    <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>{test.group}</td>
+                    <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>{test.questions}</td>
+                    <td style={{ padding: "14px 20px", fontSize: "13px", color: "#64748b" }}>
+                      {test.submissions}/{test.total}
+                      <div style={{ marginTop: "4px", background: "#e2e8f0", borderRadius: "4px", height: "4px", width: "60px" }}>
+                        <div style={{ background: "#2563a8", borderRadius: "4px", height: "4px", width: `${(test.submissions / test.total) * 60}px` }} />
+                      </div>
+                    </td>
+                    <td style={{ padding: "14px 20px", fontSize: "13px", fontWeight: 600, color: test.avgScore ? "#16a34a" : "#94a3b8" }}>
+                      {test.avgScore ? `${test.avgScore}%` : "–"}
+                    </td>
+                    <td style={{ padding: "14px 20px" }}>
+                      <span style={{ background: s.bg, color: s.color, borderRadius: "6px", padding: "3px 10px", fontSize: "12px", fontWeight: 600 }}>
+                        {s.label}
+                      </span>
+                    </td>
+                    <td style={{ padding: "14px 20px" }}>
+                      <button onClick={() => navigate("results")} style={{
+                        padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px",
+                        background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151", marginRight: "6px"
+                      }}>Ergebnisse</button>
+                      <button onClick={() => navigate("testEditor", test)} style={{
+                        padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px",
+                        background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151"
+                      }}>Bearbeiten</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
 
-        {/* Archiv */}
-        {assignments.some(a => a.status === "archiviert") && (
-          <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden", marginTop: "20px" }}>
-            <div style={{ padding: "16px 24px", borderBottom: "1px solid #f1f5f9", background: "#f8fafc", display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "16px" }}>📁</span>
-              <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#64748b" }}>Archiv</h3>
-              <span style={{ fontSize: "12px", color: "#94a3b8" }}>— archivierte Tests, nur für Lehrer sichtbar</span>
-            </div>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc" }}>
-                  {["Test", "Zeitraum", "Aktionen"].map(h => (
-                    <th key={h} style={{ padding: "10px 20px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                    const fmt = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "–";
-                    const archived = assignments.filter(a => a.status === "archiviert");
-                    const parents = archived.filter(a => !a.parent_assignment_id)
-                      .sort((a, b) => new Date(b.lobby_started_at || b.created_at) - new Date(a.lobby_started_at || a.created_at));
-                    const children = archived.filter(a => !!a.parent_assignment_id);
-                    const sorted = [];
-                    parents.forEach(p => {
-                      sorted.push({ ...p, isChild: false });
-                      children.filter(c => c.parent_assignment_id === p.id)
-                        .sort((a, b) => new Date(b.lobby_started_at || b.created_at) - new Date(a.lobby_started_at || a.created_at))
-                        .forEach(c => sorted.push({ ...c, isChild: true }));
-                    });
-                    // orphaned children
-                    children.filter(c => !parents.find(p => p.id === c.parent_assignment_id))
-                      .forEach(c => sorted.push({ ...c, isChild: true }));
-                    return sorted.map((a, i, arr) => (
-                      <tr key={a.id} style={{ borderBottom: i < arr.length - 1 ? "1px solid #f8fafc" : "none", opacity: 0.75, background: a.isChild ? "#fafbff" : "transparent" }}>
-                        <td style={{ padding: a.isChild ? "10px 20px 10px 40px" : "12px 20px" }}>
-                          <div style={{ fontWeight: 600, fontSize: "13px", color: "#64748b", display: "flex", alignItems: "center", gap: "6px" }}>
-                            {a.isChild && <span style={{ color: "#94a3b8", fontSize: "16px" }}>↳</span>}
-                            {a.title}
-                            {a.isChild && <span style={{ fontSize: "10px", background: "#eff6ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>Nachtest</span>}
-                          </div>
-                          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "3px", paddingLeft: a.isChild ? "22px" : "0" }}>{a.groups?.name || "–"}</div>
-                        </td>
-                        <td style={{ padding: "12px 20px" }}>
-                          <div style={{ fontSize: "12px", color: "#64748b" }}><span style={{ color: "#94a3b8" }}>Start:</span> {fmt(a.lobby_started_at)}</div>
-                          <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}><span style={{ color: "#94a3b8" }}>Ende:</span> {fmt(a.lobby_end_at)}</div>
-                        </td>
-                        <td style={{ padding: "12px 20px" }}>
-                          <div style={{ display: "flex", gap: "6px" }}>
-                            <button onClick={() => navigate("results", a)} style={{ padding: "4px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#374151" }}>📊 Ergebnisse</button>
-                            <button onClick={() => unarchiveAssignment(a.id)} style={{ padding: "4px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#f8fafc", fontSize: "12px", cursor: "pointer", color: "#64748b", fontWeight: 600 }}>📂 Wiederherstellen</button>
-                            <button onClick={() => setDeleteConfirm(a.id)} style={{ padding: "4px 10px", border: "1px solid #fecaca", borderRadius: "6px", background: "#fff", fontSize: "12px", cursor: "pointer", color: "#dc2626" }}>🗑</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ));
-                  })()}
-              </tbody>
-            </table>
-          </div>
-        )}
-
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "20px" }}>
-          <div onClick={() => navigate("groups")} style={{ background: "#fff", borderRadius: "14px", padding: "20px", border: "2px dashed #e2e8f0", cursor: "pointer", textAlign: "center" }}
+          <div onClick={() => navigate("groups")} style={{
+            background: "#fff", borderRadius: "14px", padding: "20px",
+            border: "2px dashed #e2e8f0", cursor: "pointer", textAlign: "center"
+          }}
             onMouseOver={e => e.currentTarget.style.borderColor = "#2563a8"}
-            onMouseOut={e => e.currentTarget.style.borderColor = "#e2e8f0"}>
+            onMouseOut={e => e.currentTarget.style.borderColor = "#e2e8f0"}
+          >
             <div style={{ fontSize: "28px", marginBottom: "8px" }}>👥</div>
-            <div style={{ fontWeight: 600, color: "#374151" }}>Lerngruppen verwalten</div>
-            <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "4px" }}>{groups.length} Gruppe{groups.length !== 1 ? "n" : ""} vorhanden</div>
+            <div style={{ fontWeight: 600, color: "#374151" }}>Neue Lerngruppe</div>
+            <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "4px" }}>Schüler anlegen & Benutzernamen generieren</div>
           </div>
-          <div style={{ background: "linear-gradient(135deg, #1e3a5f, #2563a8)", borderRadius: "14px", padding: "20px", textAlign: "center", opacity: 0.7 }}>
+          <div style={{
+            background: "linear-gradient(135deg, #1e3a5f, #2563a8)",
+            borderRadius: "14px", padding: "20px", cursor: "pointer", textAlign: "center", opacity: 0.7
+          }}>
             <div style={{ fontSize: "28px", marginBottom: "8px" }}>🤖</div>
             <div style={{ fontWeight: 600, color: "#fff" }}>KI-Test-Generator</div>
-            {/* "Nur Premium" — versteckt für Demo */}
-            <div style={{ display: "none", fontSize: "12px", color: "rgba(255,255,255,0.7)", marginTop: "4px" }}>Nur Premium · Bald verfügbar</div>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", marginTop: "4px" }}>Nur Premium · Bald verfügbar</div>
           </div>
         </div>
       </div>
-
-      {/* LOBBY MODAL */}
-      {lobbyModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-          <div style={{ background: "#fff", borderRadius: "24px", padding: "32px", maxWidth: "640px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
-              <div>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "#6d28d9", marginBottom: "4px" }}>🎮 LOBBY</div>
-                <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", margin: 0 }}>{lobbyModal.title}</h2>
-                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>{lobbyModal.groups?.name}</div>
-              </div>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                {lobbyModal.lobby_started_at && lobbyTimeLeft !== null && (
-                  <div style={{ textAlign: "center", background: lobbyTimeLeft < 120 ? "#fef2f2" : "#f0fdf4", borderRadius: "12px", padding: "8px 16px", border: `1px solid ${lobbyTimeLeft < 120 ? "#fecaca" : "#bbf7d0"}` }}>
-                    <div style={{ fontSize: "24px", fontWeight: 900, color: lobbyTimeLeft < 120 ? "#dc2626" : "#16a34a", fontVariantNumeric: "tabular-nums" }}>{formatTime(lobbyTimeLeft)}</div>
-                    <div style={{ fontSize: "11px", color: "#64748b" }}>Restzeit</div>
-                  </div>
-                )}
-                <button onClick={() => setLobbyModal(null)} style={{ background: "#f1f5f9", border: "none", borderRadius: "8px", padding: "8px 12px", cursor: "pointer", fontSize: "13px", color: "#374151" }}>✕</button>
-              </div>
-            </div>
-
-            {!lobbyModal.lobby_started_at ? (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
-                <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "20px", textAlign: "center", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
-                    {lobbyModal.require_seb ? "🔒 QR-Code für SEB" : "📱 QR-Code für Schüler"}
-                  </div>
-                  <QRCode url={appUrl} size={140} />
-                  <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px" }}>
-                    {lobbyModal.require_seb ? "Schüler ohne SEB werden zur Installation weitergeleitet" : "Schüler scannen → einloggen → warten"}
-                  </div>
-                  {/* Kopierbarer Link */}
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(appUrl); }}
-                    style={{ marginTop: "10px", width: "100%", padding: "7px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "11px", color: "#2563a8", cursor: "pointer", fontFamily: "monospace", textAlign: "center", wordBreak: "break-all", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                    title="Klicken zum Kopieren"
-                    onMouseOver={e => e.currentTarget.style.background = "#f0f7ff"}
-                    onMouseOut={e => e.currentTarget.style.background = "#fff"}
-                    onMouseDown={e => { e.currentTarget.textContent = "✓ Kopiert!"; setTimeout(() => { e.currentTarget.innerHTML = "📋 " + appUrl; }, 1500); }}
-                  >
-                    📋 {appUrl}
-                  </button>
-                  {lobbyModal.require_seb && (
-                    <div style={{ marginTop: "8px", background: "#f5f3ff", borderRadius: "8px", padding: "6px 10px", fontSize: "11px", color: "#6d28d9", fontWeight: 600 }}>🔒 SEB erforderlich</div>
-                  )}
-                </div>
-                <div style={{ background: "#f8fafc", borderRadius: "16px", padding: "20px", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
-                    👥 Warteraum ({lobbyStudents.length} / {lobbyModal.makeup_usernames?.length || lobbyModal.groups?.count || "?"})
-                  </div>
-                  {(() => {
-                    let allNames = lobbyModal.makeup_usernames?.length
-                      ? [...lobbyModal.makeup_usernames]
-                      : (() => {
-                          let names = lobbyModal.groups?.usernames || [];
-                          if (typeof names === "string") { try { names = JSON.parse(names); } catch { names = []; } }
-                          return [...names];
-                        })();
-                    allNames = allNames.sort((a, b) => a.localeCompare(b, "de"));
-                    if (allNames.length === 0) return (
-                      <div style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", paddingTop: "20px" }}>
-                        <div style={{ fontSize: "28px", marginBottom: "8px" }}>⏳</div>Warte auf Schüler...
-                      </div>
-                    );
-                    const joined = new Set(lobbyStudents);
-                    return (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "3px", maxHeight: "220px", overflowY: "auto" }}>
-                        {allNames.map((name, i) => {
-                          const isJoined = joined.has(name);
-                          return (
-                            <div key={name} style={{ display: "flex", alignItems: "center", gap: "10px", borderRadius: "7px", padding: "5px 10px", background: isJoined ? "#f0fdf4" : "transparent", transition: "background 0.3s" }}>
-                              <span style={{ fontSize: "11px", color: "#94a3b8", minWidth: "22px", fontWeight: 600 }}>{i + 1}.</span>
-                              <span style={{ fontSize: "13px", fontWeight: isJoined ? 700 : 400, color: isJoined ? "#16a34a" : "#94a3b8", flex: 1 }}>{name}</span>
-                              {isJoined && <span style={{ fontSize: "12px", color: "#16a34a" }}>✓</span>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-            ) : (
-              <div style={{ marginBottom: "20px" }}>
-                {(() => {
-                  const totalCount = lobbyModal.makeup_usernames?.length || lobbyModal.groups?.count || 0;
-                  return (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>📊 {lobbySubmissions.length} / {totalCount} abgegeben</div>
-                      <div style={{ height: "8px", flex: 1, margin: "0 12px", background: "#e2e8f0", borderRadius: "8px" }}>
-                        <div style={{ height: "8px", borderRadius: "8px", background: "#16a34a", width: `${totalCount ? (lobbySubmissions.length / totalCount) * 100 : 0}%`, transition: "width 0.5s" }} />
-                      </div>
-                    </div>
-                  );
-                })()}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px", maxHeight: "240px", overflowY: "auto" }}>
-                  {(lobbyModal.makeup_usernames?.length ? lobbyModal.makeup_usernames : (lobbyModal.groups?.usernames || [])).map((name, i) => {
-                    const submitted = lobbySubmissions.includes(name);
-                    const active = lobbyStudents.includes(name);
-                    return (
-                      <div key={i} style={{ borderRadius: "8px", padding: "8px 10px", fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px",
-                        background: submitted ? "#dcfce7" : active ? "#fef9c3" : "#f8fafc",
-                        color: submitted ? "#16a34a" : active ? "#92400e" : "#94a3b8",
-                        border: `1px solid ${submitted ? "#bbf7d0" : active ? "#fde68a" : "#e2e8f0"}` }}>
-                        <span>{submitted ? "✅" : active ? "✍️" : "⏳"}</span>
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ display: "flex", gap: "12px", marginTop: "10px", fontSize: "12px", color: "#64748b" }}>
-                  <span>✅ Abgegeben</span><span>✍️ Schreibt noch</span><span>⏳ Nicht eingeloggt</span>
-                </div>
-              </div>
-            )}
-
-            {/* Testblätter drucken */}
-            <button onClick={() => { setLobbyModal(null); navigate("testPrint", lobbyModal); }}
-              style={{ width: "100%", padding: "10px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer", marginBottom: "8px" }}>
-              🖨️ Testblätter drucken
-            </button>
-
-            {!lobbyModal.lobby_started_at ? (
-              <button onClick={startLobby} disabled={starting || lobbyStudents.length === 0}
-                style={{ width: "100%", padding: "16px", background: lobbyStudents.length > 0 ? "#16a34a" : "#e2e8f0", color: lobbyStudents.length > 0 ? "#fff" : "#94a3b8", border: "none", borderRadius: "12px", fontWeight: 800, fontSize: "16px", cursor: lobbyStudents.length > 0 ? "pointer" : "not-allowed" }}>
-                {starting ? "Wird gestartet..." : lobbyStudents.length === 0 ? "Warte auf Schüler..." : `🚀 Test jetzt starten (${lobbyStudents.length} Schüler)`}
-              </button>
-            ) : (
-              <button onClick={() => setResetConfirm(true)} style={{ width: "100%", padding: "12px", background: "#fff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
-                🔄 Lobby zurücksetzen
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* RESET LOBBY confirm modal */}
-      {resetConfirm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: "20px" }}>
-          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center" }}>
-            <div style={{ fontSize: "40px", marginBottom: "12px" }}>🔄</div>
-            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 10px", color: "#0f172a" }}>Lobby zurücksetzen?</h3>
-            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "8px", lineHeight: 1.6 }}>
-              Alle Abgaben dieses Tests werden gelöscht — Schüler können ihn danach erneut machen.
-            </p>
-            <p style={{ color: "#dc2626", fontSize: "13px", fontWeight: 600, marginBottom: "24px" }}>
-              ⚠️ Diese Aktion kann nicht rückgängig gemacht werden.
-            </p>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={() => setResetConfirm(false)} style={{ flex: 1, padding: "12px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>Abbrechen</button>
-              <button onClick={doResetLobby} style={{ flex: 1, padding: "12px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>Ja, zurücksetzen</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* END confirm modal */}
-      {endConfirm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center" }}>
-            <div style={{ fontSize: "40px", marginBottom: "12px" }}>✅</div>
-            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" }}>Test beenden?</h3>
-            <p style={{ color: "#64748b", marginBottom: "6px", fontSize: "14px" }}>
-              <strong>„{endConfirm.title}"</strong> wird als abgeschlossen archiviert.
-            </p>
-            <p style={{ color: "#94a3b8", marginBottom: "24px", fontSize: "13px" }}>
-              Schüler können den Test nicht mehr bearbeiten. Ergebnisse und Abgaben bleiben erhalten. Du kannst ihn jederzeit reaktivieren.
-            </p>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={() => setEndConfirm(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
-              <button onClick={() => endAssignment(endConfirm.id)} style={{ flex: 1, padding: "10px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 700, cursor: "pointer" }}>✓ Beenden</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete confirm modal */}
-      {deleteConfirm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", borderRadius: "20px", padding: "32px", maxWidth: "360px", width: "100%", textAlign: "center" }}>
-            <div style={{ fontSize: "40px", marginBottom: "12px" }}>🗑️</div>
-            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" }}>Zuweisung löschen?</h3>
-            <p style={{ color: "#64748b", marginBottom: "24px", fontSize: "14px" }}>Alle Abgaben und Ergebnisse werden unwiderruflich gelöscht. Die Test-Vorlage bleibt erhalten.</p>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={() => setDeleteConfirm(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
-              <button onClick={() => deleteAssignment(deleteConfirm)} style={{ flex: 1, padding: "10px", background: "#dc2626", color: "#fff", border: "none", borderRadius: "9px", fontWeight: 700, cursor: "pointer" }}>Löschen</button>
-            </div>
-          </div>
-        </div>
-      )}
     </TeacherLayout>
   );
 }
