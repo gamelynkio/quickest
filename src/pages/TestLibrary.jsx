@@ -21,9 +21,6 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
   const [filterGradeLevel, setFilterGradeLevel] = useState("");
   const [assignModal, setAssignModal] = useState(null);
   const [assignGroupId, setAssignGroupId] = useState("");
-  const [assignTimeLimit, setAssignTimeLimit] = useState(20);
-  const [assignAntiCheat, setAssignAntiCheat] = useState(true);
-  const [assignRequireSeb, setAssignRequireSeb] = useState(true);
   const [assignGradingScale, setAssignGradingScale] = useState([
     { grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
     { grade: "3", minPercent: 59 }, { grade: "4", minPercent: 45 },
@@ -87,10 +84,10 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
       teacher_id: currentUser?.id,
       title: assignModal.title,
       status: "aktiv",
-      time_limit: assignTimeLimit * 60,
-      timing_mode: "lobby",
-      anti_cheat: assignAntiCheat,
-      require_seb: assignRequireSeb,
+      time_limit: 0,
+      timing_mode: "analog",
+      anti_cheat: false,
+      require_seb: false,
       question_data: assignModal.question_data,
       grading_scale: assignGradingScale,
     });
@@ -177,15 +174,13 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
                       {taskCount > 0 && <span>📋 {taskCount} Aufgabe{taskCount !== 1 ? "n" : ""}</span>}
                       {mins > 0 && <span>⏱ {mins} Min.</span>}
                       {template.grade_level && <span>🎓 Klasse {template.grade_level}</span>}
-                      {template.anti_cheat && <span>🛡️ Anti-Cheat</span>}
                     </div>
                   </div>
                   <div style={{ padding: "12px 20px", borderTop: "1px solid #f1f5f9", display: "flex", gap: "8px" }}>
                     <button onClick={() => {
                       setAssignModal(template);
                       setAssignGroupId("");
-                      setAssignTimeLimit(Math.round((template.time_limit || 1200) / 60));
-                      setAssignAntiCheat(template.anti_cheat || true);
+              
                       setAssignRequireSeb(true);
                       setAssignGradingScale(template.grading_scale?.length ? template.grading_scale : [
                         { grade: "1", minPercent: 87 }, { grade: "2", minPercent: 73 },
@@ -234,35 +229,7 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
               )}
             </div>
 
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>Bearbeitungszeit (Min.)</label>
-              <input type="number" min={1} max={180} value={assignTimeLimit} onChange={e => setAssignTimeLimit(Number(e.target.value))}
-                style={{ width: "160px", padding: "10px 12px", border: "2px solid #e5e7eb", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" }} />
-            </div>
 
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
-                <input type="checkbox" checked={assignAntiCheat} onChange={e => setAssignAntiCheat(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#2563a8" }} />
-                🛡️ Anti-Cheat aktivieren (Tab-Wechsel loggen)
-              </label>
-            </div>
-
-            <div style={{ marginBottom: "24px" }}>
-              <label style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer" }}>
-                <input type="checkbox" checked={assignRequireSeb} onChange={e => setAssignRequireSeb(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#7c3aed", marginTop: "1px", flexShrink: 0 }} />
-                <div>
-                  🔒 Safe Exam Browser erforderlich
-                  <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 400, marginTop: "2px" }}>
-                    Schüler müssen die SEB-App nutzen. Verhindert Autokorrektur, Tab-Wechsel und andere Apps.
-                  </div>
-                </div>
-              </label>
-              {assignRequireSeb && (
-                <div style={{ marginTop: "10px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", padding: "12px 14px", fontSize: "13px", color: "#92400e", lineHeight: 1.5 }}>
-                  <strong>⚠️ Hinweis für Android-Geräte:</strong> Safe Exam Browser ist für Android nicht verfügbar.
-                </div>
-              )}
-            </div>
 
             <details style={{ marginBottom: "24px" }}>
               <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#374151", userSelect: "none" }}>📊 Notenschlüssel anpassen</summary>
