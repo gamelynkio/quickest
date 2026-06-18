@@ -113,28 +113,28 @@ export default function TestLibrary({ navigate, onLogout, currentUser }) {
 
   return (
     <TeacherLayout navigate={navigate} onLogout={onLogout} currentUser={currentUser} activePage="library">
-      <div style={{ padding: "32px", maxWidth: "960px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
+      <div style={{ padding: isMobile ? "16px 12px 24px" : "32px", maxWidth: isMobile ? "none" : "960px" }}>
+        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "stretch" : "flex-start", gap: isMobile ? "12px" : "0", marginBottom: "28px" }}>
           <div>
-            <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: 0 }}>Test-Vorlagen</h1>
+            <h1 style={{ fontSize: isMobile ? "20px" : "22px", fontWeight: 800, color: "#0f172a", margin: 0 }}>Test-Vorlagen</h1>
             <p style={{ color: "#64748b", fontSize: "14px", marginTop: "4px" }}>Erstelle wiederverwendbare Tests und weise sie beliebigen Lerngruppen zu.</p>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={() => navigate("share")} style={{ padding: "10px 16px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>📥 Test per Share-Code importieren</button>
-            <button onClick={() => navigate("testEditor", null)} style={{ padding: "10px 20px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>✏️ Neue Vorlage</button>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: "8px" }}>
+            <button onClick={() => navigate("share")} style={{ padding: "10px 16px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer", textAlign: "center" }}>📥 Test per Share-Code importieren</button>
+            <button onClick={() => navigate("testEditor", null)} style={{ padding: "10px 20px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer", textAlign: "center" }}>✏️ Neue Vorlage</button>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "12px", marginBottom: "24px" }}>
+        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? "8px" : "12px", marginBottom: "24px" }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Vorlagen durchsuchen..."
-            style={{ flex: 1, padding: "10px 14px", border: "2px solid #e5e7eb", borderRadius: "10px", fontSize: "14px", fontFamily: "inherit", outline: "none" }} />
+            style={{ flex: isMobile ? "none" : 1, width: isMobile ? "100%" : undefined, padding: "10px 14px", border: "2px solid #e5e7eb", borderRadius: "10px", fontSize: "14px", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
           <select value={filterSubject} onChange={e => setFilterSubject(e.target.value)}
-            style={{ padding: "10px 14px", border: "2px solid #e5e7eb", borderRadius: "10px", fontSize: "14px", fontFamily: "inherit", background: "#fff" }}>
+            style={{ width: isMobile ? "100%" : "auto", padding: "10px 14px", border: "2px solid #e5e7eb", borderRadius: "10px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
             <option value="">Alle Fächer</option>
             {subjects.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <select value={filterGradeLevel} onChange={e => setFilterGradeLevel(e.target.value)}
-            style={{ padding: "10px 14px", border: "2px solid #e5e7eb", borderRadius: "10px", fontSize: "14px", fontFamily: "inherit", background: "#fff" }}>
+            style={{ width: isMobile ? "100%" : "auto", padding: "10px 14px", border: "2px solid #e5e7eb", borderRadius: "10px", fontSize: "14px", fontFamily: "inherit", background: "#fff", boxSizing: "border-box" }}>
             <option value="">Alle Klassen</option>
             {[5,6,7,8,9,10,11,12,13].map(g => <option key={g} value={String(g)}>{g}. Klasse</option>)}
           </select>
