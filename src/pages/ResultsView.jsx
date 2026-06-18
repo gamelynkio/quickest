@@ -594,8 +594,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
         const s = submissions.find(s => s.id === subId);
         return s ? `- "${s.answers?.[qId] || "–"}" → ${pts} / ${qData.points} Pkt. (Lehrer)` : null;
       })
-      .filter(Boolean).join("
-");
+      .filter(Boolean).join("\n");
 
     const toRecorrect = submissions.filter(s => s.ai_corrections?.[qId]?.aiReviewed && !examples[s.id]);
 
