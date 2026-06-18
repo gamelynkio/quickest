@@ -145,6 +145,16 @@ export default function App() {
 
   if (!session || currentPage === "login") return <LoginPage onLogin={handleLogin} />;
 
+  // Profile still loading — show spinner to avoid white screen
+  if (!profile) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9" }}>
+      <div style={{ textAlign: "center", color: "#64748b" }}>
+        <div style={{ fontSize: "40px", marginBottom: "12px" }}>⚡</div>
+        <div style={{ fontSize: "16px", fontWeight: 600 }}>Wird geladen...</div>
+      </div>
+    </div>
+  );
+
   const teacherNav = { navigate, onLogout: handleLogout, currentUser: profile };
   if (currentPage === "dashboard") return <TeacherDashboard {...teacherNav} />;
   if (currentPage === "testEditor") return <TestEditor {...teacherNav} editingTest={editingTest} />;
