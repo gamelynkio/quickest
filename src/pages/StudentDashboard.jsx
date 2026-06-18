@@ -252,12 +252,11 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
   );
 }
 
-export default function StudentDashboard({ currentUser, onStartTest, onLogout }) {
+export default function StudentDashboard({ currentUser, onLogout }) {
   const [assignments, setAssignments] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [allMakeupAssignments, setAllMakeupAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [sebBlockedAssignment, setSebBlockedAssignment] = useState(null);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
 
   useEffect(() => { fetchData(); }, []);
@@ -352,15 +351,11 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
   };
 
   const handleStartTest = (assignment) => {
-    const isSEB = navigator.userAgent.includes("SEB") || navigator.userAgent.includes("SafeExamBrowser");
-    if (assignment.require_seb && !isSEB) {
-      setSebBlockedAssignment(assignment);
-      return;
-    }
-    onStartTest(assignment);
+    // Digitale Testdurchführung deaktiviert — nur Scan-Workflow
+    return;
   };
 
-  const SEB_MODAL = () => (
+=> (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
       <div style={{ background: "#fff", borderRadius: "24px", padding: "32px", maxWidth: "480px", width: "100%", textAlign: "center" }}>
         <div style={{ fontSize: "52px", marginBottom: "12px" }}>🔒</div>
@@ -448,7 +443,7 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
                     <div style={{ fontWeight: 700, fontSize: "16px", color: "#fff", marginBottom: "4px" }}>{a.title}</div>
                     <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", marginBottom: "14px" }}>Lobby — warte auf den Startschuss der Lehrkraft</div>
                     <button onClick={() => handleStartTest(a)} style={{ width: "100%", padding: "13px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
-                      In Warteraum eintreten →
+                      Ergebnisse ansehen →
                     </button>
                   </div>
                 ))}
@@ -528,7 +523,6 @@ export default function StudentDashboard({ currentUser, onStartTest, onLogout })
           </>
         )}
       </div>
-      {sebBlockedAssignment && <SEB_MODAL />}
       {selectedSubmission && <SubmissionDetailModal submission={selectedSubmission} onClose={() => setSelectedSubmission(null)} onLobbyReset={() => { setSelectedSubmission(null); fetchData(); }} />}
     </div>
   );
