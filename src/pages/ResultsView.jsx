@@ -1245,10 +1245,25 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                           }
 
                         const hasAiPending = Object.values(s.ai_corrections || {}).some(c => c.needsReview && !c.aiReviewed);
+                        const openDetails = async () => {
+                          if (s.not_participated) return;
+                          const { data: fresh } = await supabase.from("submissions").select("*").eq("id", s.id).single();
+                          const sub = { ...(fresh || s), assignments: s.assignments };
+                          setSelectedSubmission(sub);
+                          setOverrides({});
+                          setMaxPointEdits({});
+                          const initComments = {};
+                          Object.entries(sub.ai_corrections || {}).forEach(([qId, c]) => {
+                            if (c.teacherComment) initComments[qId] = c.teacherComment;
+                          });
+                          setTeacherComments(initComments);
+                        };
+                        const stop = e => e.stopPropagation();
                         return (
-                          <tr key={s.id} style={{ borderBottom: i < allNames.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent" }}>
+                          <tr key={s.id} onClick={openDetails} style={{ borderBottom: i < allNames.length - 1 ? "1px solid #f8fafc" : "none", background: selectedSubmission?.id === s.id ? "#f0f7ff" : "transparent", cursor: s.not_participated ? "default" : "pointer" }}>
                             <td style={{ padding: "13px 16px", fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>{i + 1}.</td>
                             <td style={{ padding: "13px 16px", fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>
+
                               {s.username}
                               {s.cheat_log?.length > 0 && <span title={`${s.cheat_log.length}× Tab-Wechsel`} style={{ marginLeft: "6px", fontSize: "11px", background: "#fef2f2", color: "#dc2626", borderRadius: "4px", padding: "1px 6px", fontWeight: 700 }}>⚠️ {s.cheat_log.length}×</span>}
                               {s.assignments?.title !== assignment.title && <span style={{ marginLeft: "6px", fontSize: "10px", background: "#f0f7ff", color: "#2563a8", borderRadius: "4px", padding: "1px 6px" }}>Nachtest</span>}
@@ -1277,7 +1292,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 : s.reviewed
                                 ? <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>✓ Geprüft</span>
                                 : hasAiPending
-                                ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }} onClick={() => startBatchCorrection([s])}>🤖 KI wiederholen</span>
+                                ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }} onClick={e => { stop(e); startBatchCorrection([s]); }}>🤖 KI wiederholen</span>
                                 : <span style={{ background: "#fef9c3", color: "#ca8a04", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>Offen</span>}
                             </td>
                             <td style={{ padding: "13px 16px" }}>
@@ -1285,25 +1300,14 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 ? <span style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic" }}>–</span>
                                 : s.released
                                 ? <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>✓ Freigegeben</span>
-                                : <button onClick={() => releaseSubmissions([s.id])} style={{ padding: "4px 10px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Freigeben</button>}
+                                : <button onClick={e => { stop(e); releaseSubmissions([s.id]); }} style={{ padding: "4px 10px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Freigeben</button>}
                             </td>
                             <td style={{ padding: "13px 16px" }}>
                               {!s.not_participated && (
-                                <button onClick={async () => {
-                                  // Frische Daten inkl. correction_requests laden
-                                  const { data: fresh } = await supabase.from("submissions").select("*").eq("id", s.id).single();
-                                  const sub = { ...(fresh || s), assignments: s.assignments };
-                                  setSelectedSubmission(sub);
-                                  setOverrides({});
-                                  setMaxPointEdits({});
-                                  const initComments = {};
-                                  Object.entries(sub.ai_corrections || {}).forEach(([qId, c]) => {
-                                    if (c.teacherComment) initComments[qId] = c.teacherComment;
-                                  });
-                                  setTeacherComments(initComments);
-                                }} style={{ padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer" }}>Details</button>
+                                <button onClick={e => { stop(e); openDetails(); }} style={{ padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer" }}>Details</button>
                               )}
                             </td>
+
                           </tr>
                         );
                       });
