@@ -355,7 +355,7 @@ export default function StudentDashboard({ currentUser, onLogout }) {
     return;
   };
 
-=> (
+  const SebModal = () => (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
       <div style={{ background: "#fff", borderRadius: "24px", padding: "32px", maxWidth: "480px", width: "100%", textAlign: "center" }}>
         <div style={{ fontSize: "52px", marginBottom: "12px" }}>🔒</div>
