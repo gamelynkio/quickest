@@ -1292,7 +1292,7 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 : s.reviewed
                                 ? <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>✓ Geprüft</span>
                                 : hasAiPending
-                                ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }} onClick={() => startBatchCorrection([s])}>🤖 KI wiederholen</span>
+                                ? <span style={{ background: "#eff6ff", color: "#2563a8", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }} onClick={e => { stop(e); startBatchCorrection([s]); }}>🤖 KI wiederholen</span>
                                 : <span style={{ background: "#fef9c3", color: "#ca8a04", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>Offen</span>}
                             </td>
                             <td style={{ padding: "13px 16px" }}>
@@ -1300,25 +1300,14 @@ Summe muss ${q.points} Punkte ergeben. Gib NUR JSON zurück:
                                 ? <span style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic" }}>–</span>
                                 : s.released
                                 ? <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: "6px", padding: "3px 8px", fontSize: "12px", fontWeight: 600 }}>✓ Freigegeben</span>
-                                : <button onClick={() => releaseSubmissions([s.id])} style={{ padding: "4px 10px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Freigeben</button>}
+                                : <button onClick={e => { stop(e); releaseSubmissions([s.id]); }} style={{ padding: "4px 10px", background: "#f0f7ff", color: "#2563a8", border: "1px solid #bfdbfe", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Freigeben</button>}
                             </td>
                             <td style={{ padding: "13px 16px" }}>
                               {!s.not_participated && (
-                                <button onClick={async () => {
-                                  // Frische Daten inkl. correction_requests laden
-                                  const { data: fresh } = await supabase.from("submissions").select("*").eq("id", s.id).single();
-                                  const sub = { ...(fresh || s), assignments: s.assignments };
-                                  setSelectedSubmission(sub);
-                                  setOverrides({});
-                                  setMaxPointEdits({});
-                                  const initComments = {};
-                                  Object.entries(sub.ai_corrections || {}).forEach(([qId, c]) => {
-                                    if (c.teacherComment) initComments[qId] = c.teacherComment;
-                                  });
-                                  setTeacherComments(initComments);
-                                }} style={{ padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer" }}>Details</button>
+                                <button onClick={e => { stop(e); openDetails(); }} style={{ padding: "5px 12px", border: "1px solid #e2e8f0", borderRadius: "7px", background: "#fff", fontSize: "12px", cursor: "pointer" }}>Details</button>
                               )}
                             </td>
+
                           </tr>
                         );
                       });
