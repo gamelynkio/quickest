@@ -786,16 +786,33 @@ Antworte NUR als JSON: {"results": [{"username": "<n>", "points": <Zahl>, "comme
       const parsed = [];
 
       const extractFromPage = (pageText) => {
+
         const mm = pageText.match(markerRe);
+
         if (!mm) return null;
+
         const studentName = mm[1].trim().replace(/^[-\s]+|[-\s]+$/g, "");
+
         if (!studentName || studentName.length < 2) return null;
+
+        const normName = studentName.toLowerCase().replace(/[-\s]/g, "");
+
         const answerLines = pageText.split("\n")
           .map(l => l.trim())
-          .filter(l => l.length >= 1 && !isPrinted(l) && l !== studentName);
+          .filter(l => {
+            if (l.length < 1) return false;
+            if (isPrinted(l)) return false;
+            if (l === studentName) return false;
+            if (l.toLowerCase().replace(/[-\s]/g, "") === normName) return false;
+            return true;
+          });
+
         const answers = {};
+
         openQs.forEach((q, qi) => { answers[String(q.id)] = answerLines[qi] || ""; });
+
         return { student: studentName, answers };
+
       };
 
       for (const rawPage of rawPages) {
