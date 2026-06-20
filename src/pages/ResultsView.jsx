@@ -757,13 +757,32 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
             {scanFiles.length > 0 && <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "4px", justifyContent: "center" }}>{Array.from(scanFiles).map((f, i) => <span key={i} style={{ fontSize: "11px", background: "#dcfce7", color: "#16a34a", borderRadius: "4px", padding: "2px 7px" }}>✓ {f.name.slice(0, 20)}{f.name.length > 20 ? "…" : ""}</span>)}</div>}
             <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple style={{ display: "none" }} onChange={e => { setScanFiles(Array.from(e.target.files)); setScanError(""); }} />
           </label>
-          <label style={{ display: "block", border: "2px dashed #bbf7d0", borderRadius: "12px", padding: "18px", textAlign: "center", cursor: "pointer", background: "#f0fdf4", marginBottom: "6px" }}>
-            <div style={{ fontSize: "28px", marginBottom: "6px" }}>📷</div>
-            <div style={{ fontSize: "14px", fontWeight: 600, color: "#16a34a" }}>Seite fotografieren</div>
-            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>Foto wird zur Liste hinzugefügt</div>
-            <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) { setScanFiles(prev => [...prev, e.target.files[0]]); setScanError(""); } }} />
-          </label>
-          {scanFiles.length > 0 && <div style={{ fontSize: "12px", color: "#64748b", textAlign: "center", marginBottom: "12px" }}>Noch eine Seite? Nochmal fotografieren — sie wird hinzugefügt. <button onClick={() => setScanFiles([])} style={{ background: "none", border: "none", color: "#dc2626", fontSize: "12px", cursor: "pointer", textDecoration: "underline" }}>Alle löschen</button></div>}
+          <div style={{ border: "2px dashed #bbf7d0", borderRadius: "12px", padding: "16px", background: "#f0fdf4", marginBottom: "12px" }}>
+            {scanFiles.length === 0 ? (
+              <label style={{ display: "block", textAlign: "center", cursor: "pointer" }}>
+                <div style={{ fontSize: "28px", marginBottom: "6px" }}>📷</div>
+                <div style={{ fontSize: "14px", fontWeight: 600, color: "#16a34a" }}>Seite fotografieren</div>
+                <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>Mehrere Seiten? Einfach nacheinander aufnehmen</div>
+                <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) { setScanFiles(prev => [...prev, e.target.files[0]]); setScanError(""); } }} />
+              </label>
+            ) : (
+              <>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#16a34a", marginBottom: "10px", textAlign: "center" }}>📷 {scanFiles.length} Seite{scanFiles.length > 1 ? "n" : ""} aufgenommen</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
+                  {scanFiles.map((f, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", borderRadius: "8px", padding: "7px 10px", border: "1px solid #bbf7d0" }}>
+                      <span style={{ fontSize: "13px", color: "#374151", fontWeight: 600 }}>Seite {i + 1}</span>
+                      <button onClick={() => setScanFiles(prev => prev.filter((_, fi) => fi !== i))} style={{ background: "none", border: "none", color: "#dc2626", fontSize: "16px", cursor: "pointer", lineHeight: 1, padding: "2px 6px" }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", background: "#16a34a", color: "#fff", borderRadius: "9px", padding: "11px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}>
+                  📷 + Weitere Seite hinzufügen
+                  <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) { setScanFiles(prev => [...prev, e.target.files[0]]); setScanError(""); } }} />
+                </label>
+              </>
+            )}
+          </div>
           {scanError && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#dc2626", marginBottom: "12px" }}>⚠️ {scanError}</div>}
           <div style={{ display: "flex", gap: "10px" }}>
             <button onClick={() => { setScanModal(false); setScanFiles([]); setScanError(""); }} style={{ flex: 1, padding: "11px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "9px", fontWeight: 600, cursor: "pointer" }}>Abbrechen</button>
