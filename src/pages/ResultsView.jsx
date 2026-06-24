@@ -227,6 +227,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
   const [maxPointEdits, setMaxPointEdits] = useState({});
   const [scanModal, setScanModal] = useState(false);
   const [scanFiles, setScanFiles] = useState([]);
+  const [demoRunning, setDemoRunning] = useState(false);
   const [scanProcessing, setScanProcessing] = useState(false);
   const [scanProcessingStep, setScanProcessingStep] = useState("");
   const [scanResult, setScanResult] = useState(null);
@@ -365,6 +366,70 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
     const ids = new Set([rule.id, ...(propagate ? sameLabel.map(r => r.id) : [])]);
     setDetectedRules(prev => prev.map(r => ids.has(r.id) ? { ...r, enabled: newEnabled } : r));
     setRulePropagateModal(null);
+  };
+
+  const createDemoSubmissions = async () => {
+    if (!assignmentData || groupUsernames.length === 0) return;
+    setDemoRunning(true);
+    setAiProgress("🧪 Demo-Abgaben werden erstellt...");
+    try {
+      const allQs = flattenQs(assignmentData.question_data || []);
+      const totalPoints = allQs.reduce((s, q) => s + Number(q.points || 0), 0);
+
+      // Dummy-Antworten je Fragetyp
+      const dummyAnswer = (q) => {
+        if (q.type === "multiple_choice") {
+          const opts = q.options || [];
+          if (opts.length === 0) return [];
+          // zufällig 1-2 Optionen wählen
+          const shuffled = [...opts].sort(() => Math.random() - 0.5);
+          return [shuffled[0].id || shuffled[0].text];
+        }
+        if (q.type === "true_false") return Math.random() > 0.5 ? "true" : "false";
+        // open / qa — plausible kurze Antworten
+        const pool = [
+          "to break", "broke", "found", "said", "sang", "won", "made",
+          "Hund", "Katze", "Baum", "Haus", "Schule", "gut", "schön",
+          "Paris", "Berlin", "1789", "42", "to feed", "played", "sat",
+          "Der Hund", "Die Katze", "Es war einmal", "Ich weiß es nicht",
+        ];
+        return pool[Math.floor(Math.random() * pool.length)];
+      };
+
+      const { data: existingSubs } = await supabase
+        .from("submissions").select("username").eq("assignment_id", assignmentData.id);
+      const existingNames = new Set((existingSubs || []).map(s => s.username));
+
+      for (const username of groupUsernames) {
+        if (existingNames.has(username)) continue; // nicht überschreiben
+        const { data: studentData } = await supabase
+          .from("students").select("id")
+          .eq("username", username).eq("group_id", assignmentData.group_id).single();
+        if (!studentData) continue;
+        const answers = {};
+        allQs.forEach(q => { answers[String(q.id)] = dummyAnswer(q); });
+        await supabase.from("submissions").insert({
+          assignment_id: assignmentData.id,
+          student_id: studentData.id,
+          username,
+          answers,
+          score: 0,
+          total_points: totalPoints,
+          grade: null,
+          ai_corrections: {},
+          reviewed: false,
+          cheat_log: [],
+        });
+      }
+
+      await fetchSubmissions();
+      setAiProgress("✅ Demo-Abgaben erstellt — KI startet Korrektur...");
+      setTimeout(() => setAiProgress(""), 2000);
+    } catch (e) {
+      setAiProgress("❌ Fehler beim Erstellen der Demo-Abgaben.");
+      setTimeout(() => setAiProgress(""), 3000);
+    }
+    setDemoRunning(false);
   };
 
   const processScan = async () => {
@@ -605,6 +670,7 @@ export default function ResultsView({ navigate, onLogout, currentUser, assignmen
             {submissions.length} Abgaben{avg ? ` · Ø ${avg}%` : ""}
             <button onClick={fetchSubmissions} style={{ marginLeft: "12px", background: "none", border: "none", color: "#2563a8", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>🔄 Aktualisieren</button>
             <button onClick={() => setScanModal(true)} style={{ marginLeft: "8px", padding: "4px 12px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: "7px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>📄 Scan hochladen</button>
+            <button onClick={createDemoSubmissions} disabled={demoRunning || aiRunning} title="Erstellt Dummy-Abgaben für alle Schüler zum Testen" style={{ marginLeft: "8px", padding: "4px 12px", background: "#fef9c3", color: "#92400e", border: "1px solid #fde68a", borderRadius: "7px", fontSize: "12px", fontWeight: 600, cursor: demoRunning || aiRunning ? "not-allowed" : "pointer", opacity: demoRunning || aiRunning ? 0.6 : 1 }}>🧪 Demo</button>
             {submissions.some(s => !s.released) && <button onClick={releaseAll} style={{ marginLeft: "12px", padding: "4px 12px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>✓ Alle freigeben</button>}
           </p>
         </div>
