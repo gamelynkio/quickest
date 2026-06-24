@@ -235,6 +235,7 @@ export default function StudentDashboard({ currentUser, onLogout }) {
         _username: qtStudent.username,
         _pin: qtStudent.pin
       });
+      console.log("get_student_context result:", JSON.stringify(data));
       if (error || !data || data.error) {
         // Fehler — trotzdem Loading beenden damit Schüler nicht ewig wartet
         setLoading(false);
