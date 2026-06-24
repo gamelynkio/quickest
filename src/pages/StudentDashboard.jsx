@@ -6,12 +6,9 @@ const GRADE_COLOR = { "1": "#16a34a", "2": "#22c55e", "3": "#eab308", "4": "#f97
 function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobbyReset }) {
   const [submission, setSubmission] = useState(initialSubmission);
 
-  // Automatisch aktualisieren + Lobby-Reset erkennen
   useEffect(() => {
     const poll = setInterval(async () => {
-      // Submission-Daten frisch laden
       const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
-      // Frische Daten + Lobby-Reset-Check in einem Call
       const { data: ctx } = await supabase.rpc("get_student_context", {
         _username: qtStudent.username || "",
         _pin: qtStudent.pin || ""
@@ -20,19 +17,17 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
         const freshSub = (ctx.submissions || []).find(s => s.id === initialSubmission.id);
         if (freshSub) setSubmission(prev => ({ ...prev, ...freshSub }));
         const asgn = (ctx.assignments || []).find(a => a.id === initialSubmission.assignment_id);
-        if (!asgn) onLobbyReset?.(); // Assignment nicht mehr aktiv → wurde zurückgesetzt
+        if (!asgn) onLobbyReset?.();
       }
     }, 4000);
     return () => clearInterval(poll);
   }, [initialSubmission.id]);
-  const corrections = submission.ai_corrections || {};
 
   const [orderedCorrections, setOrderedCorrections] = useState([]);
   const [requestTexts, setRequestTexts] = useState({});
   const [submittedRequests, setSubmittedRequests] = useState({});
   const [submitting, setSubmitting] = useState(null);
 
-  // orderedCorrections und submittedRequests aktuell halten wenn Polling neue Daten bringt
   useEffect(() => {
     const corrections = submission.ai_corrections || {};
     const qs = submission.question_data || [];
@@ -51,22 +46,15 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
   }, [submission]);
 
   useEffect(() => {
+    const corrections = submission.ai_corrections || {};
     const flat = [];
     const qs = submission.question_data || [];
     for (const q of qs) {
-      if (q.type === "section") {
-        for (const task of (q.tasks || [])) {
-          for (const tq of (task.questions || [])) flat.push(tq);
-        }
-      } else if (q.type === "task") {
-        for (const tq of (q.questions || [])) flat.push(tq);
-      } else {
-        flat.push(q);
-      }
+      if (q.type === "section") { for (const task of (q.tasks || [])) for (const tq of (task.questions || [])) flat.push(tq); }
+      else if (q.type === "task") { for (const tq of (q.questions || [])) flat.push(tq); }
+      else { flat.push(q); }
     }
-    const ordered = flat
-      .map(q => ({ q, correction: corrections[String(q.id)] }))
-      .filter(({ correction }) => correction !== undefined);
+    const ordered = flat.map(q => ({ q, correction: corrections[String(q.id)] })).filter(({ correction }) => correction !== undefined);
     if (ordered.length === 0) {
       setOrderedCorrections(Object.entries(corrections).map(([qId, correction]) => ({ qId, correction })));
     } else {
@@ -85,9 +73,7 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <div style={{ fontSize: "18px", fontWeight: 800, marginBottom: "4px" }}>{submission.assignments?.title || "Test"}</div>
-              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>
-                {new Date(submission.submitted_at).toLocaleDateString("de-DE")}
-              </div>
+              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>{new Date(submission.submitted_at).toLocaleDateString("de-DE")}</div>
             </div>
             <button onClick={onClose} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px", fontWeight: 700 }}>✕</button>
           </div>
@@ -114,6 +100,7 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
             <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>DATUM</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{new Date(submission.submitted_at).toLocaleDateString("de-DE")}</span></div>
             <div><span style={{ color: "#94a3b8", display: "block", fontSize: "11px", fontWeight: 600, marginBottom: "2px" }}>LEHRKRAFT</span><span style={{ fontWeight: 600, color: "#0f172a" }}>{submission.teacherName || "–"}</span></div>
           </div>
+
           {orderedCorrections.map(({ qId, correction, question }, i) => {
             const manualOverride = submission.manual_overrides?.[qId];
             const pts = manualOverride !== undefined ? Number(manualOverride) : (correction.points ?? 0);
@@ -136,11 +123,7 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
                     {pts} / {correction.maxPoints} Pkt.
                   </span>
                 </div>
-                {question?.text && (
-                  <div style={{ fontSize: "13px", color: "#0f172a", fontWeight: 600, marginBottom: "6px" }}>
-                    {question.text}
-                  </div>
-                )}
+                {question?.text && <div style={{ fontSize: "13px", color: "#0f172a", fontWeight: 600, marginBottom: "6px" }}>{question.text}</div>}
                 <div style={{ fontSize: "13px", color: "#374151", marginBottom: "6px" }}>
                   <span style={{ color: "#94a3b8" }}>Deine Antwort: </span>
                   {(() => {
@@ -153,9 +136,7 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
                 {correction.solution && (
                   <div style={{ marginBottom: "8px" }}>
                     <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Musterlösung</div>
-                    <div style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#374151", border: "1px solid #e2e8f0" }}>
-                      {correction.solution}
-                    </div>
+                    <div style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#374151", border: "1px solid #e2e8f0" }}>{correction.solution}</div>
                   </div>
                 )}
                 {(correction.comment || correction.usedCriteria) && (() => {
@@ -165,8 +146,7 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
                     <div style={{ marginBottom: "8px" }}>
                       <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Kommentar der KI</div>
                       <div style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#374151", border: "1px solid #e2e8f0" }}>
-                        <span style={{ marginRight: "4px" }}>🤖</span>
-                        {commentText}
+                        <span style={{ marginRight: "4px" }}>🤖</span>{commentText}
                         {commentText && correction.usedCriteria && <span style={{ color: "#94a3b8", margin: "0 4px" }}>·</span>}
                         {correction.usedCriteria && <span style={{ color: "#64748b" }}>{correction.usedCriteria}</span>}
                       </div>
@@ -176,13 +156,9 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
                 {correction.teacherComment && (
                   <div style={{ marginBottom: "8px" }}>
                     <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>Kommentar der Lehrkraft</div>
-                    <div style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#374151", border: "1px solid #e2e8f0" }}>
-                      ✏️ {correction.teacherComment}
-                    </div>
+                    <div style={{ background: "#f8fafc", borderRadius: "8px", padding: "8px 10px", fontSize: "12px", color: "#374151", border: "1px solid #e2e8f0" }}>✏️ {correction.teacherComment}</div>
                   </div>
                 )}
-
-                {/* Nachkorrektur anfragen */}
                 {submittedRequests[qId] ? (
                   <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "8px 12px", fontSize: "12px", color: "#16a34a", marginBottom: "8px" }}>
                     ✓ Nachkorrektur beantragt: „{submittedRequests[qId].text}"
@@ -191,39 +167,24 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
                   <div style={{ marginBottom: "8px" }}>
                     {requestTexts[qId] !== undefined ? (
                       <div>
-                        <textarea
-                          value={requestTexts[qId]}
-                          onChange={e => setRequestTexts(prev => ({ ...prev, [qId]: e.target.value }))}
-                          placeholder="Begründe warum du eine Nachkorrektur anfragst..."
-                          rows={2}
-                          style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "6px" }}
-                        />
+                        <textarea value={requestTexts[qId]} onChange={e => setRequestTexts(prev => ({ ...prev, [qId]: e.target.value }))} placeholder="Begründe warum du eine Nachkorrektur anfragst..." rows={2}
+                          style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "12px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "6px" }} />
                         <div style={{ display: "flex", gap: "6px" }}>
                           <button onClick={() => setRequestTexts(prev => { const n = { ...prev }; delete n[qId]; return n; })}
-                            style={{ flex: 1, padding: "6px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "7px", fontSize: "12px", cursor: "pointer" }}>
-                            Abbrechen
-                          </button>
+                            style={{ flex: 1, padding: "6px", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: "7px", fontSize: "12px", cursor: "pointer" }}>Abbrechen</button>
                           <button onClick={async () => {
                             if (!requestTexts[qId]?.trim()) return;
                             setSubmitting(qId);
-                            const updated = { ...(submission.correction_requests || {}), [qId]: { text: requestTexts[qId].trim(), ts: new Date().toISOString(), status: "open" } };
                             const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
                             const { data: rpcOk, error } = await supabase.rpc("request_correction", {
-                              _submission_id: submission.id,
-                              _username: qtStudent.username || "",
-                              _pin: qtStudent.pin || "",
-                              _question_id: qId,
-                              _request_text: requestTexts[qId].trim()
+                              _submission_id: submission.id, _username: qtStudent.username || "", _pin: qtStudent.pin || "",
+                              _question_id: qId, _request_text: requestTexts[qId].trim()
                             });
-                            if (error || !rpcOk) {
-                              alert("Fehler beim Speichern: " + (error?.message || "Unbekannter Fehler"));
-                              setSubmitting(null);
-                              return;
-                            }
+                            if (error || !rpcOk) { alert("Fehler beim Speichern: " + (error?.message || "Unbekannter Fehler")); setSubmitting(null); return; }
                             setSubmittedRequests(prev => ({ ...prev, [qId]: { text: requestTexts[qId].trim() } }));
                             setRequestTexts(prev => { const n = { ...prev }; delete n[qId]; return n; });
                             setSubmitting(null);
-                            }} disabled={!requestTexts[qId]?.trim() || submitting === qId}
+                          }} disabled={!requestTexts[qId]?.trim() || submitting === qId}
                             style={{ flex: 2, padding: "6px", background: requestTexts[qId]?.trim() ? "#f97316" : "#e2e8f0", color: requestTexts[qId]?.trim() ? "#fff" : "#94a3b8", border: "none", borderRadius: "7px", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>
                             {submitting === qId ? "⏳" : "✓ Anfrage absenden"}
                           </button>
@@ -240,12 +201,9 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
               </div>
             );
           })}
-          <button onClick={onClose} style={{ width: "100%", padding: "13px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", marginTop: "4px" }}>
-            Schließen
-          </button>
-          <p style={{ fontSize: "11px", color: "#94a3b8", textAlign: "center", marginTop: "8px" }}>
-            Fehler in der Korrektur? Nutze die Schaltfläche „Nachkorrektur anfragen" bei der jeweiligen Aufgabe.
-          </p>
+
+          <button onClick={onClose} style={{ width: "100%", padding: "13px", background: "#2563a8", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer", marginTop: "4px" }}>Schließen</button>
+          <p style={{ fontSize: "11px", color: "#94a3b8", textAlign: "center", marginTop: "8px" }}>Fehler in der Korrektur? Nutze die Schaltfläche „Nachkorrektur anfragen" bei der jeweiligen Aufgabe.</p>
         </div>
       </div>
     </div>
@@ -261,7 +219,6 @@ export default function StudentDashboard({ currentUser, onLogout }) {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Permanentes Polling alle 4 Sek. — neue Tests, Lobbys, Notenänderungen
   useEffect(() => {
     const poll = setInterval(fetchData, 4000);
     return () => clearInterval(poll);
@@ -269,19 +226,31 @@ export default function StudentDashboard({ currentUser, onLogout }) {
 
   const fetchData = async () => {
     const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
-    if (!qtStudent.username || !qtStudent.pin) return;
-    const { data, error } = await supabase.rpc("get_student_context", {
-      _username: qtStudent.username,
-      _pin: qtStudent.pin
-    });
-    if (error || !data || data.error) return;
-    setAssignments(data.assignments || []);
-    setSubmissions((data.submissions || []).map(s => ({
-      ...s,
-      assignments: { title: (data.assignments || []).find(a => a.id === s.assignment_id)?.title || "" }
-    })));
-    setAllMakeupAssignments(data.all_group_assignments || []);
-    setLoading(false);
+    if (!qtStudent.username || !qtStudent.pin) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const { data, error } = await supabase.rpc("get_student_context", {
+        _username: qtStudent.username,
+        _pin: qtStudent.pin
+      });
+      if (error || !data || data.error) {
+        // Fehler — trotzdem Loading beenden damit Schüler nicht ewig wartet
+        setLoading(false);
+        return;
+      }
+      setAssignments(data.assignments || []);
+      setSubmissions((data.submissions || []).map(s => ({
+        ...s,
+        assignments: { title: (data.assignments || []).find(a => a.id === s.assignment_id)?.title || "" }
+      })));
+      setAllMakeupAssignments(data.all_group_assignments || []);
+    } catch (e) {
+      console.error("fetchData error:", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const submittedIds = new Set(submissions.map(s => String(s.assignment_id)));
@@ -302,10 +271,7 @@ export default function StudentDashboard({ currentUser, onLogout }) {
     return true;
   });
 
-  const lobbyWaiting = visibleAssignments.filter(a =>
-    a.timing_mode === "lobby" && !a.lobby_started_at
-  );
-
+  const lobbyWaiting = visibleAssignments.filter(a => a.timing_mode === "lobby" && !a.lobby_started_at);
   const active = visibleAssignments.filter(a => {
     if (a.timing_mode === "lobby") return !!a.lobby_started_at;
     if (a.timing_mode === "window") {
@@ -317,7 +283,6 @@ export default function StudentDashboard({ currentUser, onLogout }) {
     }
     return true;
   });
-
   const upcoming = visibleAssignments.filter(a => {
     if (a.timing_mode === "lobby" && !a.lobby_started_at) return false;
     if (a.timing_mode === "window" && a.window_date) {
@@ -342,19 +307,8 @@ export default function StudentDashboard({ currentUser, onLogout }) {
       const { data: profile } = await supabase.from("profiles").select("name").eq("id", assignmentData.teacher_id).single();
       if (profile?.name) teacherName = profile.name;
     }
-    setSelectedSubmission({
-      ...(freshSubmission || s),
-      assignments: s.assignments,
-      question_data: assignmentData?.question_data || [],
-      teacherName,
-    });
+    setSelectedSubmission({ ...(freshSubmission || s), assignments: s.assignments, question_data: assignmentData?.question_data || [], teacherName });
   };
-
-  const handleStartTest = (assignment) => {
-    // Digitale Testdurchführung deaktiviert — nur Scan-Workflow
-    return;
-  };
-
 
   const timeLabel = (a) => {
     const mins = Math.round((a.time_limit || 0) / 60);
@@ -374,6 +328,10 @@ export default function StudentDashboard({ currentUser, onLogout }) {
     </div>
   );
 
+  // Freigegebene Abgaben — direkt klickbar
+  const releasedSubmissions = submissions.filter(s => s.released);
+  const pendingSubmissions = submissions.filter(s => !s.released);
+
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e3a5f 0%, #2563a8 50%, #1e3a5f 100%)", fontFamily: "'Segoe UI', system-ui, sans-serif", padding: "20px 16px 40px" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
@@ -388,19 +346,19 @@ export default function StudentDashboard({ currentUser, onLogout }) {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            {/* Live-Indikator */}
             <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
               <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
               <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>Live</span>
             </div>
-            <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.8)", borderRadius: "8px", padding: "8px 14px", fontSize: "13px", cursor: "pointer", fontWeight: 600 }}>
-              Abmelden
-            </button>
+            <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.8)", borderRadius: "8px", padding: "8px 14px", fontSize: "13px", cursor: "pointer", fontWeight: 600 }}>Abmelden</button>
           </div>
         </div>
 
         {loading ? (
-          <div style={{ textAlign: "center", color: "rgba(255,255,255,0.6)", padding: "48px" }}>Wird geladen...</div>
+          <div style={{ textAlign: "center", padding: "48px" }}>
+            <div style={{ width: "40px", height: "40px", border: "3px solid rgba(255,255,255,0.2)", borderTop: "3px solid #fff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
+            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "14px" }}>Wird geladen...</div>
+          </div>
         ) : (
           <>
             {lobbyWaiting.length > 0 && (
@@ -409,9 +367,12 @@ export default function StudentDashboard({ currentUser, onLogout }) {
                   <div key={a.id} style={{ background: "rgba(109,40,217,0.2)", borderRadius: "16px", padding: "18px 20px", marginBottom: "10px", border: "1px solid rgba(109,40,217,0.4)" }}>
                     <div style={{ fontWeight: 700, fontSize: "16px", color: "#fff", marginBottom: "4px" }}>{a.title}</div>
                     <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", marginBottom: "14px" }}>Lobby — warte auf den Startschuss der Lehrkraft</div>
-                    <button onClick={() => handleStartTest(a)} style={{ width: "100%", padding: "13px", background: "#6d28d9", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
-                      Ergebnisse ansehen →
-                    </button>
+                    <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "8px", padding: "10px 14px", textAlign: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#a78bfa", animation: "pulse 1.5s infinite" }} />
+                        <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>Warte auf Lehrkraft...</span>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </Section>
@@ -422,12 +383,10 @@ export default function StudentDashboard({ currentUser, onLogout }) {
                 {active.map(a => (
                   <div key={a.id} style={{ background: "rgba(22,163,74,0.15)", borderRadius: "16px", padding: "18px 20px", marginBottom: "10px", border: "1px solid rgba(22,163,74,0.35)" }}>
                     <div style={{ fontWeight: 700, fontSize: "16px", color: "#fff", marginBottom: "4px" }}>{a.title}</div>
-                    <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", marginBottom: "14px" }}>
-                      ⏱ {Math.round((a.time_limit || 0) / 60)} Min.
+                    <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", marginBottom: "14px" }}>⏱ {Math.round((a.time_limit || 0) / 60)} Min.</div>
+                    <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "8px", padding: "10px 14px", textAlign: "center", fontSize: "13px", color: "rgba(255,255,255,0.6)" }}>
+                      📄 Test wird auf Papier durchgeführt — bitte wende dich an deine Lehrkraft.
                     </div>
-                    <button onClick={() => handleStartTest(a)} style={{ width: "100%", padding: "14px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "15px", cursor: "pointer" }}>
-                      Test starten →
-                    </button>
                   </div>
                 ))}
               </Section>
@@ -452,39 +411,53 @@ export default function StudentDashboard({ currentUser, onLogout }) {
               </div>
             )}
 
-            {submissions.length > 0 && (
-              <Section title="ABSOLVIERT" icon="📋" color="#2563a8" count={submissions.length}>
-                {submissions.map(s => {
+            {/* Freigegebene Ergebnisse */}
+            {releasedSubmissions.length > 0 && (
+              <Section title="ERGEBNISSE" icon="🏆" color="#16a34a" count={releasedSubmissions.length}>
+                {releasedSubmissions.map(s => {
                   const percent = s.total_points > 0 ? Math.round((s.score / s.total_points) * 100) : 0;
                   return (
-                    <div key={s.id} onClick={() => s.released && handleOpenSubmission(s)}
-                      style={{ background: "rgba(255,255,255,0.07)", borderRadius: "14px", padding: "14px 18px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)", cursor: s.released ? "pointer" : "default", transition: "background 0.15s" }}
-                      onMouseOver={e => s.released && (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
-                      onMouseOut={e => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}>
+                    <div key={s.id} onClick={() => handleOpenSubmission(s)}
+                      style={{ background: "rgba(255,255,255,0.09)", borderRadius: "14px", padding: "14px 18px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer", transition: "background 0.15s" }}
+                      onMouseOver={e => e.currentTarget.style.background = "rgba(255,255,255,0.14)"}
+                      onMouseOut={e => e.currentTarget.style.background = "rgba(255,255,255,0.09)"}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: "15px", color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.assignments?.title || "Test"}</div>
-                        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)", marginTop: "3px" }}>
-                          {new Date(s.submitted_at).toLocaleDateString("de-DE")}{s.released ? ` · ${s.score ?? "–"}/${s.total_points} Pkt. · ${percent}%` : ""}
-                          {s.released ? <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.4)" }}>· Tippen für Details</span> : <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.3)", fontSize: "11px" }}>· Korrektur ausstehend</span>}
+                        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", marginTop: "3px" }}>
+                          {new Date(s.submitted_at).toLocaleDateString("de-DE")} · {s.score ?? "–"}/{s.total_points} Pkt. · {percent}%
+                          <span style={{ marginLeft: "6px", color: "rgba(255,255,255,0.35)" }}>· Tippen für Details</span>
                         </div>
                       </div>
                       <div style={{ textAlign: "center", flexShrink: 0, marginLeft: "14px" }}>
-                        {s.not_participated ? (
-                          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textAlign: "center", fontStyle: "italic" }}>nicht<br/>teilgenommen</div>
-                        ) : s.released && s.grade ? (
+                        {s.grade ? (
                           <div style={{ fontSize: "30px", fontWeight: 900, color: GRADE_COLOR[s.grade] || "#fff", lineHeight: 1 }}>{s.grade}</div>
-                        ) : s.released ? (
-                          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>wird<br/>bewertet</div>
                         ) : (
-                          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                            <div style={{ width: "8px", height: "8px", border: "2px solid rgba(255,255,255,0.2)", borderTop: "2px solid rgba(255,255,255,0.6)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>ausstehend</span>
-                          </div>
+                          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>wird<br/>bewertet</div>
                         )}
                       </div>
                     </div>
                   );
                 })}
+              </Section>
+            )}
+
+            {/* Ausstehende Korrekturen */}
+            {pendingSubmissions.length > 0 && (
+              <Section title="KORREKTUR AUSSTEHEND" icon="⏳" color="#64748b" count={pendingSubmissions.length}>
+                {pendingSubmissions.map(s => (
+                  <div key={s.id} style={{ background: "rgba(255,255,255,0.05)", borderRadius: "14px", padding: "14px 18px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: "15px", color: "rgba(255,255,255,0.7)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.assignments?.title || "Test"}</div>
+                      <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", marginTop: "3px" }}>
+                        {new Date(s.submitted_at).toLocaleDateString("de-DE")} · Korrektur ausstehend
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0, marginLeft: "14px" }}>
+                      <div style={{ width: "8px", height: "8px", border: "2px solid rgba(255,255,255,0.2)", borderTop: "2px solid rgba(255,255,255,0.6)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                      <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>ausstehend</span>
+                    </div>
+                  </div>
+                ))}
               </Section>
             )}
           </>
