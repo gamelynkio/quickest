@@ -1,0 +1,1 @@
+CREATE POLICY "Anon can read submissions" ON public.submissions FOR SELECT TO anon USING (true);
