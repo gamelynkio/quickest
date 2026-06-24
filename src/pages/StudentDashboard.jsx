@@ -8,17 +8,9 @@ function SubmissionDetailModal({ submission: initialSubmission, onClose, onLobby
 
   useEffect(() => {
     const poll = setInterval(async () => {
-      const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
-      const { data: ctx } = await supabase.rpc("get_student_context", {
-        _username: qtStudent.username || "",
-        _pin: qtStudent.pin || ""
-      });
-      if (ctx && !ctx.error) {
-        const freshSub = (ctx.submissions || []).find(s => s.id === initialSubmission.id);
-        if (freshSub) setSubmission(prev => ({ ...prev, ...freshSub }));
-        const asgn = (ctx.assignments || []).find(a => a.id === initialSubmission.assignment_id);
-        if (!asgn) onLobbyReset?.();
-      }
+      const { data: freshSub } = await supabase.from("submissions")
+        .select("*, assignments(title)").eq("id", initialSubmission.id).single();
+      if (freshSub) setSubmission(prev => ({ ...prev, ...freshSub }));
     }, 4000);
     return () => clearInterval(poll);
   }, [initialSubmission.id]);
@@ -226,26 +218,19 @@ export default function StudentDashboard({ currentUser, onLogout }) {
 
   const fetchData = async () => {
     const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
-    if (!qtStudent.username) {
+    if (!qtStudent.id || !qtStudent.group_id) {
       setLoading(false);
       return;
     }
     try {
-      const { data, error } = await supabase.rpc("get_student_context", {
-        _username: qtStudent.username,
-        _pin: qtStudent.pin || ""
-      });
-      if (error || !data || data.error) {
-        // Fehler — trotzdem Loading beenden damit Schüler nicht ewig wartet
-        setLoading(false);
-        return;
-      }
-      setAssignments(data.assignments || []);
-      setSubmissions((data.submissions || []).map(s => ({
-        ...s,
-        assignments: { title: (data.assignments || []).find(a => a.id === s.assignment_id)?.title || "" }
-      })));
-      setAllMakeupAssignments(data.all_group_assignments || []);
+      const [{ data: asgnData }, { data: subsData }, { data: makeupData }] = await Promise.all([
+        supabase.from("assignments").select("*").eq("group_id", qtStudent.group_id),
+        supabase.from("submissions").select("*, assignments(title)").eq("student_id", qtStudent.id),
+        supabase.from("assignments").select("id, parent_assignment_id").not("parent_assignment_id", "is", null).eq("group_id", qtStudent.group_id),
+      ]);
+      setAssignments(asgnData || []);
+      setSubmissions(subsData || []);
+      setAllMakeupAssignments(makeupData || []);
     } catch (e) {
       console.error("fetchData error:", e);
     } finally {
@@ -294,12 +279,7 @@ export default function StudentDashboard({ currentUser, onLogout }) {
 
   const handleOpenSubmission = async (s) => {
     const [{ data: freshSubmission }, { data: assignmentData }] = await Promise.all([
-      (async () => {
-        const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
-        const { data: ctx } = await supabase.rpc("get_student_context", { _username: qtStudent.username || "", _pin: qtStudent.pin || "" });
-        const sub = (ctx?.submissions || []).find(sub => sub.id === s.id);
-        return { data: sub || s };
-      })(),
+      supabase.from("submissions").select("*, assignments(title)").eq("id", s.id).single(),
       supabase.from("assignments").select("question_data, teacher_id").eq("id", s.assignment_id).single(),
     ]);
     let teacherName = "–";
