@@ -226,16 +226,15 @@ export default function StudentDashboard({ currentUser, onLogout }) {
 
   const fetchData = async () => {
     const qtStudent = JSON.parse(sessionStorage.getItem("qt_student") || "{}");
-    if (!qtStudent.username || !qtStudent.pin) {
+    if (!qtStudent.username) {
       setLoading(false);
       return;
     }
     try {
       const { data, error } = await supabase.rpc("get_student_context", {
         _username: qtStudent.username,
-        _pin: qtStudent.pin
+        _pin: qtStudent.pin || ""
       });
-      console.log("get_student_context result:", JSON.stringify(data));
       if (error || !data || data.error) {
         // Fehler — trotzdem Loading beenden damit Schüler nicht ewig wartet
         setLoading(false);
